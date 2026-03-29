@@ -92,13 +92,13 @@ export default function Sidebar() {
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={`flex items-center gap-3 px-5 py-2.5 text-sm transition-colors ${
+                    className={`flex items-center gap-3 px-5 py-3 lg:py-2.5 text-base lg:text-sm transition-colors ${
                       active
                         ? 'text-white bg-neutral-800/60 border-r-2 border-emerald-500'
                         : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-900/50'
                     }`}
                   >
-                    <IconComponent size={18} weight="duotone" className="shrink-0" />
+                    <IconComponent size={20} weight="duotone" className="shrink-0 lg:w-[18px] lg:h-[18px]" />
                     {item.label}
                   </Link>
                 )
@@ -120,10 +120,10 @@ export default function Sidebar() {
     <>
       {/* Mobile header bar */}
       <div className="lg:hidden fixed top-0 left-0 right-0 z-40 h-14 bg-neutral-950 border-b border-neutral-800/50 flex items-center px-4 gap-3">
-        <button onClick={() => setOpen(true)} className="text-neutral-400 hover:text-white transition-colors">
-          <List size={24} />
+        <button onClick={() => setOpen(true)} className="text-neutral-400 hover:text-white transition-colors p-2 -ml-2 rounded-lg active:bg-neutral-800">
+          <List size={28} weight="bold" />
         </button>
-        <p className="text-sm font-bold text-white tracking-tight">Kwint Agents</p>
+        <p className="text-base font-bold text-white tracking-tight">Kwint Agents</p>
       </div>
 
       {/* Mobile overlay */}

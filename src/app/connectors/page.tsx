@@ -224,7 +224,7 @@ export default function ConnectorsPage() {
           {isFormOpen && (
             <div className="bg-neutral-900/50 border border-neutral-800/50 rounded-xl p-6 space-y-5">
               <p className="text-sm font-semibold text-white">{editingId ? 'Edit Connector' : 'New Connector'}</p>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs text-neutral-500 mb-1.5">Name</label>
                   <input value={form.name} onChange={(e) => updateForm('name', e.target.value)} placeholder="e.g. GitHub"

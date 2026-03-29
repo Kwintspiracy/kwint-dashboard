@@ -233,7 +233,7 @@ export default function AgentsPage() {
           {/* Telegram Configuration */}
           <div className="border-t border-neutral-800/50 pt-5">
             <p className="text-xs text-neutral-400 font-semibold uppercase tracking-wider mb-3">Telegram Bot</p>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs text-neutral-400 mb-1.5">
                   Bot Token <span className="text-neutral-600 font-normal">(from @BotFather)</span>

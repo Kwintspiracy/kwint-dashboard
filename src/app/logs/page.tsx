@@ -76,9 +76,9 @@ export default function LogsPage() {
           <thead>
             <tr className="border-b border-neutral-800/50">
               <th className="text-left px-5 py-3.5 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Tool</th>
-              <th className="text-left px-5 py-3.5 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Input</th>
+              <th className="text-left hidden md:table-cell px-5 py-3.5 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Input</th>
               <th className="text-left px-5 py-3.5 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Duration</th>
-              <th className="text-left px-5 py-3.5 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Channel</th>
+              <th className="text-left hidden md:table-cell px-5 py-3.5 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Channel</th>
               <th className="text-left px-5 py-3.5 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Time</th>
             </tr>
           </thead>
@@ -105,7 +105,7 @@ export default function LogsPage() {
                         }
                       />
                     </td>
-                    <td className="px-5 py-3 text-neutral-400 text-xs font-mono truncate max-w-xs">
+                    <td className="px-5 py-3 text-neutral-400 text-xs font-mono truncate max-w-xs hidden md:table-cell">
                       {inputStr.slice(0, 80)}{inputStr.length > 80 ? '...' : ''}
                     </td>
                     <td className="px-5 py-3 text-neutral-500 text-xs">

@@ -108,8 +108,8 @@ export default function SkillsPage() {
             <tr className="border-b border-neutral-800/50">
               <th className="text-left px-5 py-3.5 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider w-12">On</th>
               <th className="text-left px-5 py-3.5 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Name</th>
-              <th className="text-left px-5 py-3.5 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Slug</th>
-              <th className="text-left px-5 py-3.5 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Connectors</th>
+              <th className="text-left px-5 py-3.5 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider hidden md:table-cell">Slug</th>
+              <th className="text-left px-5 py-3.5 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider hidden md:table-cell">Connectors</th>
               <th className="text-right px-5 py-3.5 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
@@ -120,8 +120,8 @@ export default function SkillsPage() {
                 <tr key={s.id} className="border-b border-neutral-800/50 hover:bg-neutral-800/30 transition-colors">
                   <td className="px-5 py-3.5"><Toggle id={s.id} active={s.active} /></td>
                   <td className="px-5 py-3.5 text-neutral-200 font-medium">{s.name}</td>
-                  <td className="px-5 py-3.5 text-neutral-500 font-mono text-xs">{s.slug}</td>
-                  <td className="px-5 py-3.5">
+                  <td className="px-5 py-3.5 text-neutral-500 font-mono text-xs hidden md:table-cell">{s.slug}</td>
+                  <td className="px-5 py-3.5 hidden md:table-cell">
                     {linked.length > 0 ? (
                       <div className="flex flex-wrap gap-1.5">
                         {linked.map(c => (
@@ -149,7 +149,7 @@ export default function SkillsPage() {
       {isFormOpen && (
         <div className="bg-neutral-900/50 border border-neutral-800/50 rounded-xl p-6 space-y-5">
           <p className="text-sm font-semibold text-white">{editingId ? 'Edit Skill' : 'New Skill'}</p>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs text-neutral-500 mb-1.5">Name</label>
               <input value={form.name} onChange={(e) => updateForm('name', e.target.value)} placeholder="e.g. Google Sheets"

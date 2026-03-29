@@ -115,8 +115,8 @@ export default function JobsPage() {
           <thead>
             <tr className="border-b border-neutral-800/50">
               <th className="text-left px-5 py-3 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Status</th>
-              <th className="text-left px-5 py-3 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Agent</th>
-              <th className="text-left px-5 py-3 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Channel</th>
+              <th className="text-left hidden md:table-cell px-5 py-3 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Agent</th>
+              <th className="text-left hidden md:table-cell px-5 py-3 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Channel</th>
               <th className="text-left px-5 py-3 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Task</th>
               <th className="text-right px-5 py-3 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Tools</th>
               <th className="text-right px-5 py-3 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Turns</th>
