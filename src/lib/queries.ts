@@ -514,6 +514,29 @@ export async function getCostByAgent() {
   })).sort((a, b) => b.total_tokens - a.total_tokens)
 }
 
+export async function getApprovals(status?: string) {
+  let query = supabase
+    .from('approval_requests')
+    .select('*, agents(name), agent_jobs(task, channel)')
+    .order('requested_at', { ascending: false })
+
+  if (status) query = query.eq('status', status)
+
+  const { data, error } = await query
+  if (error) throw error
+  return data || []
+}
+
+export async function resolveApproval(id: string, action: 'approve' | 'reject', notes?: string) {
+  const agentUrl = process.env.NEXT_PUBLIC_AGENT_API_URL
+  const res = await fetch(`${agentUrl}/api/approve`, {
+    method: 'POST',
+    headers: agentHeaders(),
+    body: JSON.stringify({ approval_id: id, action, notes: notes || '' }),
+  })
+  return res.json()
+}
+
 export async function getToolCalls(limit = 100) {
   const { data, error } = await supabase
     .from('tool_calls')

@@ -11,6 +11,7 @@ import {
   BookOpenText,
   ClockCountdown,
   ListMagnifyingGlass,
+  ShieldCheck,
   type Icon,
 } from '@phosphor-icons/react'
 
@@ -38,6 +39,7 @@ const NAV_ITEMS: NavGroup[] = [
     section: 'Automation',
     items: [
       { href: '/automations', label: 'Automations', icon: ClockCountdown },
+      { href: '/approvals', label: 'Approvals', icon: ShieldCheck },
       { href: '/logs', label: 'Logs', icon: ListMagnifyingGlass },
     ],
   },

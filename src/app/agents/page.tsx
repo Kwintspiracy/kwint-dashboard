@@ -11,6 +11,7 @@ type Agent = {
   id: string; name: string; slug: string; personality: string
   model: string; active: boolean; is_default: boolean; role: string
   telegram_bot_token: string | null; telegram_bot_username: string | null
+  requires_approval: string[] | null
   created_at: string; updated_at: string
 }
 
@@ -28,6 +29,7 @@ export default function AgentsPage() {
   const [form, setForm] = useState({
     name: '', slug: '', personality: '', model: 'claude-sonnet-4-6',
     role: 'agent', telegram_bot_token: '', telegram_bot_username: '',
+    requires_approval: '' as string,
   })
   const [telegramStatus, setTelegramStatus] = useState('')
 
@@ -41,6 +43,7 @@ export default function AgentsPage() {
       role: a.role || 'agent',
       telegram_bot_token: a.telegram_bot_token || '',
       telegram_bot_username: a.telegram_bot_username || '',
+      requires_approval: (a.requires_approval || []).join(', '),
     })
   }
 
@@ -49,6 +52,7 @@ export default function AgentsPage() {
     setForm({
       name: '', slug: '', personality: DEFAULT_PERSONALITY, model: 'claude-sonnet-4-6',
       role: 'agent', telegram_bot_token: '', telegram_bot_username: '',
+      requires_approval: '',
     })
   }
 
@@ -69,12 +73,17 @@ export default function AgentsPage() {
 
   async function handleSave() {
     if (!form.name || !form.slug || !form.personality) return
+    const approvalList = form.requires_approval
+      ? form.requires_approval.split(',').map(s => s.trim()).filter(Boolean)
+      : []
+
     if (editingId) {
       await updateAgent(editingId, {
         name: form.name, slug: form.slug, personality: form.personality, model: form.model,
         role: form.role,
         telegram_bot_token: form.telegram_bot_token || null,
         telegram_bot_username: form.telegram_bot_username || null,
+        requires_approval: approvalList,
       })
       setEditingId(null)
     } else {
@@ -246,6 +255,25 @@ export default function AgentsPage() {
                   className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors"
                 />
               </div>
+            </div>
+          </div>
+
+          {/* Approval Configuration */}
+          <div className="border-t border-neutral-800/50 pt-5">
+            <p className="text-xs text-neutral-400 font-semibold uppercase tracking-wider mb-3">Human-in-the-Loop</p>
+            <div>
+              <label className="block text-xs text-neutral-400 mb-1.5">
+                Tools requiring approval <span className="text-neutral-600 font-normal">(comma-separated, e.g. http_request, send_notification)</span>
+              </label>
+              <input
+                value={form.requires_approval}
+                onChange={(e) => updateForm('requires_approval', e.target.value)}
+                placeholder="http_request, send_notification, delegate_task"
+                className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors"
+              />
+              <p className="text-[10px] text-neutral-600 mt-1">
+                Available tools: web_search, save_memory, query_database, send_notification, http_request, manage_skill, load_skill, delegate_task
+              </p>
             </div>
           </div>
 
