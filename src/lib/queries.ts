@@ -483,3 +483,44 @@ export async function getMemoryCount() {
   }
   return counts
 }
+
+// ═══════════════════════════════════════════════════
+// OBSERVABILITY QUERIES
+// ═══════════════════════════════════════════════════
+
+export async function getCostByAgent() {
+  const { data } = await supabase
+    .from('agent_runs')
+    .select('agent_id, input_tokens, output_tokens, agents(name)')
+
+  const costs: Record<string, { name: string; input: number; output: number; runs: number }> = {}
+  for (const row of data || []) {
+    const id = row.agent_id || 'unknown'
+    const agentData = row.agents as unknown as { name: string } | { name: string }[] | null
+    const name = Array.isArray(agentData) ? agentData[0]?.name || 'Unknown' : agentData?.name || 'Unknown'
+    if (!costs[id]) costs[id] = { name, input: 0, output: 0, runs: 0 }
+    costs[id].input += row.input_tokens || 0
+    costs[id].output += row.output_tokens || 0
+    costs[id].runs++
+  }
+
+  return Object.entries(costs).map(([id, c]) => ({
+    agent_id: id,
+    name: c.name,
+    input_tokens: c.input,
+    output_tokens: c.output,
+    total_tokens: c.input + c.output,
+    runs: c.runs,
+  })).sort((a, b) => b.total_tokens - a.total_tokens)
+}
+
+export async function getToolCalls(limit = 100) {
+  const { data, error } = await supabase
+    .from('tool_calls')
+    .select('*, agent_jobs(task, agent_id, channel)')
+    .order('created_at', { ascending: false })
+    .limit(limit)
+
+  if (error) throw error
+  return data || []
+}
