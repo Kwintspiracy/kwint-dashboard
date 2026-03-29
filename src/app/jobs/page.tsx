@@ -110,7 +110,7 @@ export default function JobsPage() {
         </select>
       </div>
 
-      <div className="bg-neutral-900/50 border border-neutral-800/50 rounded-xl overflow-hidden">
+      <div className="bg-neutral-900/50 border border-neutral-800/50 rounded-xl overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-neutral-800/50">

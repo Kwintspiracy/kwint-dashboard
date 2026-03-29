@@ -108,7 +108,7 @@ export default function AgentsPage() {
         </button>
       </PageHeader>
 
-      <div className="bg-neutral-900/50 border border-neutral-800/50 rounded-xl overflow-hidden">
+      <div className="bg-neutral-900/50 border border-neutral-800/50 rounded-xl overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-neutral-800/50">
@@ -183,7 +183,7 @@ export default function AgentsPage() {
         <div className="bg-neutral-900/50 border border-neutral-800/50 rounded-xl p-6 space-y-5">
           <p className="text-sm font-semibold text-white">{editingId ? 'Edit Agent' : 'New Agent'}</p>
 
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
               <label className="block text-xs text-neutral-400 font-semibold uppercase tracking-wider mb-1.5">Name</label>
               <input

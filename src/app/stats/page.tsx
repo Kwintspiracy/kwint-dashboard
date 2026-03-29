@@ -157,7 +157,7 @@ export default function StatsPage() {
       )}
 
       {/* Recent jobs table */}
-      <div className="bg-neutral-900/50 border border-neutral-800/50 rounded-xl overflow-hidden">
+      <div className="bg-neutral-900/50 border border-neutral-800/50 rounded-xl overflow-x-auto">
         <div className="px-5 py-4 border-b border-neutral-800/50">
           <p className="text-sm font-medium text-neutral-300">Recent jobs</p>
         </div>
