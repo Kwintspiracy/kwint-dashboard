@@ -167,7 +167,7 @@ export async function toggleConnectorActive(id: string, active: boolean) {
 export async function getSkills() {
   const { data, error } = await supabase
     .from('agent_skills')
-    .select('*, connectors(id, name, slug)')
+    .select('*, skill_connectors(connector_id, connectors(id, name, slug))')
     .order('name')
 
   if (error) throw error
@@ -187,13 +187,28 @@ export async function createSkill(data: {
   name: string
   slug: string
   content: string
-  connector_id?: string | null
-}) {
-  const { error } = await supabase
+}, connectorIds?: string[]) {
+  const { data: inserted, error } = await supabase
     .from('agent_skills')
     .insert({ ...data, active: true })
+    .select('id')
 
   if (error) throw error
+
+  // Link connectors via junction table
+  if (connectorIds?.length && inserted?.[0]) {
+    const links = connectorIds.map(cid => ({ skill_id: inserted[0].id, connector_id: cid }))
+    await supabase.from('skill_connectors').insert(links)
+  }
+}
+
+export async function updateSkillConnectors(skillId: string, connectorIds: string[]) {
+  // Replace all connector links for this skill
+  await supabase.from('skill_connectors').delete().eq('skill_id', skillId)
+  if (connectorIds.length) {
+    const links = connectorIds.map(cid => ({ skill_id: skillId, connector_id: cid }))
+    await supabase.from('skill_connectors').insert(links)
+  }
 }
 
 export async function updateSkill(id: string, data: Record<string, unknown>) {
