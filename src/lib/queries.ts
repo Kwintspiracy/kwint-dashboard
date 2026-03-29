@@ -112,7 +112,7 @@ export async function getChannelBreakdown() {
 
 export async function getConnectors() {
   const { data, error } = await supabase
-    .from('connectors')
+    .from('connectors_safe')
     .select('*')
     .order('name')
 

@@ -7,7 +7,7 @@ import EmptyState from '@/components/EmptyState'
 
 type Connector = {
   id: string; name: string; slug: string
-  base_url: string | null; api_key: string | null
+  base_url: string | null; has_key: boolean
   active: boolean; created_at: string
 }
 
@@ -29,7 +29,7 @@ export default function ConnectorsPage() {
 
   function startEdit(c: Connector) {
     setEditingId(c.id)
-    setForm({ name: c.name, slug: c.slug, base_url: c.base_url || '', api_key: c.api_key || '' })
+    setForm({ name: c.name, slug: c.slug, base_url: c.base_url || '', api_key: '' })
     setShowAdd(false)
   }
 
@@ -125,7 +125,7 @@ export default function ConnectorsPage() {
                 <td className="px-5 py-3.5 text-neutral-200 font-medium">{c.name}</td>
                 <td className="px-5 py-3.5 text-neutral-500 font-mono text-xs">{c.slug}</td>
                 <td className="px-5 py-3.5 text-neutral-500 text-xs">{c.base_url || '—'}</td>
-                <td className="px-5 py-3.5 text-neutral-500 text-xs">{c.api_key ? '••••••' : '—'}</td>
+                <td className="px-5 py-3.5 text-neutral-500 text-xs">{c.has_key ? '••••••' : '—'}</td>
                 <td className="px-5 py-3.5 text-right space-x-3">
                   <button onClick={() => startEdit(c)} className="text-xs text-neutral-400 hover:text-white transition-colors">Edit</button>
                   <button onClick={() => handleDelete(c.id)} className="text-xs text-neutral-400 hover:text-red-400 transition-colors">Delete</button>
