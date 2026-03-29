@@ -16,6 +16,7 @@ import {
   getChannelBreakdown,
   getJobs,
   getAgents,
+  getCostByAgent,
 } from '@/lib/queries'
 import { estimateCost, formatDuration, truncate, timeAgo } from '@/lib/utils'
 
@@ -45,15 +46,16 @@ export default function StatsPage() {
   const [toolUsage, setToolUsage] = useState<{ name: string; count: number }[]>([])
   const [recentJobs, setRecentJobs] = useState<{ id: string; status: string; task: string; channel: string; agent_id: string | null; created_at: string }[]>([])
   const [agentMap, setAgentMap] = useState<Record<string, string>>({})
+  const [costByAgent, setCostByAgent] = useState<{ name: string; input_tokens: number; output_tokens: number; total_tokens: number; runs: number }[]>([])
 
   useEffect(() => {
     async function load() {
-      const [counts, tokens, jpd, tools, dur, rate, chans, recent, agents] = await Promise.all([
+      const [counts, tokens, jpd, tools, dur, rate, chans, recent, agents, costs] = await Promise.all([
         getJobCounts(), getTotalTokens(), getJobsPerDay(), getToolUsage(),
-        getAverageDuration(), getSuccessRate(), getChannelBreakdown(), getJobs(undefined, 8), getAgents(),
+        getAverageDuration(), getSuccessRate(), getChannelBreakdown(), getJobs(undefined, 8), getAgents(), getCostByAgent(),
       ])
       setJobCounts(counts); setTotalTokens(tokens); setJobsPerDay(jpd); setToolUsage(tools)
-      setAvgDuration(dur); setSuccessRate(rate); setChannels(chans); setRecentJobs(recent)
+      setAvgDuration(dur); setSuccessRate(rate); setChannels(chans); setRecentJobs(recent); setCostByAgent(costs)
       const map: Record<string, string> = {}
       for (const a of agents) map[a.id] = a.name
       setAgentMap(map)
@@ -117,6 +119,42 @@ export default function StatsPage() {
           <ToolUsageChart data={toolUsage} />
         </div>
       </div>
+
+      {/* Cost by agent */}
+      {costByAgent.length > 0 && (
+        <div className="bg-neutral-900/50 border border-neutral-800/50 rounded-xl p-5">
+          <p className="text-sm font-medium text-neutral-300 mb-4">Cost by agent</p>
+          <div className="space-y-3">
+            {costByAgent.map(agent => {
+              const maxTokens = costByAgent[0]?.total_tokens || 1
+              const barWidth = Math.max((agent.total_tokens / maxTokens) * 100, 2)
+              const cost = (agent.input_tokens * 3 + agent.output_tokens * 15) / 1_000_000
+              return (
+                <div key={agent.name} className="space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-neutral-300 font-medium">{agent.name}</span>
+                    <div className="flex items-center gap-3 text-neutral-500">
+                      <span>{agent.runs} runs</span>
+                      <span>{(agent.total_tokens / 1000).toFixed(1)}K tokens</span>
+                      <span className="text-emerald-500">${cost.toFixed(3)}</span>
+                    </div>
+                  </div>
+                  <div className="h-2 bg-neutral-800 rounded-full overflow-hidden">
+                    <div className="h-full rounded-full flex">
+                      <div className="bg-blue-500/70 h-full" style={{ width: `${(agent.input_tokens / maxTokens) * 100}%` }} />
+                      <div className="bg-purple-500/70 h-full" style={{ width: `${(agent.output_tokens / maxTokens) * 100}%` }} />
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+            <div className="flex items-center gap-4 text-[10px] text-neutral-600 pt-1">
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500/70" /> Input</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-purple-500/70" /> Output</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Recent jobs table */}
       <div className="bg-neutral-900/50 border border-neutral-800/50 rounded-xl overflow-hidden">

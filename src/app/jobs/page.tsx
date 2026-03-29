@@ -6,6 +6,7 @@ import { truncate, timeAgo } from '@/lib/utils'
 import PageHeader from '@/components/PageHeader'
 import Badge from '@/components/Badge'
 import EmptyState from '@/components/EmptyState'
+import TraceTree from '@/components/TraceTree'
 
 type Job = {
   id: string; status: string; channel: string; task: string; chat_id: string | null
@@ -180,6 +181,13 @@ export default function JobsPage() {
                 <span>chains: {job.chain_count}</span>
                 {job.tools_used?.length ? <span>tools: {job.tools_used.join(', ')}</span> : null}
               </div>
+
+              {/* Trace tree */}
+              <div className="border-t border-neutral-800/50 pt-4">
+                <p className="text-[11px] text-neutral-500 font-semibold uppercase tracking-wider mb-3">Execution Trace</p>
+                <TraceTree jobId={job.id} />
+              </div>
+
               <div className="flex gap-2 pt-1">
                 {job.status === 'failed' && (
                   <button

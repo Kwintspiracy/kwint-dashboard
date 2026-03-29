@@ -562,3 +562,21 @@ export async function getToolCalls(limit = 100) {
   if (error) throw error
   return data || []
 }
+
+export async function getJobTrace(jobId: string) {
+  // Get tool calls for this job
+  const { data: calls } = await supabase
+    .from('tool_calls')
+    .select('*')
+    .eq('job_id', jobId)
+    .order('created_at')
+
+  // Get child jobs (delegations)
+  const { data: children } = await supabase
+    .from('agent_jobs')
+    .select('id, task, result, status, total_duration_ms, chain_count, agent_id, agents(name), created_at, completed_at')
+    .eq('parent_job_id', jobId)
+    .order('created_at')
+
+  return { calls: calls || [], children: children || [] }
+}
