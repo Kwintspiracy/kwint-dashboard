@@ -107,18 +107,69 @@ export async function getChannelBreakdown() {
 }
 
 // ═══════════════════════════════════════════════════
-// SKILLS QUERIES
+// CONNECTORS QUERIES
 // ═══════════════════════════════════════════════════
 
-export async function getSkills(type?: 'connector' | 'skill') {
-  let query = supabase
-    .from('agent_skills')
+export async function getConnectors() {
+  const { data, error } = await supabase
+    .from('connectors')
     .select('*')
     .order('name')
 
-  if (type) query = query.eq('type', type)
+  if (error) throw error
+  return data || []
+}
 
-  const { data, error } = await query
+export async function createConnector(data: {
+  name: string
+  slug: string
+  base_url?: string
+  api_key?: string
+}) {
+  const { error } = await supabase
+    .from('connectors')
+    .insert({ ...data, active: true })
+
+  if (error) throw error
+}
+
+export async function updateConnector(id: string, data: Record<string, unknown>) {
+  const { error } = await supabase
+    .from('connectors')
+    .update({ ...data, updated_at: new Date().toISOString() })
+    .eq('id', id)
+
+  if (error) throw error
+}
+
+export async function deleteConnector(id: string) {
+  const { error } = await supabase
+    .from('connectors')
+    .delete()
+    .eq('id', id)
+
+  if (error) throw error
+}
+
+export async function toggleConnectorActive(id: string, active: boolean) {
+  const { error } = await supabase
+    .from('connectors')
+    .update({ active, updated_at: new Date().toISOString() })
+    .eq('id', id)
+
+  if (error) throw error
+}
+
+// ═══════════════════════════════════════════════════
+// SKILLS QUERIES
+// ═══════════════════════════════════════════════════
+
+export async function getSkills() {
+  const { data, error } = await supabase
+    .from('agent_skills')
+    .select('*, connectors(id, name, slug)')
+    .order('name')
+
   if (error) throw error
   return data || []
 }
@@ -136,13 +187,11 @@ export async function createSkill(data: {
   name: string
   slug: string
   content: string
-  api_key?: string
-  base_url?: string
-  type?: 'connector' | 'skill'
+  connector_id?: string | null
 }) {
   const { error } = await supabase
     .from('agent_skills')
-    .insert({ ...data, type: data.type || 'connector', active: true })
+    .insert({ ...data, active: true })
 
   if (error) throw error
 }

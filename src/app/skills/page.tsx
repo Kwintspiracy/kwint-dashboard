@@ -1,35 +1,33 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { getSkills, toggleSkillActive, createSkill, updateSkill, deleteSkill } from '@/lib/queries'
+import { getSkills, getConnectors, toggleSkillActive, createSkill, updateSkill, deleteSkill, createConnector } from '@/lib/queries'
 import { SKILL_TEMPLATES, SKILL_CATEGORIES, type SkillTemplate } from '@/lib/skill-templates'
 import PageHeader from '@/components/PageHeader'
 import Badge from '@/components/Badge'
 import EmptyState from '@/components/EmptyState'
 
+type Connector = { id: string; name: string; slug: string; base_url: string | null; api_key: string | null; active: boolean }
 type Skill = {
   id: string; name: string; slug: string; content: string
-  api_key: string | null; base_url: string | null; active: boolean
-  type: 'connector' | 'skill' | null; created_at: string
+  connector_id: string | null; active: boolean; created_at: string
+  connectors: { id: string; name: string; slug: string } | null
 }
 
 const ALL_CATEGORIES = 'All'
 
 export default function SkillsPage() {
-  const [tab, setTab] = useState<'connectors' | 'skills' | 'marketplace'>('connectors')
-
-  // Separate lists
-  const [connectors, setConnectors] = useState<Skill[]>([])
-  const [skillsList, setSkillsList] = useState<Skill[]>([])
+  const [tab, setTab] = useState<'skills' | 'marketplace'>('skills')
+  const [skills, setSkills] = useState<Skill[]>([])
+  const [connectors, setConnectors] = useState<Connector[]>([])
   const [loading, setLoading] = useState(true)
 
-  // Form state — shared between Connectors and Skills tabs
+  // Form state
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [editingType, setEditingType] = useState<'connector' | 'skill'>('connector')
   const [showAdd, setShowAdd] = useState(false)
-  const [form, setForm] = useState({ name: '', slug: '', content: '', api_key: '', base_url: '' })
+  const [form, setForm] = useState({ name: '', slug: '', content: '', connector_id: '' })
 
-  // Marketplace tab state
+  // Marketplace state
   const [categoryFilter, setCategoryFilter] = useState<string>(ALL_CATEGORIES)
   const [installing, setInstalling] = useState<SkillTemplate | null>(null)
   const [installForm, setInstallForm] = useState<Record<string, string>>({})
@@ -37,27 +35,23 @@ export default function SkillsPage() {
   const [installedSlug, setInstalledSlug] = useState<string | null>(null)
 
   async function load() {
-    const [c, s] = await Promise.all([getSkills('connector'), getSkills('skill')])
-    setConnectors(c as Skill[])
-    setSkillsList(s as Skill[])
+    const [s, c] = await Promise.all([getSkills(), getConnectors()])
+    setSkills(s as Skill[])
+    setConnectors(c as Connector[])
     setLoading(false)
   }
 
   useEffect(() => { load() }, [])
 
-  // ── Shared form handlers ──────────────────────────
-
   function startEdit(s: Skill) {
     setEditingId(s.id)
-    setEditingType(s.type ?? 'connector')
-    setForm({ name: s.name, slug: s.slug, content: s.content, api_key: s.api_key || '', base_url: s.base_url || '' })
+    setForm({ name: s.name, slug: s.slug, content: s.content, connector_id: s.connector_id || '' })
     setShowAdd(false)
   }
 
-  function startAdd(type: 'connector' | 'skill') {
+  function startAdd() {
     setEditingId(null)
-    setEditingType(type)
-    setForm({ name: '', slug: '', content: '', api_key: '', base_url: '' })
+    setForm({ name: '', slug: '', content: '', connector_id: '' })
     setShowAdd(true)
   }
 
@@ -77,32 +71,23 @@ export default function SkillsPage() {
   }
 
   async function handleSave() {
+    const data: Record<string, unknown> = {
+      name: form.name, slug: form.slug, content: form.content,
+      connector_id: form.connector_id || null,
+    }
     if (editingId) {
-      const patch: Record<string, unknown> = { name: form.name, slug: form.slug, content: form.content }
-      if (editingType === 'connector') {
-        patch.api_key = form.api_key || null
-        patch.base_url = form.base_url || null
-      }
-      await updateSkill(editingId, patch)
+      await updateSkill(editingId, data)
       setEditingId(null)
     } else {
-      if (editingType === 'connector') {
-        await createSkill({
-          name: form.name, slug: form.slug, content: form.content,
-          api_key: form.api_key || undefined, base_url: form.base_url || undefined,
-          type: 'connector',
-        })
-      } else {
-        await createSkill({ name: form.name, slug: form.slug, content: form.content, type: 'skill' })
-      }
+      await createSkill(data as { name: string; slug: string; content: string; connector_id?: string | null })
       setShowAdd(false)
     }
     load()
   }
 
   async function handleToggle(id: string, active: boolean) { await toggleSkillActive(id, !active); load() }
-  async function handleDelete(id: string, label: string) {
-    if (confirm(`Delete this ${label}?`)) { await deleteSkill(id); load() }
+  async function handleDelete(id: string) {
+    if (confirm('Delete this skill?')) { await deleteSkill(id); load() }
   }
 
   // ── Marketplace handlers ────────────────────────────
@@ -125,13 +110,27 @@ export default function SkillsPage() {
     if (!installing) return
     setInstallLoading(true)
     try {
+      // Create connector if the template defines one
+      let connectorId: string | null = null
+      if (installing.connector) {
+        await createConnector({
+          name: installing.name,
+          slug: installing.connector.slug,
+          base_url: installing.connector.base_url || undefined,
+          api_key: installForm['api_key'] || undefined,
+        })
+        // Reload to get the new connector's ID
+        const freshConnectors = await (await import('@/lib/queries')).getConnectors()
+        const created = freshConnectors.find((c: Connector) => c.slug === installing.connector!.slug)
+        if (created) connectorId = created.id
+      }
+
+      // Create the skill linked to the connector
       await createSkill({
         name: installing.name,
         slug: installing.slug,
         content: installing.content,
-        api_key: installForm['api_key'] || undefined,
-        base_url: installing.base_url || installForm['base_url'] || undefined,
-        type: 'connector',
+        connector_id: connectorId,
       })
       await load()
       setInstalledSlug(installing.slug)
@@ -140,20 +139,16 @@ export default function SkillsPage() {
     }
   }
 
-  // ── Derived state ───────────────────────────────────
+  // ── Derived state ────────────────────────────────────
 
-  // Marketplace checks against connectors only (all templates are connectors)
-  const installedSlugs = new Set(connectors.map(s => s.slug))
+  const installedSlugs = new Set(skills.map(s => s.slug))
   const isFormOpen = editingId !== null || showAdd
-
   const categories = [ALL_CATEGORIES, ...Object.keys(SKILL_CATEGORIES)]
   const filteredTemplates = categoryFilter === ALL_CATEGORIES
     ? SKILL_TEMPLATES
     : SKILL_TEMPLATES.filter(t => t.category === categoryFilter)
 
   if (loading) return <p className="text-neutral-500 text-sm">Loading...</p>
-
-  // ── Tab label helpers ───────────────────────────────
 
   function tabClass(t: typeof tab) {
     return `text-sm font-medium transition-colors ${
@@ -162,8 +157,6 @@ export default function SkillsPage() {
         : 'text-neutral-500 hover:text-neutral-300 pb-3'
     }`
   }
-
-  // ── Toggle widget ───────────────────────────────────
 
   function Toggle({ id, active }: { id: string; active: boolean }) {
     return (
@@ -178,22 +171,10 @@ export default function SkillsPage() {
 
   return (
     <div className="space-y-5 max-w-7xl">
-      {/* Header */}
-      <PageHeader
-        title="Skills"
-        count={tab === 'connectors' ? connectors.length : tab === 'skills' ? skillsList.length : undefined}
-      >
-        {tab === 'connectors' && (
-          <button
-            onClick={() => startAdd('connector')}
-            className="px-4 py-2 text-xs font-semibold bg-white text-black rounded-lg hover:bg-neutral-200 transition-colors"
-          >
-            Add connector
-          </button>
-        )}
+      <PageHeader title="Skills" count={tab === 'skills' ? skills.length : undefined}>
         {tab === 'skills' && (
           <button
-            onClick={() => startAdd('skill')}
+            onClick={startAdd}
             className="px-4 py-2 text-xs font-semibold bg-white text-black rounded-lg hover:bg-neutral-200 transition-colors"
           >
             Add skill
@@ -203,127 +184,16 @@ export default function SkillsPage() {
 
       {/* Tab bar */}
       <div className="flex gap-6 border-b border-neutral-800">
-        <button onClick={() => setTab('connectors')} className={tabClass('connectors')}>
-          Connectors
-          {connectors.length > 0 && (
-            <span className="ml-1.5 text-xs text-neutral-500">({connectors.length})</span>
-          )}
-        </button>
         <button onClick={() => setTab('skills')} className={tabClass('skills')}>
           Skills
-          {skillsList.length > 0 && (
-            <span className="ml-1.5 text-xs text-neutral-500">({skillsList.length})</span>
+          {skills.length > 0 && (
+            <span className="ml-1.5 text-xs text-neutral-500">({skills.length})</span>
           )}
         </button>
         <button onClick={() => setTab('marketplace')} className={tabClass('marketplace')}>
           Marketplace
         </button>
       </div>
-
-      {/* ── Connectors tab ── */}
-      {tab === 'connectors' && (
-        <div className="space-y-4">
-          <div className="bg-neutral-900/50 border border-neutral-800/50 rounded-xl overflow-hidden">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-neutral-800/50">
-                  <th className="text-left px-5 py-3.5 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider w-12">On</th>
-                  <th className="text-left px-5 py-3.5 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Name</th>
-                  <th className="text-left px-5 py-3.5 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Slug</th>
-                  <th className="text-left px-5 py-3.5 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Base URL</th>
-                  <th className="text-left px-5 py-3.5 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">API Key</th>
-                  <th className="text-right px-5 py-3.5 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {connectors.map((s) => (
-                  <tr key={s.id} className="border-b border-neutral-800/50 hover:bg-neutral-800/30 transition-colors">
-                    <td className="px-5 py-3.5"><Toggle id={s.id} active={s.active} /></td>
-                    <td className="px-5 py-3.5 text-neutral-200 font-medium">{s.name}</td>
-                    <td className="px-5 py-3.5 text-neutral-500 font-mono text-xs">{s.slug}</td>
-                    <td className="px-5 py-3.5 text-neutral-500 text-xs">{s.base_url || '—'}</td>
-                    <td className="px-5 py-3.5 text-neutral-500 text-xs">{s.api_key ? '••••••' : '—'}</td>
-                    <td className="px-5 py-3.5 text-right space-x-3">
-                      <button onClick={() => startEdit(s)} className="text-xs text-neutral-400 hover:text-white transition-colors">Edit</button>
-                      <button onClick={() => handleDelete(s.id, 'connector')} className="text-xs text-neutral-400 hover:text-red-400 transition-colors">Delete</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {connectors.length === 0 && <EmptyState message="No connectors yet — install one from the Marketplace" />}
-          </div>
-
-          {isFormOpen && editingType === 'connector' && (
-            <div className="bg-neutral-900/50 border border-neutral-800/50 rounded-xl p-6 space-y-5">
-              <p className="text-sm font-semibold text-white">{editingId ? 'Edit Connector' : 'New Connector'}</p>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs text-neutral-500 mb-1.5">Name</label>
-                  <input
-                    value={form.name}
-                    onChange={(e) => updateForm('name', e.target.value)}
-                    placeholder="e.g. GitHub API"
-                    className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none transition-colors"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-neutral-500 mb-1.5">Slug</label>
-                  <input
-                    value={form.slug}
-                    onChange={(e) => updateForm('slug', e.target.value)}
-                    placeholder="e.g. github-api"
-                    className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-neutral-500 mb-1.5">
-                    API Key <span className="text-neutral-600">(optional)</span>
-                  </label>
-                  <input
-                    value={form.api_key}
-                    onChange={(e) => updateForm('api_key', e.target.value)}
-                    placeholder="sk-..."
-                    type="password"
-                    className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-neutral-500 mb-1.5">
-                    Base URL <span className="text-neutral-600">(optional)</span>
-                  </label>
-                  <input
-                    value={form.base_url}
-                    onChange={(e) => updateForm('base_url', e.target.value)}
-                    placeholder="https://api.example.com"
-                    className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none transition-colors"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs text-neutral-500 mb-1.5">
-                  Content <span className="text-neutral-600">(markdown — teaches the agent how to use the API)</span>
-                </label>
-                <textarea
-                  value={form.content}
-                  onChange={(e) => updateForm('content', e.target.value)}
-                  placeholder={'# API Documentation\n\nDescribe endpoints, auth, examples...'}
-                  rows={14}
-                  className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-3 text-sm text-white font-mono leading-relaxed focus:border-neutral-600 focus:outline-none transition-colors resize-y"
-                />
-              </div>
-              <div className="flex gap-2 pt-1">
-                <button onClick={handleSave} className="px-4 py-2 text-xs font-semibold bg-white text-black rounded-lg hover:bg-neutral-200 transition-colors">
-                  {editingId ? 'Save changes' : 'Create connector'}
-                </button>
-                <button onClick={cancelForm} className="px-4 py-2 text-xs font-medium border border-neutral-700 text-neutral-400 rounded-lg hover:text-white hover:border-neutral-600 transition-colors">
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
 
       {/* ── Skills tab ── */}
       {tab === 'skills' && (
@@ -335,27 +205,40 @@ export default function SkillsPage() {
                   <th className="text-left px-5 py-3.5 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider w-12">On</th>
                   <th className="text-left px-5 py-3.5 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Name</th>
                   <th className="text-left px-5 py-3.5 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Slug</th>
+                  <th className="text-left px-5 py-3.5 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Connector</th>
                   <th className="text-right px-5 py-3.5 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {skillsList.map((s) => (
+                {skills.map((s) => (
                   <tr key={s.id} className="border-b border-neutral-800/50 hover:bg-neutral-800/30 transition-colors">
                     <td className="px-5 py-3.5"><Toggle id={s.id} active={s.active} /></td>
                     <td className="px-5 py-3.5 text-neutral-200 font-medium">{s.name}</td>
                     <td className="px-5 py-3.5 text-neutral-500 font-mono text-xs">{s.slug}</td>
+                    <td className="px-5 py-3.5">
+                      {s.connectors ? (
+                        <span className="inline-flex items-center gap-1.5 px-2 py-1 text-xs font-medium text-emerald-400 bg-emerald-900/20 border border-emerald-900/30 rounded-md">
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m9.86-2.54a4.5 4.5 0 00-6.364-6.364L4.5 8.25l4.5 4.5" />
+                          </svg>
+                          {s.connectors.name}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-neutral-600">—</span>
+                      )}
+                    </td>
                     <td className="px-5 py-3.5 text-right space-x-3">
                       <button onClick={() => startEdit(s)} className="text-xs text-neutral-400 hover:text-white transition-colors">Edit</button>
-                      <button onClick={() => handleDelete(s.id, 'skill')} className="text-xs text-neutral-400 hover:text-red-400 transition-colors">Delete</button>
+                      <button onClick={() => handleDelete(s.id)} className="text-xs text-neutral-400 hover:text-red-400 transition-colors">Delete</button>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            {skillsList.length === 0 && <EmptyState message="No skills yet — add knowledge procedures for your agents" />}
+            {skills.length === 0 && <EmptyState message="No skills yet — add one manually or install from the Marketplace" />}
           </div>
 
-          {isFormOpen && editingType === 'skill' && (
+          {isFormOpen && (
             <div className="bg-neutral-900/50 border border-neutral-800/50 rounded-xl p-6 space-y-5">
               <p className="text-sm font-semibold text-white">{editingId ? 'Edit Skill' : 'New Skill'}</p>
               <div className="grid grid-cols-2 gap-4">
@@ -364,7 +247,7 @@ export default function SkillsPage() {
                   <input
                     value={form.name}
                     onChange={(e) => updateForm('name', e.target.value)}
-                    placeholder="e.g. How to write a professional email"
+                    placeholder="e.g. Google Sheets"
                     className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none transition-colors"
                   />
                 </div>
@@ -373,21 +256,36 @@ export default function SkillsPage() {
                   <input
                     value={form.slug}
                     onChange={(e) => updateForm('slug', e.target.value)}
-                    placeholder="e.g. professional-email"
+                    placeholder="e.g. google-sheets"
                     className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors"
                   />
                 </div>
               </div>
               <div>
                 <label className="block text-xs text-neutral-500 mb-1.5">
-                  Content <span className="text-neutral-600">(knowledge or procedure — plain text or markdown)</span>
+                  Connector <span className="text-neutral-600">(optional — link to API credentials)</span>
+                </label>
+                <select
+                  value={form.connector_id}
+                  onChange={(e) => updateForm('connector_id', e.target.value)}
+                  className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none transition-colors"
+                >
+                  <option value="">None</option>
+                  {connectors.map(c => (
+                    <option key={c.id} value={c.id}>{c.name} ({c.slug})</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-neutral-500 mb-1.5">
+                  Content <span className="text-neutral-600">(markdown — knowledge, procedures, or API documentation)</span>
                 </label>
                 <textarea
                   value={form.content}
                   onChange={(e) => updateForm('content', e.target.value)}
-                  placeholder={'Describe the knowledge, procedure, or guidelines the agent should follow...'}
-                  rows={20}
-                  className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-3 text-sm text-white leading-relaxed focus:border-neutral-600 focus:outline-none transition-colors resize-y"
+                  placeholder={'# Skill Documentation\n\nDescribe what this skill teaches the agent...'}
+                  rows={16}
+                  className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-3 text-sm text-white font-mono leading-relaxed focus:border-neutral-600 focus:outline-none transition-colors resize-y"
                 />
               </div>
               <div className="flex gap-2 pt-1">
@@ -406,7 +304,6 @@ export default function SkillsPage() {
       {/* ── Marketplace tab ── */}
       {tab === 'marketplace' && (
         <div className="space-y-5">
-          {/* Category filter pills */}
           <div className="flex flex-wrap gap-2">
             {categories.map(cat => (
               <button
@@ -423,7 +320,6 @@ export default function SkillsPage() {
             ))}
           </div>
 
-          {/* Template grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {filteredTemplates.map(template => {
               const isInstalled = installedSlugs.has(template.slug)
@@ -449,17 +345,22 @@ export default function SkillsPage() {
                   </div>
 
                   <div className="flex items-center justify-between mt-auto pt-1">
-                    <Badge
-                      label={categoryLabel}
-                      color={
-                        template.category === 'google' ? 'blue' :
-                        template.category === 'communication' ? 'purple' :
-                        template.category === 'dev' ? 'emerald' :
-                        template.category === 'productivity' ? 'amber' :
-                        template.category === 'search' ? 'red' :
-                        'neutral'
-                      }
-                    />
+                    <div className="flex items-center gap-2">
+                      <Badge
+                        label={categoryLabel}
+                        color={
+                          template.category === 'google' ? 'blue' :
+                          template.category === 'communication' ? 'purple' :
+                          template.category === 'dev' ? 'emerald' :
+                          template.category === 'productivity' ? 'amber' :
+                          template.category === 'search' ? 'red' :
+                          'neutral'
+                        }
+                      />
+                      {template.connector && (
+                        <span className="text-[10px] text-neutral-600">+ connector</span>
+                      )}
+                    </div>
 
                     {isInstalled ? (
                       <span className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-emerald-400 bg-emerald-900/30 border border-emerald-900/40 rounded-lg">
@@ -520,13 +421,23 @@ export default function SkillsPage() {
                     </span>
                   </div>
                   <p className="text-sm font-semibold text-white">Installed successfully!</p>
-                  <p className="text-xs text-neutral-400">{installing.name} is now available in your connectors.</p>
+                  <p className="text-xs text-neutral-400">
+                    {installing.name} skill{installing.connector ? ' + connector' : ''} created.
+                  </p>
                   <button onClick={closeInstallModal} className="mt-2 px-4 py-2 text-xs font-semibold bg-white text-black rounded-lg hover:bg-neutral-200 transition-colors">
                     Done
                   </button>
                 </div>
               ) : (
                 <>
+                  {installing.connector && (
+                    <div className="bg-neutral-800/30 border border-neutral-800/50 rounded-lg px-4 py-3">
+                      <p className="text-xs text-neutral-400">
+                        This will create a <span className="text-emerald-400 font-medium">connector</span> ({installing.connector.slug}) and link it to the skill.
+                      </p>
+                    </div>
+                  )}
+
                   {installing.fields.length > 0 ? (
                     <div className="space-y-4">
                       {installing.fields.map(field => (
