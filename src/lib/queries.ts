@@ -110,12 +110,15 @@ export async function getChannelBreakdown() {
 // SKILLS QUERIES
 // ═══════════════════════════════════════════════════
 
-export async function getSkills() {
-  const { data, error } = await supabase
+export async function getSkills(type?: 'connector' | 'skill') {
+  let query = supabase
     .from('agent_skills')
     .select('*')
     .order('name')
 
+  if (type) query = query.eq('type', type)
+
+  const { data, error } = await query
   if (error) throw error
   return data || []
 }
@@ -135,10 +138,11 @@ export async function createSkill(data: {
   content: string
   api_key?: string
   base_url?: string
+  type?: 'connector' | 'skill'
 }) {
   const { error } = await supabase
     .from('agent_skills')
-    .insert({ ...data, active: true })
+    .insert({ ...data, type: data.type || 'connector', active: true })
 
   if (error) throw error
 }

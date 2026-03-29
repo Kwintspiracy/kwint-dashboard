@@ -9,18 +9,23 @@ import EmptyState from '@/components/EmptyState'
 
 type Skill = {
   id: string; name: string; slug: string; content: string
-  api_key: string | null; base_url: string | null; active: boolean; created_at: string
+  api_key: string | null; base_url: string | null; active: boolean
+  type: 'connector' | 'skill' | null; created_at: string
 }
 
 const ALL_CATEGORIES = 'All'
 
 export default function SkillsPage() {
-  const [tab, setTab] = useState<'installed' | 'marketplace'>('installed')
-  const [skills, setSkills] = useState<Skill[]>([])
+  const [tab, setTab] = useState<'connectors' | 'skills' | 'marketplace'>('connectors')
+
+  // Separate lists
+  const [connectors, setConnectors] = useState<Skill[]>([])
+  const [skillsList, setSkillsList] = useState<Skill[]>([])
   const [loading, setLoading] = useState(true)
 
-  // Installed tab state
+  // Form state — shared between Connectors and Skills tabs
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [editingType, setEditingType] = useState<'connector' | 'skill'>('connector')
   const [showAdd, setShowAdd] = useState(false)
   const [form, setForm] = useState({ name: '', slug: '', content: '', api_key: '', base_url: '' })
 
@@ -31,19 +36,27 @@ export default function SkillsPage() {
   const [installLoading, setInstallLoading] = useState(false)
   const [installedSlug, setInstalledSlug] = useState<string | null>(null)
 
-  async function load() { setSkills(await getSkills()); setLoading(false) }
+  async function load() {
+    const [c, s] = await Promise.all([getSkills('connector'), getSkills('skill')])
+    setConnectors(c as Skill[])
+    setSkillsList(s as Skill[])
+    setLoading(false)
+  }
+
   useEffect(() => { load() }, [])
 
-  // ── Installed tab handlers ──────────────────────────
+  // ── Shared form handlers ──────────────────────────
 
   function startEdit(s: Skill) {
     setEditingId(s.id)
+    setEditingType(s.type ?? 'connector')
     setForm({ name: s.name, slug: s.slug, content: s.content, api_key: s.api_key || '', base_url: s.base_url || '' })
     setShowAdd(false)
   }
 
-  function startAdd() {
+  function startAdd(type: 'connector' | 'skill') {
     setEditingId(null)
+    setEditingType(type)
     setForm({ name: '', slug: '', content: '', api_key: '', base_url: '' })
     setShowAdd(true)
   }
@@ -58,27 +71,45 @@ export default function SkillsPage() {
     })
   }
 
+  function cancelForm() {
+    setEditingId(null)
+    setShowAdd(false)
+  }
+
   async function handleSave() {
     if (editingId) {
-      await updateSkill(editingId, { name: form.name, slug: form.slug, content: form.content, api_key: form.api_key || null, base_url: form.base_url || null })
+      const patch: Record<string, unknown> = { name: form.name, slug: form.slug, content: form.content }
+      if (editingType === 'connector') {
+        patch.api_key = form.api_key || null
+        patch.base_url = form.base_url || null
+      }
+      await updateSkill(editingId, patch)
       setEditingId(null)
     } else {
-      await createSkill({ name: form.name, slug: form.slug, content: form.content, api_key: form.api_key || undefined, base_url: form.base_url || undefined })
+      if (editingType === 'connector') {
+        await createSkill({
+          name: form.name, slug: form.slug, content: form.content,
+          api_key: form.api_key || undefined, base_url: form.base_url || undefined,
+          type: 'connector',
+        })
+      } else {
+        await createSkill({ name: form.name, slug: form.slug, content: form.content, type: 'skill' })
+      }
       setShowAdd(false)
     }
     load()
   }
 
   async function handleToggle(id: string, active: boolean) { await toggleSkillActive(id, !active); load() }
-  async function handleDelete(id: string) { if (confirm('Delete this skill?')) { await deleteSkill(id); load() } }
+  async function handleDelete(id: string, label: string) {
+    if (confirm(`Delete this ${label}?`)) { await deleteSkill(id); load() }
+  }
 
   // ── Marketplace handlers ────────────────────────────
 
   function openInstallModal(template: SkillTemplate) {
     const defaults: Record<string, string> = {}
-    for (const field of template.fields) {
-      defaults[field.key] = ''
-    }
+    for (const field of template.fields) { defaults[field.key] = '' }
     setInstallForm(defaults)
     setInstalling(template)
     setInstalledSlug(null)
@@ -100,6 +131,7 @@ export default function SkillsPage() {
         content: installing.content,
         api_key: installForm['api_key'] || undefined,
         base_url: installing.base_url || installForm['base_url'] || undefined,
+        type: 'connector',
       })
       await load()
       setInstalledSlug(installing.slug)
@@ -110,7 +142,8 @@ export default function SkillsPage() {
 
   // ── Derived state ───────────────────────────────────
 
-  const installedSlugs = new Set(skills.map(s => s.slug))
+  // Marketplace checks against connectors only (all templates are connectors)
+  const installedSlugs = new Set(connectors.map(s => s.slug))
   const isFormOpen = editingId !== null || showAdd
 
   const categories = [ALL_CATEGORIES, ...Object.keys(SKILL_CATEGORIES)]
@@ -120,15 +153,49 @@ export default function SkillsPage() {
 
   if (loading) return <p className="text-neutral-500 text-sm">Loading...</p>
 
+  // ── Tab label helpers ───────────────────────────────
+
+  function tabClass(t: typeof tab) {
+    return `text-sm font-medium transition-colors ${
+      tab === t
+        ? 'text-white border-b-2 border-emerald-500 pb-3'
+        : 'text-neutral-500 hover:text-neutral-300 pb-3'
+    }`
+  }
+
+  // ── Toggle widget ───────────────────────────────────
+
+  function Toggle({ id, active }: { id: string; active: boolean }) {
+    return (
+      <button
+        onClick={() => handleToggle(id, active)}
+        className={`w-9 h-5 rounded-full relative transition-colors ${active ? 'bg-emerald-600' : 'bg-neutral-700'}`}
+      >
+        <span className={`absolute top-1 w-3.5 h-3.5 bg-white rounded-full transition-all shadow-sm ${active ? 'left-[18px]' : 'left-0.5'}`} />
+      </button>
+    )
+  }
+
   return (
     <div className="space-y-5 max-w-7xl">
       {/* Header */}
       <PageHeader
         title="Skills"
-        count={tab === 'installed' ? skills.length : undefined}
+        count={tab === 'connectors' ? connectors.length : tab === 'skills' ? skillsList.length : undefined}
       >
-        {tab === 'installed' && (
-          <button onClick={startAdd} className="px-4 py-2 text-xs font-semibold bg-white text-black rounded-lg hover:bg-neutral-200 transition-colors">
+        {tab === 'connectors' && (
+          <button
+            onClick={() => startAdd('connector')}
+            className="px-4 py-2 text-xs font-semibold bg-white text-black rounded-lg hover:bg-neutral-200 transition-colors"
+          >
+            Add connector
+          </button>
+        )}
+        {tab === 'skills' && (
+          <button
+            onClick={() => startAdd('skill')}
+            className="px-4 py-2 text-xs font-semibold bg-white text-black rounded-lg hover:bg-neutral-200 transition-colors"
+          >
             Add skill
           </button>
         )}
@@ -136,30 +203,25 @@ export default function SkillsPage() {
 
       {/* Tab bar */}
       <div className="flex gap-6 border-b border-neutral-800">
-        <button
-          onClick={() => setTab('installed')}
-          className={`text-sm font-medium transition-colors ${
-            tab === 'installed'
-              ? 'text-white border-b-2 border-emerald-500 pb-3'
-              : 'text-neutral-500 hover:text-neutral-300 pb-3 transition-colors'
-          }`}
-        >
-          Installed
+        <button onClick={() => setTab('connectors')} className={tabClass('connectors')}>
+          Connectors
+          {connectors.length > 0 && (
+            <span className="ml-1.5 text-xs text-neutral-500">({connectors.length})</span>
+          )}
         </button>
-        <button
-          onClick={() => setTab('marketplace')}
-          className={`text-sm font-medium transition-colors ${
-            tab === 'marketplace'
-              ? 'text-white border-b-2 border-emerald-500 pb-3'
-              : 'text-neutral-500 hover:text-neutral-300 pb-3 transition-colors'
-          }`}
-        >
+        <button onClick={() => setTab('skills')} className={tabClass('skills')}>
+          Skills
+          {skillsList.length > 0 && (
+            <span className="ml-1.5 text-xs text-neutral-500">({skillsList.length})</span>
+          )}
+        </button>
+        <button onClick={() => setTab('marketplace')} className={tabClass('marketplace')}>
           Marketplace
         </button>
       </div>
 
-      {/* ── Installed tab ── */}
-      {tab === 'installed' && (
+      {/* ── Connectors tab ── */}
+      {tab === 'connectors' && (
         <div className="space-y-4">
           <div className="bg-neutral-900/50 border border-neutral-800/50 rounded-xl overflow-hidden">
             <table className="w-full text-sm">
@@ -174,34 +236,27 @@ export default function SkillsPage() {
                 </tr>
               </thead>
               <tbody>
-                {skills.map((s) => (
+                {connectors.map((s) => (
                   <tr key={s.id} className="border-b border-neutral-800/50 hover:bg-neutral-800/30 transition-colors">
-                    <td className="px-5 py-3.5">
-                      <button
-                        onClick={() => handleToggle(s.id, s.active)}
-                        className={`w-9 h-5 rounded-full relative transition-colors ${s.active ? 'bg-emerald-600' : 'bg-neutral-700'}`}
-                      >
-                        <span className={`absolute top-1 w-3.5 h-3.5 bg-white rounded-full transition-all shadow-sm ${s.active ? 'left-[18px]' : 'left-0.5'}`} />
-                      </button>
-                    </td>
+                    <td className="px-5 py-3.5"><Toggle id={s.id} active={s.active} /></td>
                     <td className="px-5 py-3.5 text-neutral-200 font-medium">{s.name}</td>
                     <td className="px-5 py-3.5 text-neutral-500 font-mono text-xs">{s.slug}</td>
                     <td className="px-5 py-3.5 text-neutral-500 text-xs">{s.base_url || '—'}</td>
                     <td className="px-5 py-3.5 text-neutral-500 text-xs">{s.api_key ? '••••••' : '—'}</td>
                     <td className="px-5 py-3.5 text-right space-x-3">
                       <button onClick={() => startEdit(s)} className="text-xs text-neutral-400 hover:text-white transition-colors">Edit</button>
-                      <button onClick={() => handleDelete(s.id)} className="text-xs text-neutral-400 hover:text-red-400 transition-colors">Delete</button>
+                      <button onClick={() => handleDelete(s.id, 'connector')} className="text-xs text-neutral-400 hover:text-red-400 transition-colors">Delete</button>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            {skills.length === 0 && <EmptyState message="No skills yet" />}
+            {connectors.length === 0 && <EmptyState message="No connectors yet — install one from the Marketplace" />}
           </div>
 
-          {isFormOpen && (
+          {isFormOpen && editingType === 'connector' && (
             <div className="bg-neutral-900/50 border border-neutral-800/50 rounded-xl p-6 space-y-5">
-              <p className="text-sm font-semibold text-white">{editingId ? 'Edit Skill' : 'New Skill'}</p>
+              <p className="text-sm font-semibold text-white">{editingId ? 'Edit Connector' : 'New Connector'}</p>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs text-neutral-500 mb-1.5">Name</label>
@@ -209,7 +264,7 @@ export default function SkillsPage() {
                     value={form.name}
                     onChange={(e) => updateForm('name', e.target.value)}
                     placeholder="e.g. GitHub API"
-                    className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none"
+                    className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none transition-colors"
                   />
                 </div>
                 <div>
@@ -218,7 +273,7 @@ export default function SkillsPage() {
                     value={form.slug}
                     onChange={(e) => updateForm('slug', e.target.value)}
                     placeholder="e.g. github-api"
-                    className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none"
+                    className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors"
                   />
                 </div>
                 <div>
@@ -230,7 +285,7 @@ export default function SkillsPage() {
                     onChange={(e) => updateForm('api_key', e.target.value)}
                     placeholder="sk-..."
                     type="password"
-                    className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none"
+                    className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors"
                   />
                 </div>
                 <div>
@@ -241,30 +296,105 @@ export default function SkillsPage() {
                     value={form.base_url}
                     onChange={(e) => updateForm('base_url', e.target.value)}
                     placeholder="https://api.example.com"
-                    className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none"
+                    className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none transition-colors"
                   />
                 </div>
               </div>
               <div>
                 <label className="block text-xs text-neutral-500 mb-1.5">
-                  Content <span className="text-neutral-600">(markdown — this teaches the agent how to use the API)</span>
+                  Content <span className="text-neutral-600">(markdown — teaches the agent how to use the API)</span>
                 </label>
                 <textarea
                   value={form.content}
                   onChange={(e) => updateForm('content', e.target.value)}
                   placeholder={'# API Documentation\n\nDescribe endpoints, auth, examples...'}
                   rows={14}
-                  className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-3 text-sm text-white font-mono leading-relaxed focus:border-neutral-600 focus:outline-none resize-y"
+                  className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-3 text-sm text-white font-mono leading-relaxed focus:border-neutral-600 focus:outline-none transition-colors resize-y"
+                />
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button onClick={handleSave} className="px-4 py-2 text-xs font-semibold bg-white text-black rounded-lg hover:bg-neutral-200 transition-colors">
+                  {editingId ? 'Save changes' : 'Create connector'}
+                </button>
+                <button onClick={cancelForm} className="px-4 py-2 text-xs font-medium border border-neutral-700 text-neutral-400 rounded-lg hover:text-white hover:border-neutral-600 transition-colors">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Skills tab ── */}
+      {tab === 'skills' && (
+        <div className="space-y-4">
+          <div className="bg-neutral-900/50 border border-neutral-800/50 rounded-xl overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-neutral-800/50">
+                  <th className="text-left px-5 py-3.5 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider w-12">On</th>
+                  <th className="text-left px-5 py-3.5 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Name</th>
+                  <th className="text-left px-5 py-3.5 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Slug</th>
+                  <th className="text-right px-5 py-3.5 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {skillsList.map((s) => (
+                  <tr key={s.id} className="border-b border-neutral-800/50 hover:bg-neutral-800/30 transition-colors">
+                    <td className="px-5 py-3.5"><Toggle id={s.id} active={s.active} /></td>
+                    <td className="px-5 py-3.5 text-neutral-200 font-medium">{s.name}</td>
+                    <td className="px-5 py-3.5 text-neutral-500 font-mono text-xs">{s.slug}</td>
+                    <td className="px-5 py-3.5 text-right space-x-3">
+                      <button onClick={() => startEdit(s)} className="text-xs text-neutral-400 hover:text-white transition-colors">Edit</button>
+                      <button onClick={() => handleDelete(s.id, 'skill')} className="text-xs text-neutral-400 hover:text-red-400 transition-colors">Delete</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {skillsList.length === 0 && <EmptyState message="No skills yet — add knowledge procedures for your agents" />}
+          </div>
+
+          {isFormOpen && editingType === 'skill' && (
+            <div className="bg-neutral-900/50 border border-neutral-800/50 rounded-xl p-6 space-y-5">
+              <p className="text-sm font-semibold text-white">{editingId ? 'Edit Skill' : 'New Skill'}</p>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs text-neutral-500 mb-1.5">Name</label>
+                  <input
+                    value={form.name}
+                    onChange={(e) => updateForm('name', e.target.value)}
+                    placeholder="e.g. How to write a professional email"
+                    className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-neutral-500 mb-1.5">Slug</label>
+                  <input
+                    value={form.slug}
+                    onChange={(e) => updateForm('slug', e.target.value)}
+                    placeholder="e.g. professional-email"
+                    className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs text-neutral-500 mb-1.5">
+                  Content <span className="text-neutral-600">(knowledge or procedure — plain text or markdown)</span>
+                </label>
+                <textarea
+                  value={form.content}
+                  onChange={(e) => updateForm('content', e.target.value)}
+                  placeholder={'Describe the knowledge, procedure, or guidelines the agent should follow...'}
+                  rows={20}
+                  className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-3 text-sm text-white leading-relaxed focus:border-neutral-600 focus:outline-none transition-colors resize-y"
                 />
               </div>
               <div className="flex gap-2 pt-1">
                 <button onClick={handleSave} className="px-4 py-2 text-xs font-semibold bg-white text-black rounded-lg hover:bg-neutral-200 transition-colors">
                   {editingId ? 'Save changes' : 'Create skill'}
                 </button>
-                <button
-                  onClick={() => { setEditingId(null); setShowAdd(false) }}
-                  className="px-4 py-2 text-xs font-medium border border-neutral-700 text-neutral-400 rounded-lg hover:text-white hover:border-neutral-600 transition-colors"
-                >
+                <button onClick={cancelForm} className="px-4 py-2 text-xs font-medium border border-neutral-700 text-neutral-400 rounded-lg hover:text-white hover:border-neutral-600 transition-colors">
                   Cancel
                 </button>
               </div>
@@ -288,7 +418,7 @@ export default function SkillsPage() {
                     : 'border border-neutral-800 text-neutral-400 rounded-full px-3 py-1 text-xs hover:text-white hover:border-neutral-700 transition-colors'
                 }
               >
-                {cat}
+                {cat === ALL_CATEGORIES ? 'All' : SKILL_CATEGORIES[cat]?.label ?? cat}
               </button>
             ))}
           </div>
@@ -304,7 +434,6 @@ export default function SkillsPage() {
                   className="bg-neutral-900/50 border border-neutral-800/50 rounded-xl p-5 hover:border-neutral-700 transition-all flex flex-col gap-4"
                   style={{ borderLeftColor: template.color, borderLeftWidth: '4px' }}
                 >
-                  {/* Icon + name + description */}
                   <div className="flex items-start gap-3">
                     <div className="shrink-0">
                       <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${template.color}18` }}>
@@ -319,7 +448,6 @@ export default function SkillsPage() {
                     </div>
                   </div>
 
-                  {/* Footer: category badge + action */}
                   <div className="flex items-center justify-between mt-auto pt-1">
                     <Badge
                       label={categoryLabel}
@@ -364,7 +492,6 @@ export default function SkillsPage() {
       {installing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-neutral-900 border border-neutral-800/50 rounded-2xl w-full max-w-md shadow-2xl">
-            {/* Modal header */}
             <div className="flex items-center gap-3 px-6 py-5 border-b border-neutral-800/50">
               <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: `${installing.color}18` }}>
                 <svg viewBox="0 0 24 24" className="w-5 h-5" fill={installing.color}>
@@ -375,17 +502,13 @@ export default function SkillsPage() {
                 <p className="text-sm font-semibold text-white">{installing.name}</p>
                 <p className="text-xs text-neutral-400 truncate">{installing.description}</p>
               </div>
-              <button
-                onClick={closeInstallModal}
-                className="text-neutral-500 hover:text-white transition-colors ml-2 shrink-0"
-              >
+              <button onClick={closeInstallModal} className="text-neutral-500 hover:text-white transition-colors ml-2 shrink-0">
                 <svg viewBox="0 0 16 16" className="w-4 h-4" fill="currentColor">
                   <path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z" />
                 </svg>
               </button>
             </div>
 
-            {/* Modal body */}
             <div className="px-6 py-5 space-y-4">
               {installedSlug === installing.slug ? (
                 <div className="text-center py-6 space-y-3">
@@ -397,7 +520,7 @@ export default function SkillsPage() {
                     </span>
                   </div>
                   <p className="text-sm font-semibold text-white">Installed successfully!</p>
-                  <p className="text-xs text-neutral-400">{installing.name} is now available in your skills.</p>
+                  <p className="text-xs text-neutral-400">{installing.name} is now available in your connectors.</p>
                   <button onClick={closeInstallModal} className="mt-2 px-4 py-2 text-xs font-semibold bg-white text-black rounded-lg hover:bg-neutral-200 transition-colors">
                     Done
                   </button>
@@ -417,7 +540,7 @@ export default function SkillsPage() {
                             value={installForm[field.key] ?? ''}
                             onChange={e => setInstallForm(prev => ({ ...prev, [field.key]: e.target.value }))}
                             placeholder={field.placeholder}
-                            className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none"
+                            className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none transition-colors"
                           />
                           {field.help && <p className="text-xs text-neutral-600 mt-1">{field.help}</p>}
                         </div>
