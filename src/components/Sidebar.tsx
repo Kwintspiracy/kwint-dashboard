@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-  HouseSimple,
+  ChartPieSlice,
   UsersThree,
   ClipboardText,
   Brain,
@@ -20,7 +20,7 @@ const NAV_ITEMS: NavGroup[] = [
   {
     section: null,
     items: [
-      { href: '/stats', label: 'Overview', icon: HouseSimple },
+      { href: '/stats', label: 'Dashboard', icon: ChartPieSlice },
       { href: '/agents', label: 'Agents', icon: UsersThree },
     ],
   },
