@@ -80,7 +80,7 @@ export default function JobsPage() {
         )}
       </PageHeader>
 
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <select
           value={agentFilter} onChange={(e) => setAgentFilter(e.target.value)}
           className="bg-neutral-800/50 border border-neutral-800 rounded-lg px-3 py-2 text-xs text-neutral-300 focus:border-neutral-600 focus:outline-none transition-colors"
@@ -174,7 +174,7 @@ export default function JobsPage() {
                   <pre className="text-sm text-red-300 whitespace-pre-wrap bg-red-950/30 rounded-lg p-4 border border-red-900/50">{job.error}</pre>
                 </div>
               )}
-              <div className="flex gap-4 text-xs text-neutral-600">
+              <div className="flex flex-wrap gap-2 sm:gap-4 text-xs text-neutral-600">
                 <span>id: {job.id.slice(0, 8)}</span>
                 <span>agent: {job.agent_id ? (agentMap[job.agent_id] || job.agent_id.slice(0, 8)) : '—'}</span>
                 <span>chat: {job.chat_id || '—'}</span>

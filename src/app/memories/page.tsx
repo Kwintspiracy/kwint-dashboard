@@ -136,7 +136,7 @@ export default function MemoriesPage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search memories..."
-          className="bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2 text-xs text-neutral-300 focus:border-neutral-600 focus:outline-none w-64"
+          className="bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2 text-xs text-neutral-300 focus:border-neutral-600 focus:outline-none w-full sm:w-64"
         />
         <select
           value={agentFilter}

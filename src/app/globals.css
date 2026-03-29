@@ -1,6 +1,8 @@
 @import "tailwindcss";
 
-/* ── Theme variables ─────────────────────────────── */
+/* ═══════════════════════════════════════════════════
+   THEME VARIABLES
+   ═══════════════════════════════════════════════════ */
 
 :root,
 [data-theme="dark"] {
@@ -51,8 +53,9 @@ body {
 input, select, textarea { outline: none; }
 input:focus, select:focus, textarea:focus { border-color: var(--border-focus); }
 
-/* ── Light theme overrides for Tailwind utility classes ── */
-/* These remap neutral dark colors to light equivalents */
+/* ═══════════════════════════════════════════════════
+   LIGHT THEME — remap Tailwind dark colors
+   ═══════════════════════════════════════════════════ */
 
 [data-theme="light"] .bg-neutral-950 { background-color: var(--sidebar-bg); }
 [data-theme="light"] .bg-neutral-900\/50,
@@ -60,6 +63,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--border-focus); }
 [data-theme="light"] .bg-neutral-800\/50,
 [data-theme="light"] .bg-neutral-800\/30,
 [data-theme="light"] .bg-neutral-800\/60 { background-color: var(--bg-input); }
+[data-theme="light"] .bg-neutral-800 { background-color: #e5e5e5; }
 
 [data-theme="light"] .border-neutral-800\/50,
 [data-theme="light"] .border-neutral-800\/30,
@@ -78,8 +82,11 @@ input:focus, select:focus, textarea:focus { border-color: var(--border-focus); }
 [data-theme="light"] .hover\:bg-neutral-900\/50:hover { background-color: var(--bg-hover); }
 [data-theme="light"] .hover\:text-neutral-200:hover,
 [data-theme="light"] .hover\:text-white:hover { color: var(--text-primary); }
+[data-theme="light"] .hover\:text-neutral-300:hover { color: var(--text-secondary); }
+[data-theme="light"] .hover\:border-neutral-700:hover,
+[data-theme="light"] .hover\:border-neutral-600:hover { border-color: #a3a3a3; }
 
-/* Invert the white buttons in light mode */
+/* Invert primary buttons */
 [data-theme="light"] .bg-white.text-black {
   background-color: #171717;
   color: #ffffff;
@@ -87,6 +94,97 @@ input:focus, select:focus, textarea:focus { border-color: var(--border-focus); }
 [data-theme="light"] .bg-white.text-black:hover {
   background-color: #262626;
 }
+[data-theme="light"] .hover\:bg-neutral-200:hover {
+  background-color: #404040;
+}
 
-/* Black/60 backdrop stays dark */
+/* Fix category filter pills in light mode */
+[data-theme="light"] .bg-white.text-black.rounded-full {
+  background-color: #171717;
+  color: #ffffff;
+}
+
+/* Backdrops */
 [data-theme="light"] .bg-black\/60 { background-color: rgba(0, 0, 0, 0.3); }
+
+/* Scrollbar track in sidebar */
+[data-theme="light"] .bg-neutral-950 ::-webkit-scrollbar-thumb { background: #d4d4d4; }
+
+/* ═══════════════════════════════════════════════════
+   MOBILE-FIRST RESPONSIVE OVERRIDES
+   Applied globally so every page benefits
+   ═══════════════════════════════════════════════════ */
+
+/* Reduce table cell padding on mobile */
+@media (max-width: 767px) {
+  th, td {
+    padding-left: 0.75rem !important;
+    padding-right: 0.75rem !important;
+    padding-top: 0.5rem !important;
+    padding-bottom: 0.5rem !important;
+  }
+
+  /* Bump up readable text on mobile */
+  table {
+    font-size: 0.8125rem; /* 13px instead of 14px */
+  }
+
+  /* Make badge text readable */
+  .text-\[11px\] { font-size: 0.75rem !important; }
+  .text-\[10px\] { font-size: 0.6875rem !important; }
+
+  /* Form inputs: bigger touch targets */
+  input, select, textarea {
+    font-size: 1rem !important;
+    padding: 0.625rem 0.75rem !important;
+    min-height: 44px;
+  }
+
+  /* Buttons: bigger touch targets */
+  button {
+    min-height: 36px;
+  }
+
+  /* Cards and panels: reduce padding */
+  .rounded-xl.p-6 {
+    padding: 1rem !important;
+  }
+  .rounded-xl.p-5 {
+    padding: 0.875rem !important;
+  }
+
+  /* Modal padding */
+  .rounded-2xl .px-6 {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+  }
+
+  /* Pre blocks: smaller on mobile */
+  pre {
+    font-size: 0.6875rem !important;
+    padding: 0.5rem !important;
+    max-height: 150px !important;
+  }
+
+  /* Prevent any element from causing horizontal overflow */
+  .max-w-7xl {
+    max-width: 100% !important;
+    overflow-x: hidden;
+  }
+
+  /* Table container: allow scroll but prevent page-level scroll */
+  .overflow-x-auto {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Stat cards: ensure text fits */
+  h1 { font-size: 1.125rem !important; }
+}
+
+/* Tablet adjustments */
+@media (min-width: 768px) and (max-width: 1023px) {
+  th, td {
+    padding-left: 0.875rem !important;
+    padding-right: 0.875rem !important;
+  }
+}
