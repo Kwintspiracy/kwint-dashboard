@@ -17,9 +17,13 @@ import {
   X,
   Moon,
   Sun,
+  SignOut,
   type Icon,
 } from '@phosphor-icons/react'
 import { useTheme } from '@/components/ThemeProvider'
+import { useAuth } from '@/components/AuthProvider'
+import { useApprovalCount } from '@/hooks/useApprovalCount'
+import EntitySwitcher from '@/components/EntitySwitcher'
 
 type NavItem = { href: string; label: string; icon: Icon }
 type NavGroup = { section: string | null; items: NavItem[] }
@@ -55,6 +59,8 @@ export default function Sidebar() {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
   const { theme, toggle: toggleTheme } = useTheme()
+  const { signOut, activeEntity } = useAuth()
+  const approvalCount = useApprovalCount()
 
   // Close on route change
   useEffect(() => { setOpen(false) }, [pathname])
@@ -78,6 +84,9 @@ export default function Sidebar() {
           <X size={20} />
         </button>
       </div>
+      <div className="border-b border-neutral-800/50">
+        <EntitySwitcher />
+      </div>
       <nav className="flex-1 py-4 space-y-6 overflow-y-auto">
         {NAV_ITEMS.map((group, gi) => (
           <div key={gi}>
@@ -100,6 +109,11 @@ export default function Sidebar() {
                   >
                     <IconComponent size={20} weight="duotone" className="shrink-0 lg:w-[18px] lg:h-[18px]" />
                     {item.label}
+                    {item.href === '/approvals' && approvalCount > 0 && (
+                      <span className="ml-auto text-[9px] font-bold bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded-full">
+                        {approvalCount}
+                      </span>
+                    )}
                   </Link>
                 )
               })}
@@ -109,9 +123,14 @@ export default function Sidebar() {
       </nav>
       <div className="px-5 py-4 border-t border-neutral-800/50 flex items-center justify-between">
         <p className="text-[10px] text-neutral-700 uppercase tracking-wider">v1.0</p>
-        <button onClick={toggleTheme} className="text-neutral-500 hover:text-white transition-colors" title={theme === 'dark' ? 'Switch to light' : 'Switch to dark'}>
-          {theme === 'dark' ? <Sun size={16} weight="duotone" /> : <Moon size={16} weight="duotone" />}
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={toggleTheme} className="text-neutral-500 hover:text-white transition-colors" title={theme === 'dark' ? 'Switch to light' : 'Switch to dark'}>
+            {theme === 'dark' ? <Sun size={16} weight="duotone" /> : <Moon size={16} weight="duotone" />}
+          </button>
+          <button onClick={signOut} className="text-neutral-500 hover:text-red-400 transition-colors" title="Sign out">
+            <SignOut size={16} weight="duotone" />
+          </button>
+        </div>
       </div>
     </>
   )

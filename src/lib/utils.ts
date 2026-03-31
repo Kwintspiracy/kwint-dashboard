@@ -1,11 +1,27 @@
-/**
- * Estimate cost from token count.
- * Rough average for Claude Sonnet: ~$5/1M tokens blended.
- */
-export function estimateCost(tokens: number): string {
-  const cost = (tokens / 1_000_000) * 5
+// Per-model pricing in USD per 1M tokens (Anthropic, March 2026)
+const MODEL_RATES: Record<string, { input: number; output: number }> = {
+  'claude-opus-4-6':           { input: 15,   output: 75   },
+  'claude-sonnet-4-6':         { input: 3,    output: 15   },
+  'claude-haiku-4-5-20251001': { input: 0.80, output: 4    },
+  'claude-haiku-4-5':          { input: 0.80, output: 4    },
+}
+
+const FALLBACK_RATE = { input: 3, output: 15 }
+
+export function estimateCost(
+  inputTokens: number,
+  outputTokens: number,
+  model: string = 'claude-sonnet-4-6'
+): string {
+  const rates = MODEL_RATES[model] ?? FALLBACK_RATE
+  const cost = (inputTokens * rates.input + outputTokens * rates.output) / 1_000_000
   if (cost < 0.01) return `$${cost.toFixed(4)}`
   return `$${cost.toFixed(2)}`
+}
+
+// Legacy: when only a blended token total is available
+export function estimateCostBlended(tokens: number, model: string = 'claude-sonnet-4-6'): string {
+  return estimateCost(Math.round(tokens * 0.7), Math.round(tokens * 0.3), model)
 }
 
 export function formatDuration(ms: number): string {

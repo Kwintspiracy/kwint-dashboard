@@ -450,4 +450,325 @@ export const SKILL_TEMPLATES: SkillTemplate[] = [
     fields: [{ key: 'api_key', label: 'API Key', type: 'password', placeholder: 'tvly-...', required: true, help: 'From tavily.com > Dashboard > API Keys' }],
     content: `# Tavily Search\n\nAPI key goes in the request body, not header.\n\n## Search\nPOST /search\n\`\`\`json\n{"api_key": "YOUR_API_KEY", "query": "search query", "search_depth": "basic", "max_results": 5}\n\`\`\`\n\n- search_depth: "basic" (fast) or "advanced" (thorough)\n- max_results: 1-10\n\n**Note:** Do NOT use connector_slug for auth — Tavily uses API key in body.`,
   },
+
+  // ═══════════════════════════════════════════════════
+  // COMMUNICATION (additional)
+  // ═══════════════════════════════════════════════════
+
+  {
+    id: 'whatsapp', name: 'WhatsApp Business', slug: 'whatsapp',
+    description: 'Send and receive WhatsApp messages via the Cloud API',
+    category: 'communication', color: '#25D366',
+    icon: 'M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z M12 0C5.373 0 0 5.373 0 12c0 2.127.558 4.123 1.534 5.856L0 24l6.29-1.51A11.94 11.94 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0z',
+    connector: { slug: 'whatsapp', base_url: 'https://graph.facebook.com/v19.0' },
+    fields: [
+      { key: 'api_key', label: 'Permanent Access Token', type: 'password', placeholder: 'EAAxxxxxxx...', required: true, help: 'Meta Developer Portal > App > WhatsApp > API Setup' },
+      { key: 'base_url', label: 'Phone Number ID', type: 'text', placeholder: '123456789012345', required: true, help: 'WhatsApp > API Setup > Phone number ID' },
+    ],
+    content: `# WhatsApp Business Cloud API\n\nBase URL: https://graph.facebook.com/v19.0\nAuth: Bearer token in Authorization header.\n\n## Send text message\nPOST /{phone_number_id}/messages\n\`\`\`json\n{\n  "messaging_product": "whatsapp",\n  "recipient_type": "individual",\n  "to": "15551234567",\n  "type": "text",\n  "text": { "body": "Hello from the agent!" }\n}\n\`\`\`\n\n## Send template message\nPOST /{phone_number_id}/messages\n\`\`\`json\n{\n  "messaging_product": "whatsapp",\n  "to": "15551234567",\n  "type": "template",\n  "template": {\n    "name": "hello_world",\n    "language": { "code": "en_US" }\n  }\n}\n\`\`\`\n\n## Send image message\nPOST /{phone_number_id}/messages\n\`\`\`json\n{\n  "messaging_product": "whatsapp",\n  "to": "15551234567",\n  "type": "image",\n  "image": { "link": "https://example.com/image.jpg" }\n}\n\`\`\`\n\n## Mark message as read\nPUT /{phone_number_id}/messages\n\`\`\`json\n{ "messaging_product": "whatsapp", "status": "read", "message_id": "wamid.xxx" }\n\`\`\`\n\nUse connector_slug="whatsapp" for auth.`,
+  },
+
+  {
+    id: 'slack-webhook', name: 'Slack Webhook', slug: 'slack-webhook',
+    description: 'Post messages to Slack channels via Incoming Webhooks — no OAuth needed',
+    category: 'communication', color: '#4A154B',
+    icon: 'M5.042 15.165a2.528 2.528 0 01-2.52 2.523A2.528 2.528 0 010 15.165a2.527 2.527 0 012.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 012.521-2.52 2.527 2.527 0 012.521 2.52v6.313A2.528 2.528 0 018.834 24a2.528 2.528 0 01-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 01-2.521-2.52A2.528 2.528 0 018.834 0a2.527 2.527 0 012.521 2.522v2.52H8.834zM8.834 6.313a2.527 2.527 0 012.521 2.521 2.527 2.527 0 01-2.521 2.521H2.522A2.528 2.528 0 010 8.834a2.528 2.528 0 012.522-2.521h6.312z',
+    connector: { slug: 'slack-webhook' },
+    fields: [
+      { key: 'webhook_url', label: 'Webhook URL', type: 'url', placeholder: 'https://hooks.slack.com/services/T.../B.../xxx', required: true, help: 'Slack App > Incoming Webhooks > Add New Webhook to Workspace' },
+    ],
+    content: `# Slack Incoming Webhooks\n\nNo OAuth required. POST JSON to the webhook URL directly.\n\n## Send a simple message\nPOST {webhook_url}\n\`\`\`json\n{ "text": "Hello from the agent!" }\n\`\`\`\n\n## Send a rich message with blocks\nPOST {webhook_url}\n\`\`\`json\n{\n  "blocks": [\n    {\n      "type": "section",\n      "text": { "type": "mrkdwn", "text": "*Alert:* Something happened." }\n    },\n    {\n      "type": "section",\n      "fields": [\n        { "type": "mrkdwn", "text": "*Status:* :red_circle: Error" },\n        { "type": "mrkdwn", "text": "*Time:* 2026-03-30 12:00" }\n      ]\n    }\n  ]\n}\n\`\`\`\n\n## Send to a specific channel (override)\nPOST {webhook_url}\n\`\`\`json\n{ "text": "Hello", "channel": "#alerts", "username": "My Agent" }\n\`\`\`\n\n**Note:** POST directly to the webhook_url field — do not use connector auth.`,
+  },
+
+  {
+    id: 'discord-webhook', name: 'Discord Webhook', slug: 'discord-webhook',
+    description: 'Post messages and embeds to Discord channels via webhooks — no bot required',
+    category: 'communication', color: '#5865F2',
+    icon: 'M20.317 4.37a19.791 19.791 0 00-4.885-1.515.074.074 0 00-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 00-5.487 0 12.64 12.64 0 00-.617-1.25.077.077 0 00-.079-.037A19.736 19.736 0 003.677 4.37a.07.07 0 00-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 00.031.057 19.9 19.9 0 005.993 3.03.078.078 0 00.084-.028 14.09 14.09 0 001.226-1.994.076.076 0 00-.041-.106 13.107 13.107 0 01-1.872-.892.077.077 0 01-.008-.128 10.2 10.2 0 00.372-.292.074.074 0 01.077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 01.078.01c.12.098.246.198.373.292a.077.077 0 01-.006.127 12.299 12.299 0 01-1.873.892.077.077 0 00-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 00.084.028 19.839 19.839 0 006.002-3.03.077.077 0 00.032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 00-.031-.03z',
+    connector: { slug: 'discord-webhook' },
+    fields: [
+      { key: 'webhook_url', label: 'Webhook URL', type: 'url', placeholder: 'https://discord.com/api/webhooks/...', required: true, help: 'Discord channel > Edit Channel > Integrations > Webhooks' },
+    ],
+    content: `# Discord Webhooks\n\nNo bot token required. POST JSON to the webhook URL directly.\n\n## Send a plain message\nPOST {webhook_url}\n\`\`\`json\n{ "content": "Hello from the agent!" }\n\`\`\`\n\n## Send with username and avatar override\nPOST {webhook_url}\n\`\`\`json\n{\n  "content": "Deployment succeeded!",\n  "username": "Deploy Bot",\n  "avatar_url": "https://example.com/avatar.png"\n}\n\`\`\`\n\n## Send a rich embed\nPOST {webhook_url}\n\`\`\`json\n{\n  "embeds": [{\n    "title": "Build #42 Passed",\n    "description": "All 57 tests passed.",\n    "color": 3066993,\n    "fields": [\n      { "name": "Branch", "value": "main", "inline": true },\n      { "name": "Duration", "value": "1m 23s", "inline": true }\n    ],\n    "timestamp": "2026-03-30T12:00:00.000Z"\n  }]\n}\n\`\`\`\n\n- color is a decimal integer (e.g. 3066993 = #2ECC71 green)\n- Supports up to 10 embeds per request\n\n**Note:** POST directly to the webhook_url — no auth header needed.`,
+  },
+
+  // ═══════════════════════════════════════════════════
+  // DEVELOPER (additional)
+  // ═══════════════════════════════════════════════════
+
+  {
+    id: 'jira', name: 'Jira', slug: 'jira',
+    description: 'Issue and project tracking for software teams by Atlassian',
+    category: 'dev', color: '#0052CC',
+    icon: 'M11.571 11.513H0a5.218 5.218 0 005.232 5.215h2.13v2.057A5.215 5.215 0 0012.575 24V12.518a1.005 1.005 0 00-1.004-1.005zm5.723-5.756H5.757a5.215 5.215 0 005.215 5.214h2.129v2.058a5.218 5.218 0 005.215 5.214V6.762a1.005 1.005 0 00-1.022-1.005zM23.013 0H11.455a5.215 5.215 0 005.215 5.215h2.129v2.057A5.215 5.215 0 0024 12.483V1.005A1.001 1.001 0 0023.013 0z',
+    connector: { slug: 'jira' },
+    fields: [
+      { key: 'api_key', label: 'API Token', type: 'password', placeholder: 'ATATTxxxxxxx...', required: true, help: 'id.atlassian.com > Security > Create and manage API tokens' },
+      { key: 'base_url', label: 'Cloud Base URL', type: 'url', placeholder: 'https://yourcompany.atlassian.net/rest/api/3', required: true, help: 'Replace "yourcompany" with your Atlassian cloud subdomain' },
+    ],
+    content: `# Jira REST API v3\n\nAuth: HTTP Basic — email address as username, API token as password.\nEncode as Base64: email:api_token\n\n## Create issue\nPOST /issue\n\`\`\`json\n{\n  "fields": {\n    "project": { "key": "PROJ" },\n    "summary": "Bug in login flow",\n    "issuetype": { "name": "Bug" },\n    "description": {\n      "type": "doc", "version": 1,\n      "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Details here." }] }]\n    }\n  }\n}\n\`\`\`\n\n## Search issues (JQL)\nPOST /issue/search\n\`\`\`json\n{ "jql": "project = PROJ AND status = \\"In Progress\\"", "maxResults": 20 }\n\`\`\`\n\n## Get issue\nGET /issue/{issueIdOrKey}\n\n## Update issue\nPUT /issue/{issueIdOrKey}\n\`\`\`json\n{ "fields": { "summary": "Updated title" } }\n\`\`\`\n\n## Transition issue (change status)\nPOST /issue/{issueIdOrKey}/transitions\n\`\`\`json\n{ "transition": { "id": "31" } }\n\`\`\`\nFirst GET /issue/{issueIdOrKey}/transitions to list available transitions and their IDs.\n\n## Add comment\nPOST /issue/{issueIdOrKey}/comment\n\`\`\`json\n{\n  "body": {\n    "type": "doc", "version": 1,\n    "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Comment text." }] }]\n  }\n}\n\`\`\``,
+  },
+
+  {
+    id: 'docker-hub', name: 'Docker Hub', slug: 'docker-hub',
+    description: 'Manage container image repositories, tags, and builds',
+    category: 'dev', color: '#2496ED',
+    icon: 'M13.983 11.078h2.119a.186.186 0 00.186-.185V9.006a.186.186 0 00-.186-.186h-2.119a.185.185 0 00-.185.185v1.888c0 .102.083.185.185.185m-2.954-5.43h2.118a.186.186 0 00.186-.186V3.574a.186.186 0 00-.186-.185h-2.118a.185.185 0 00-.185.185v1.888c0 .102.082.185.185.185m0 2.716h2.118a.187.187 0 00.186-.186V6.29a.186.186 0 00-.186-.185h-2.118a.185.185 0 00-.185.185v1.887c0 .102.082.185.185.186m-2.93 0h2.12a.186.186 0 00.184-.186V6.29a.185.185 0 00-.185-.185H8.1a.185.185 0 00-.185.185v1.887c0 .102.083.185.185.186m-2.964 0h2.119a.186.186 0 00.185-.186V6.29a.185.185 0 00-.185-.185H5.136a.186.186 0 00-.186.185v1.887c0 .102.084.185.186.186m5.893 2.715h2.118a.186.186 0 00.186-.185V9.006a.186.186 0 00-.186-.186h-2.118a.185.185 0 00-.185.185v1.888c0 .102.082.185.185.185m-2.93 0h2.12a.185.185 0 00.184-.185V9.006a.185.185 0 00-.184-.186h-2.12a.185.185 0 00-.184.185v1.888c0 .102.083.185.185.185m-2.964 0h2.119a.185.185 0 00.185-.185V9.006a.185.185 0 00-.184-.186h-2.12a.186.186 0 00-.186.186v1.887c0 .102.084.185.186.185m-2.92 0h2.12a.186.186 0 00.184-.185V9.006a.185.185 0 00-.184-.186h-2.12a.185.185 0 00-.185.186v1.887c0 .102.082.185.184.185M23.763 9.89c-.065-.051-.672-.51-1.954-.51-.338.001-.676.03-1.01.087-.248-1.7-1.653-2.53-1.716-2.566l-.344-.199-.226.327c-.284.438-.49.922-.612 1.43-.23.97-.09 1.882.403 2.661-.595.332-1.55.413-1.744.42H.751a.751.751 0 00-.75.748 11.376 11.376 0 00.692 4.062c.545 1.428 1.355 2.48 2.41 3.124 1.18.723 3.1 1.137 5.275 1.137.983.003 1.963-.086 2.93-.266a12.248 12.248 0 003.823-1.389c.98-.567 1.86-1.288 2.61-2.136 1.252-1.418 1.998-2.997 2.553-4.4h.221c1.372 0 2.215-.549 2.68-1.009.309-.293.55-.65.707-1.046l.098-.288z',
+    connector: { slug: 'docker-hub', base_url: 'https://hub.docker.com/v2' },
+    fields: [
+      { key: 'api_key', label: 'Access Token', type: 'password', placeholder: 'xxxxxxx...', required: true, help: 'Docker Hub > Account Settings > Security > New Access Token' },
+    ],
+    content: `# Docker Hub API v2\n\nAuth: Bearer token in Authorization header.\nFirst obtain a JWT: POST https://hub.docker.com/v2/users/login with {"username": "...", "password": "ACCESS_TOKEN"}.\nThe response contains a "token" field — use that as Bearer token.\n\n## List repositories\nGET /repositories/{namespace}/?page_size=25\n\n## Get repository info\nGET /repositories/{namespace}/{repository}/\n\n## List tags\nGET /repositories/{namespace}/{repository}/tags?page_size=25\n\n## Get tag details\nGET /repositories/{namespace}/{repository}/tags/{tag}/\n\n## Delete tag\nDELETE /repositories/{namespace}/{repository}/tags/{tag}/\n\n## Search repositories (public)\nGET /search/repositories/?query={term}&page_size=10\n\n## Get image manifest (via Registry API)\nGET https://registry-1.docker.io/v2/{namespace}/{repository}/manifests/{tag}\nRequires separate auth against registry.docker.io (use token from /token endpoint).`,
+  },
+
+  {
+    id: 'datadog', name: 'Datadog', slug: 'datadog',
+    description: 'Cloud monitoring, metrics, logs, APM, and alerting',
+    category: 'analytics', color: '#632CA6',
+    icon: 'M14.5 2.5c0 1.5-1.5 3-3 3a3 3 0 01-3-3c0-1.381 1.5-2.5 3-2.5s3 1.119 3 2.5zM2 19v-8.5c0-1.5 1.5-3 3-3h14c1.5 0 3 1.5 3 3V19l-3 3H5l-3-3zm5-6h10v2H7v-2zm0 3h7v2H7v-2z',
+    connector: { slug: 'datadog', base_url: 'https://api.datadoghq.com/api/v1' },
+    fields: [
+      { key: 'api_key', label: 'API Key', type: 'password', placeholder: 'xxxxxxx...', required: true, help: 'Datadog > Organization Settings > API Keys' },
+      { key: 'base_url', label: 'App Key', type: 'password', placeholder: 'xxxxxxx...', required: true, help: 'Datadog > Organization Settings > Application Keys — required for read operations' },
+    ],
+    content: `# Datadog API v1\n\nAuth uses two headers:\n- DD-API-KEY: {api_key}\n- DD-APPLICATION-KEY: {app_key}\n\nNote: For EU region use https://api.datadoghq.eu/api/v1 as base URL.\n\n## Submit metrics\nPOST /series\n\`\`\`json\n{\n  "series": [{\n    "metric": "custom.agent.events",\n    "points": [[1711843200, 42]],\n    "type": "gauge",\n    "tags": ["env:production", "service:api"]\n  }]\n}\n\`\`\`\n\n## Query metrics\nGET /query?from=1711756800&to=1711843200&query=avg:system.cpu.user{*}\n\n## List monitors\nGET /monitor?with_downtimes=true\n\n## Create monitor\nPOST /monitor\n\`\`\`json\n{\n  "name": "High CPU",\n  "type": "metric alert",\n  "query": "avg(last_5m):avg:system.cpu.user{*} > 90",\n  "message": "CPU is high @pagerduty"\n}\n\`\`\`\n\n## List events\nGET /events?start=1711756800&end=1711843200\n\n## Send event\nPOST /events\n\`\`\`json\n{ "title": "Deploy completed", "text": "v1.2.3 deployed to production", "tags": ["env:prod"] }\n\`\`\`\n\n## Get logs (v2)\nPOST https://api.datadoghq.com/api/v2/logs/events/search\n\`\`\`json\n{ "filter": { "query": "service:api status:error", "from": "now-1h", "to": "now" }, "page": { "limit": 50 } }\n\`\`\``,
+  },
+
+  // ═══════════════════════════════════════════════════
+  // AI & ML (additional)
+  // ═══════════════════════════════════════════════════
+
+  {
+    id: 'stability-ai', name: 'Stability AI', slug: 'stability-ai',
+    description: 'Stable Diffusion image generation, editing, and upscaling',
+    category: 'ai', color: '#7B2FBE',
+    icon: 'M12 2a10 10 0 100 20A10 10 0 0012 2zm0 4a6 6 0 110 12A6 6 0 0112 6zm0 2a4 4 0 100 8 4 4 0 000-8z',
+    connector: { slug: 'stability-ai', base_url: 'https://api.stability.ai' },
+    fields: [{ key: 'api_key', label: 'API Key', type: 'password', placeholder: 'sk-...', required: true, help: 'platform.stability.ai > Account > API Keys' }],
+    content: `# Stability AI API\n\nAuth: Authorization: Bearer {api_key}\n\n## Generate image (Stable Image Core)\nPOST /v2beta/stable-image/generate/core\nContent-Type: multipart/form-data\n\nForm fields:\n- prompt (required): text description\n- negative_prompt: what to avoid\n- aspect_ratio: "1:1" | "16:9" | "9:16" | "3:2" | "2:3" (default "1:1")\n- output_format: "png" | "jpeg" | "webp" (default "png")\n- seed: integer for reproducibility\n\nResponse: image bytes (check Content-Type) or JSON with base64 if Accept: application/json.\n\n## Generate image (Stable Diffusion 3.5)\nPOST /v2beta/stable-image/generate/sd3\nForm fields:\n- prompt (required)\n- model: "sd3.5-large" | "sd3.5-large-turbo" | "sd3.5-medium" (default "sd3.5-large")\n- aspect_ratio, output_format, seed (same as above)\n\n## Image-to-image\nPOST /v2beta/stable-image/generate/core\nForm fields:\n- prompt (required)\n- image: binary file upload\n- strength: 0.0–1.0 (how much to change the image, default 0.5)\n\n## Remove background\nPOST /v2beta/stable-image/edit/remove-background\nForm fields:\n- image: binary file upload\n- output_format: "png" | "webp"\n\n## Upscale image (Conservative)\nPOST /v2beta/stable-image/upscale/conservative\nForm fields:\n- image: binary file upload\n- prompt: description to guide upscaling\n- creativity: 0.2–0.5 (default 0.35)\n\n## List available engines (v1)\nGET /v1/engines/list\n\n**Note:** Use connector_slug="stability-ai" for auth.`,
+  },
+
+  {
+    id: 'anthropic', name: 'Anthropic Claude', slug: 'anthropic',
+    description: 'Claude AI models for text, reasoning, vision, and tool use',
+    category: 'ai', color: '#D97706',
+    icon: 'M12 2L3 7v10l9 5 9-5V7l-9-5zm0 2.18L19 8.5v7l-7 3.88L5 15.5v-7l7-3.82z',
+    connector: { slug: 'anthropic', base_url: 'https://api.anthropic.com/v1' },
+    fields: [{ key: 'api_key', label: 'API Key', type: 'password', placeholder: 'sk-ant-...', required: true, help: 'console.anthropic.com > API Keys' }],
+    content: `# Anthropic Messages API\n\nAuth uses x-api-key header (not Authorization Bearer).\nAlways include: anthropic-version: 2023-06-01\n\n## Basic message\nPOST /messages\n\`\`\`json\n{\n  "model": "claude-opus-4-5",\n  "max_tokens": 1024,\n  "messages": [{ "role": "user", "content": "Hello, Claude." }]\n}\n\`\`\`\n\n## With system prompt\nPOST /messages\n\`\`\`json\n{\n  "model": "claude-sonnet-4-5",\n  "max_tokens": 2048,\n  "system": "You are a helpful assistant.",\n  "messages": [{ "role": "user", "content": "Summarize this text: ..." }]\n}\n\`\`\`\n\n## With vision (image input)\nPOST /messages\n\`\`\`json\n{\n  "model": "claude-opus-4-5",\n  "max_tokens": 1024,\n  "messages": [{\n    "role": "user",\n    "content": [\n      { "type": "image", "source": { "type": "base64", "media_type": "image/jpeg", "data": "BASE64_STRING" } },\n      { "type": "text", "text": "What is in this image?" }\n    ]\n  }]\n}\n\`\`\`\n\n## Streaming\nAdd "stream": true to any request — returns server-sent events.\n\n## Available models\n- claude-opus-4-5 — most capable\n- claude-sonnet-4-5 — balanced speed/quality\n- claude-haiku-3-5 — fastest\n\nUse connector_slug="anthropic" for auth.`,
+  },
+
+  {
+    id: 'mistral', name: 'Mistral AI', slug: 'mistral',
+    description: 'Fast and efficient open-weight language models via API',
+    category: 'ai', color: '#FF7000',
+    icon: 'M3 4h4v4H3V4zm0 6h4v4H3v-4zm0 6h4v4H3v-4zm6-12h4v4H9V4zm0 6h4v4H9v-4zm0 6h4v4H9v-4zm6-12h4v4h-4V4zm0 6h4v4h-4v-4zm0 6h4v4h-4v-4z',
+    connector: { slug: 'mistral', base_url: 'https://api.mistral.ai/v1' },
+    fields: [{ key: 'api_key', label: 'API Key', type: 'password', placeholder: 'xxxxxxx...', required: true, help: 'console.mistral.ai > API Keys' }],
+    content: `# Mistral AI API\n\nOpenAI-compatible API. Auth: Authorization: Bearer {api_key}\n\n## Chat completion\nPOST /chat/completions\n\`\`\`json\n{\n  "model": "mistral-large-latest",\n  "messages": [{ "role": "user", "content": "Explain quantum entanglement simply." }]\n}\n\`\`\`\n\n## With streaming\nPOST /chat/completions\n\`\`\`json\n{\n  "model": "mistral-small-latest",\n  "messages": [{ "role": "user", "content": "Hello" }],\n  "stream": true\n}\n\`\`\`\n\n## Embeddings\nPOST /embeddings\n\`\`\`json\n{ "model": "mistral-embed", "input": ["Text to embed"] }\n\`\`\`\n\n## List models\nGET /models\n\n## Available models\n- mistral-large-latest — most capable\n- mistral-small-latest — fast and cost-effective\n- codestral-latest — code-focused\n- mistral-embed — embeddings model\n\nUse connector_slug="mistral" for auth.`,
+  },
+
+  // ═══════════════════════════════════════════════════
+  // PRODUCTIVITY (Todoist, Calendly)
+  // ═══════════════════════════════════════════════════
+
+  {
+    id: 'todoist', name: 'Todoist', slug: 'todoist',
+    description: 'Manage tasks, projects, labels, and due dates in Todoist',
+    category: 'planning', color: '#DB4035',
+    icon: 'M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z',
+    connector: { slug: 'todoist', base_url: 'https://api.todoist.com/rest/v2' },
+    fields: [{ key: 'api_key', label: 'API Token', type: 'password', placeholder: 'xxxxxxx...', required: true, help: 'Todoist > Settings > Integrations > Developer > API token' }],
+    content: `# Todoist REST API v2\n\nAuth: Authorization: Bearer {api_token}\n\n## Get all tasks\nGET /tasks\n\n## Filter tasks by project\nGET /tasks?project_id={project_id}\n\n## Create task\nPOST /tasks\n\`\`\`json\n{\n  "content": "Buy groceries",\n  "due_string": "tomorrow at 10am",\n  "priority": 2,\n  "project_id": "PROJECT_ID"\n}\n\`\`\`\npriority: 1 (normal) to 4 (urgent).\n\n## Update task\nPOST /tasks/{id}\n\`\`\`json\n{ "content": "Updated task name", "priority": 3 }\n\`\`\`\n\n## Complete task\nPOST /tasks/{id}/close\n\n## Reopen task\nPOST /tasks/{id}/reopen\n\n## Delete task\nDELETE /tasks/{id}\n\n## List projects\nGET /projects\n\n## Create project\nPOST /projects\n\`\`\`json\n{ "name": "My Project", "color": "red" }\n\`\`\`\n\n## Get all labels\nGET /labels\n\nUse connector_slug="todoist" for auth.`,
+  },
+
+  {
+    id: 'calendly', name: 'Calendly', slug: 'calendly',
+    description: 'Query scheduling data: event types, scheduled events, and invitees',
+    category: 'planning', color: '#006BFF',
+    icon: 'M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z',
+    connector: { slug: 'calendly', base_url: 'https://api.calendly.com' },
+    fields: [{ key: 'api_key', label: 'Personal Access Token', type: 'password', placeholder: 'eyJhbGci...', required: true, help: 'Calendly > Integrations > API & Webhooks > Personal Access Tokens' }],
+    content: `# Calendly API v2\n\nAuth: Authorization: Bearer {personal_access_token}\nAll requests must include your user URI, obtained from /users/me.\n\n## Get current user\nGET /users/me\nReturns your user URI like: https://api.calendly.com/users/XXXXX\n\n## List event types\nGET /event_types?user={user_uri}\n\n## List scheduled events\nGET /scheduled_events?user={user_uri}&count=20\nOptional filters: min_start_time, max_start_time (ISO 8601), status=active|canceled\n\n## Get event details\nGET /scheduled_events/{uuid}\n\n## List invitees for an event\nGET /scheduled_events/{uuid}/invitees\n\n## Cancel an event\nPOST /scheduled_events/{uuid}/cancellation\n\`\`\`json\n{ "reason": "Agent cancelled this meeting." }\n\`\`\`\n\n## Create webhook subscription\nPOST /webhook_subscriptions\n\`\`\`json\n{\n  "url": "https://your-webhook-endpoint.com/hook",\n  "events": ["invitee.created", "invitee.canceled"],\n  "organization": "{org_uri}",\n  "scope": "organization"\n}\n\`\`\`\n\nUse connector_slug="calendly" for auth.`,
+  },
+
+  // ═══════════════════════════════════════════════════
+  // FINANCE (additional)
+  // ═══════════════════════════════════════════════════
+
+  {
+    id: 'paypal', name: 'PayPal', slug: 'paypal',
+    description: 'Accept payments, manage orders, issue refunds via PayPal REST API',
+    category: 'finance', color: '#003087',
+    icon: 'M7.076 21.337H2.47a.641.641 0 01-.633-.74L4.944 2.79A.859.859 0 015.79 2.1h6.878c2.625 0 4.608.795 5.895 2.363 1.245 1.517 1.51 3.33.784 5.39-.78 2.197-2.184 3.82-4.173 4.825-1.672.848-3.668 1.275-5.934 1.275h-.003c-.657 0-1.216.476-1.316 1.126l-.845 5.258zm10.85-14.29c-.035.207-.08.42-.135.636-.884 3.387-3.64 5.127-8.196 5.127h-.001c-.457 0-.85.33-.926.782l-1.147 7.278h3.06a.56.56 0 00.552-.474l.048-.248.654-4.143.042-.228a.56.56 0 01.553-.474h.348c2.618 0 4.666-.707 5.788-2.485.935-1.494.947-3.19-.64-5.77z',
+    connector: { slug: 'paypal', base_url: 'https://api-m.paypal.com/v2' },
+    fields: [
+      { key: 'api_key', label: 'Client ID', type: 'text', placeholder: 'AxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxA', required: true, help: 'developer.paypal.com > Apps & Credentials > Your App' },
+      { key: 'base_url', label: 'Client Secret', type: 'password', placeholder: 'Exxxxxxxxx...', required: true, help: 'Same app page as Client ID — keep this secret' },
+    ],
+    content: `# PayPal REST API v2\n\nPayPal uses OAuth 2.0 client credentials. First obtain an access token:\n\n## Get access token\nPOST https://api-m.paypal.com/v1/oauth2/token\nAuth: HTTP Basic (client_id:client_secret)\nBody (form-encoded): grant_type=client_credentials\n\nResponse: { "access_token": "Bearer ...", "token_type": "Bearer", "expires_in": 32400 }\n\nUse the returned access_token as: Authorization: Bearer {access_token}\n\n**Note:** Use https://api-m.sandbox.paypal.com for sandbox testing.\n\n## Create order\nPOST /checkout/orders\n\`\`\`json\n{\n  "intent": "CAPTURE",\n  "purchase_units": [{\n    "amount": { "currency_code": "USD", "value": "10.00" },\n    "description": "Order description"\n  }]\n}\n\`\`\`\n\n## Capture order (after buyer approval)\nPOST /checkout/orders/{order_id}/capture\n\n## Get order\nGET /checkout/orders/{order_id}\n\n## List transactions\nGET https://api-m.paypal.com/v1/reporting/transactions?start_date=2026-01-01T00:00:00-0700&end_date=2026-03-31T23:59:59-0700\n\n## Issue refund\nPOST https://api-m.paypal.com/v2/payments/captures/{capture_id}/refund\n\`\`\`json\n{ "amount": { "value": "5.00", "currency_code": "USD" }, "note_to_payer": "Partial refund" }\n\`\`\``,
+  },
+
+  {
+    id: 'wise', name: 'Wise (TransferWise)', slug: 'wise',
+    description: 'International money transfers, multi-currency accounts, and FX rates',
+    category: 'finance', color: '#00B9FF',
+    icon: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15v-4H7l5-8v4h4l-5 8z',
+    connector: { slug: 'wise', base_url: 'https://api.transferwise.com/v3' },
+    fields: [{ key: 'api_key', label: 'API Token', type: 'password', placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx', required: true, help: 'Wise > Settings > API tokens > Add new token' }],
+    content: `# Wise API v3\n\nAuth: Authorization: Bearer {api_token}\nFor sandbox testing use: https://api.sandbox.transferwise.tech/v3\n\n## List profiles\nGET /profiles\nReturns personal and business profiles. Note the profile id for subsequent calls.\n\n## Get exchange rate\nGET https://api.transferwise.com/v1/rates?source=USD&target=EUR\n\n## Create quote\nPOST /quotes\n\`\`\`json\n{\n  "sourceCurrency": "USD",\n  "targetCurrency": "EUR",\n  "sourceAmount": 1000,\n  "profile": PROFILE_ID\n}\n\`\`\`\n\n## List recipient accounts\nGET https://api.transferwise.com/v1/accounts?profile={profileId}&currency=EUR\n\n## Create recipient account\nPOST https://api.transferwise.com/v1/accounts\n\`\`\`json\n{\n  "profile": PROFILE_ID,\n  "accountHolderName": "John Doe",\n  "currency": "EUR",\n  "type": "iban",\n  "details": { "iban": "DE89370400440532013000" }\n}\n\`\`\`\n\n## Create transfer\nPOST https://api.transferwise.com/v1/transfers\n\`\`\`json\n{\n  "targetAccount": RECIPIENT_ACCOUNT_ID,\n  "quoteUuid": "QUOTE_ID",\n  "customerTransactionId": "unique-uuid",\n  "details": { "reference": "Payment ref" }\n}\n\`\`\`\n\n## Fund transfer\nPOST https://api.transferwise.com/v3/profiles/{profileId}/transfers/{transferId}/payments\n\`\`\`json\n{ "type": "BALANCE" }\n\`\`\`\n\n## Get account balance\nGET /profiles/{profileId}/balances?types=STANDARD\n\nUse connector_slug="wise" for auth.`,
+  },
+
+  // ═══════════════════════════════════════════════════
+  // STORAGE (additional)
+  // ═══════════════════════════════════════════════════
+
+  {
+    id: 'supabase-storage', name: 'Supabase Storage', slug: 'supabase-storage',
+    description: 'Store and serve files with Supabase S3-compatible storage buckets',
+    category: 'storage', color: '#3ECF8E',
+    icon: 'M3 3h7v7H3V3zm0 11h7v7H3v-7zm11-11h7v7h-7V3zm0 11h7v7h-7v-7z',
+    connector: { slug: 'supabase-storage' },
+    fields: [
+      { key: 'api_key', label: 'Service Role Key', type: 'password', placeholder: 'eyJhbGci...', required: true, help: 'Supabase Dashboard > Project Settings > API > service_role key' },
+      { key: 'base_url', label: 'Project Storage URL', type: 'url', placeholder: 'https://xxxx.supabase.co/storage/v1', required: true, help: 'Your Project URL from Settings > API, append /storage/v1' },
+    ],
+    content: `# Supabase Storage API\n\nAuth: Authorization: Bearer {service_role_key}\nAlso set: apikey: {service_role_key}\nBase URL: https://{project_ref}.supabase.co/storage/v1\n\n## List buckets\nGET /bucket\n\n## Create bucket\nPOST /bucket\n\`\`\`json\n{ "id": "my-bucket", "name": "my-bucket", "public": false }\n\`\`\`\n\n## List files in a bucket\nPOST /object/list/{bucket_name}\n\`\`\`json\n{ "prefix": "folder/", "limit": 100, "offset": 0 }\n\`\`\`\n\n## Upload file\nPOST /object/{bucket_name}/{path_to_file}\nContent-Type: {file_mime_type}\nBody: binary file content\n\n## Download file\nGET /object/{bucket_name}/{path_to_file}\n\n## Get public URL (for public buckets)\nGET /object/public/{bucket_name}/{path_to_file}\nThis is a direct URL — no auth needed if bucket is public.\n\n## Delete file\nDELETE /object/{bucket_name}\n\`\`\`json\n{ "prefixes": ["path/to/file.jpg"] }\n\`\`\`\n\n## Move/rename file\nPOST /object/move\n\`\`\`json\n{ "bucketId": "my-bucket", "sourceKey": "old/path.jpg", "destinationKey": "new/path.jpg" }\n\`\`\`\n\n## Copy file\nPOST /object/copy\n\`\`\`json\n{ "bucketId": "my-bucket", "sourceKey": "original.jpg", "destinationKey": "copy.jpg" }\n\`\`\`\n\nUse connector_slug="supabase-storage" for auth.`,
+  },
+
+  {
+    id: 'backblaze-b2', name: 'Backblaze B2', slug: 'backblaze-b2',
+    description: 'Low-cost S3-compatible cloud object storage',
+    category: 'storage', color: '#E3000F',
+    icon: 'M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5',
+    connector: { slug: 'backblaze-b2', base_url: 'https://api.backblazeb2.com/b2api/v3' },
+    fields: [
+      { key: 'api_key', label: 'Application Key ID', type: 'text', placeholder: '003xxxxxxxxxxxxxxxxxxxxxxxx', required: true, help: 'Backblaze > App Keys > Add a New Application Key' },
+      { key: 'base_url', label: 'Application Key', type: 'password', placeholder: 'K003xxxxxxxxxxxxxxxxxxxxxxxx', required: true, help: 'Shown once when key is created — copy it immediately' },
+    ],
+    content: `# Backblaze B2 API v3\n\nB2 uses a two-step auth: first authorize to get a token and API URLs, then use those for all file operations.\n\n## Step 1: Authorize account\nGET https://api.backblazeb2.com/b2api/v3/b2_authorize_account\nAuth: HTTP Basic (keyID:applicationKey)\n\nResponse includes:\n- authorizationToken: use this as Authorization header for all subsequent calls\n- apiInfo.storageApi.apiUrl: base URL for subsequent calls\n- apiInfo.storageApi.downloadUrl: base URL for downloads\n\n## List buckets\nGET {apiUrl}/b2api/v3/b2_list_buckets?accountId={accountId}\n\n## Upload file (2 steps)\n### Get upload URL\nGET {apiUrl}/b2api/v3/b2_get_upload_url?bucketId={bucketId}\nReturns: uploadUrl, authorizationToken (upload-specific token)\n\n### Upload to that URL\nPOST {uploadUrl}\nHeaders:\n- Authorization: {uploadAuthToken}\n- X-Bz-File-Name: path/to/file.jpg (URL-encoded)\n- Content-Type: image/jpeg\n- Content-Length: {bytes}\n- X-Bz-Content-Sha1: {sha1_of_file}\n\n## Download file\nGET {downloadUrl}/file/{bucketName}/{fileName}\n\n## List files in bucket\nGET {apiUrl}/b2api/v3/b2_list_file_names?bucketId={bucketId}&maxFileCount=100\n\n## Delete file version\nGET {apiUrl}/b2api/v3/b2_delete_file_version?fileId={fileId}&fileName={fileName}`,
+  },
+
+  {
+    id: 'aws-s3', name: 'AWS S3', slug: 'aws-s3',
+    description: 'Store and retrieve files from Amazon S3 buckets',
+    category: 'storage', color: '#FF9900',
+    icon: 'M2 20h20v2H2v-2zm2-8h2v6H4v-6zm5-3h2v9H9V9zm5 5h2v4h-2v-4zm5-8h2v12h-2V6z',
+    connector: { slug: 'aws-s3', base_url: 'https://s3.amazonaws.com' },
+    fields: [
+      { key: 'api_key', label: 'Access Key ID', type: 'text', placeholder: 'AKIAIOSFODNN7EXAMPLE', required: true, help: 'AWS IAM > Users > Security Credentials > Create Access Key' },
+      { key: 'base_url', label: 'Secret Access Key', type: 'password', placeholder: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY', required: true },
+    ],
+    content: `# AWS S3 API\n\nS3 uses AWS Signature Version 4 (SigV4) auth — this is complex to compute manually.\nRecommend using the AWS SDK or a pre-signed URL approach.\n\n## Bucket URL format\nPath-style: https://s3.{region}.amazonaws.com/{bucket}/{key}\nVirtual-hosted: https://{bucket}.s3.{region}.amazonaws.com/{key}\n\n## List objects in bucket\nGET https://s3.{region}.amazonaws.com/{bucket}?list-type=2&max-keys=100&prefix={prefix}\n\n## Get object\nGET https://{bucket}.s3.{region}.amazonaws.com/{key}\n\n## Put object (upload)\nPUT https://{bucket}.s3.{region}.amazonaws.com/{key}\nHeaders:\n- Content-Type: {mime_type}\n- Content-Length: {bytes}\nBody: binary file\n\n## Delete object\nDELETE https://{bucket}.s3.{region}.amazonaws.com/{key}\n\n## Generate pre-signed URL (for downloads/uploads without exposing keys)\nThis requires SigV4 signing. The URL includes:\n- X-Amz-Algorithm=AWS4-HMAC-SHA256\n- X-Amz-Credential={AccessKeyId}/{date}/{region}/s3/aws4_request\n- X-Amz-Expires=3600 (seconds)\n- X-Amz-Signature={computed_signature}\n\n**Tip:** For simpler integration, store files via Supabase Storage or Cloudinary which wrap S3 with simpler auth.`,
+  },
+
+  // ═══════════════════════════════════════════════════
+  // DEVELOPER (additional)
+  // ═══════════════════════════════════════════════════
+
+  {
+    id: 'render', name: 'Render', slug: 'render',
+    description: 'Manage cloud services, deploys, and infrastructure on Render',
+    category: 'dev', color: '#46E3B7',
+    icon: 'M12 2a10 10 0 110 20A10 10 0 0112 2zm0 2a8 8 0 100 16A8 8 0 0012 4zm1 3v5.586l3.707 3.707-1.414 1.414-4-4A1 1 0 0111 13V7h2z',
+    connector: { slug: 'render', base_url: 'https://api.render.com/v1' },
+    fields: [{ key: 'api_key', label: 'API Key', type: 'password', placeholder: 'rnd_...', required: true, help: 'Render Dashboard > Account Settings > API Keys' }],
+    content: `# Render API v1\n\nAuth: Authorization: Bearer {api_key}\n\n## List services\nGET /services?limit=20\n\n## Get service\nGET /services/{serviceId}\n\n## Trigger manual deploy\nPOST /services/{serviceId}/deploys\n\`\`\`json\n{ "clearCache": "do_not_clear" }\n\`\`\`\n\n## List deploys for a service\nGET /services/{serviceId}/deploys?limit=10\n\n## Get deploy\nGET /services/{serviceId}/deploys/{deployId}\n\n## Suspend service\nPOST /services/{serviceId}/suspend\n\n## Resume service\nPOST /services/{serviceId}/resume\n\n## Scale service (instance count)\nPOST /services/{serviceId}/scale\n\`\`\`json\n{ "numInstances": 2 }\n\`\`\`\n\n## List environment variables\nGET /services/{serviceId}/env-vars\n\n## Update environment variable\nPUT /services/{serviceId}/env-vars/{envVarKey}\n\`\`\`json\n{ "value": "new-value" }\n\`\`\`\n\nUse connector_slug="render" for auth.`,
+  },
+
+  {
+    id: 'supabase-db', name: 'Supabase Database', slug: 'supabase-db',
+    description: 'Query and manage your Supabase PostgreSQL database via REST',
+    category: 'dev', color: '#3ECF8E',
+    icon: 'M4 6h16v2H4V6zm0 5h16v2H4v-2zm0 5h16v2H4v-2z',
+    connector: { slug: 'supabase-db' },
+    fields: [
+      { key: 'api_key', label: 'Service Role Key', type: 'password', placeholder: 'eyJhbGci...', required: true, help: 'Supabase Dashboard > Project Settings > API > service_role key (bypasses RLS)' },
+      { key: 'base_url', label: 'Project REST URL', type: 'url', placeholder: 'https://xxxx.supabase.co/rest/v1', required: true, help: 'Your Project URL from Settings > API, append /rest/v1' },
+    ],
+    content: `# Supabase REST API (PostgREST)\n\nAuth: Both headers required:\n- Authorization: Bearer {service_role_key}\n- apikey: {service_role_key}\n\nBase URL: https://{project_ref}.supabase.co/rest/v1\n\n## Select rows\nGET /{table}?select=*&limit=10\nGET /{table}?select=id,name,email\nGET /{table}?status=eq.active&select=*\n\n## Filter operators\n- eq, neq, gt, gte, lt, lte\n- like, ilike (case-insensitive), in\nExample: GET /users?age=gte.18&name=ilike.*john*\n\n## Insert row\nPOST /{table}\nPrefer: return=representation\n\`\`\`json\n{ "name": "Alice", "email": "alice@example.com" }\n\`\`\`\n\n## Update rows\nPATCH /{table}?id=eq.{id}\nPrefer: return=representation\n\`\`\`json\n{ "name": "Alice Updated" }\n\`\`\`\n\n## Delete rows\nDELETE /{table}?id=eq.{id}\n\n## Upsert\nPOST /{table}\nPrefer: resolution=merge-duplicates,return=representation\n\`\`\`json\n{ "id": 1, "name": "Alice", "email": "alice@example.com" }\n\`\`\`\n\n## Call RPC function\nPOST /rpc/{function_name}\n\`\`\`json\n{ "param1": "value1" }\n\`\`\`\n\nUse connector_slug="supabase-db" for auth.`,
+  },
+
+  // ═══════════════════════════════════════════════════
+  // MARKETING (additional)
+  // ═══════════════════════════════════════════════════
+
+  {
+    id: 'loops', name: 'Loops', slug: 'loops',
+    description: 'Modern email platform for SaaS — transactional and marketing emails',
+    category: 'marketing', color: '#7C3AED',
+    icon: 'M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2zm0 2v.01L12 13 20 6.01V6H4zm0 12h16V8.99l-8 6.92-8-6.92V18z',
+    connector: { slug: 'loops', base_url: 'https://app.loops.so/api/v1' },
+    fields: [{ key: 'api_key', label: 'API Key', type: 'password', placeholder: 'xxxxxxx...', required: true, help: 'Loops > Settings > API' }],
+    content: `# Loops API v1\n\nAuth: Authorization: Bearer {api_key}\n\n## Send transactional email\nPOST /transactional\n\`\`\`json\n{\n  "transactionalId": "cm_xxxx",\n  "email": "user@example.com",\n  "dataVariables": {\n    "username": "Alice",\n    "confirmUrl": "https://example.com/confirm/abc123"\n  }\n}\n\`\`\`\n\n## Create or update contact\nPOST /contacts/upsert\n\`\`\`json\n{\n  "email": "user@example.com",\n  "firstName": "Alice",\n  "lastName": "Smith",\n  "userGroup": "pro",\n  "subscribed": true\n}\n\`\`\`\n\n## Find contact\nGET /contacts/find?email=user@example.com\n\n## Delete contact\nDELETE /contacts\n\`\`\`json\n{ "email": "user@example.com" }\n\`\`\`\n\n## Send event (trigger automations)\nPOST /events/send\n\`\`\`json\n{\n  "email": "user@example.com",\n  "eventName": "Plan Upgraded",\n  "eventProperties": { "plan": "pro", "mrr": 29 }\n}\n\`\`\`\n\nUse connector_slug="loops" for auth.`,
+  },
+
+  {
+    id: 'convertkit', name: 'ConvertKit', slug: 'convertkit',
+    description: 'Email marketing for creators — subscribers, sequences, and broadcasts',
+    category: 'marketing', color: '#FB6970',
+    icon: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z',
+    connector: { slug: 'convertkit', base_url: 'https://api.convertkit.com/v3' },
+    fields: [{ key: 'api_key', label: 'API Secret', type: 'password', placeholder: 'xxxxxxx...', required: true, help: 'ConvertKit > Settings > Advanced > API Secret (use Secret, not Key, for write access)' }],
+    content: `# ConvertKit API v3\n\nAuth uses api_secret query parameter (not header) on all requests.\nAppend ?api_secret={api_secret} to every request, or include in JSON body.\n\n## List subscribers\nGET /subscribers?api_secret={api_secret}\n\n## Create subscriber\nPOST /forms/{form_id}/subscribe\n\`\`\`json\n{\n  "api_secret": "API_SECRET",\n  "email": "user@example.com",\n  "first_name": "Alice",\n  "fields": { "company": "Acme Inc" }\n}\n\`\`\`\n\n## Add tag to subscriber\nPOST /tags/{tag_id}/subscribe\n\`\`\`json\n{ "api_secret": "API_SECRET", "email": "user@example.com" }\n\`\`\`\n\n## List tags\nGET /tags?api_key={api_key}\n\n## Create tag\nPOST /tags\n\`\`\`json\n{ "api_secret": "API_SECRET", "tag": { "name": "Paying Customer" } }\n\`\`\`\n\n## List sequences\nGET /sequences?api_key={api_key}\n\n## Subscribe to sequence\nPOST /sequences/{sequence_id}/subscribe\n\`\`\`json\n{ "api_secret": "API_SECRET", "email": "user@example.com" }\n\`\`\`\n\n**Note:** api_key (public) works for read operations; api_secret required for writes.`,
+  },
+
+  // ═══════════════════════════════════════════════════
+  // ANALYTICS (additional)
+  // ═══════════════════════════════════════════════════
+
+  {
+    id: 'mixpanel', name: 'Mixpanel', slug: 'mixpanel',
+    description: 'Event-based product analytics with funnels and cohorts',
+    category: 'analytics', color: '#7856FF',
+    icon: 'M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z',
+    connector: { slug: 'mixpanel', base_url: 'https://api.mixpanel.com' },
+    fields: [
+      { key: 'api_key', label: 'Service Account Username', type: 'text', placeholder: 'service-account.xxxxxxx', required: true, help: 'Mixpanel > Project Settings > Service Accounts > Create' },
+      { key: 'base_url', label: 'Service Account Password', type: 'password', placeholder: 'xxxxxxx...', required: true, help: 'Shown once when service account is created' },
+    ],
+    content: `# Mixpanel API\n\nTwo separate APIs: Ingestion (track events) and Query (read data).\n\n## Ingest events\nPOST https://api.mixpanel.com/track\nContent-Type: application/x-www-form-urlencoded\nBody: data={base64_encoded_json}\n\nWhere the JSON is:\n\`\`\`json\n[{\n  "event": "Signup",\n  "properties": {\n    "token": "YOUR_PROJECT_TOKEN",\n    "distinct_id": "user123",\n    "plan": "pro",\n    "time": 1711843200\n  }\n}]\n\`\`\`\n\n## Import historical events (server-side)\nPOST https://api.mixpanel.com/import?project_id={project_id}\nAuth: HTTP Basic (service_account_username:service_account_password)\nContent-Type: application/json\n\`\`\`json\n[{ "event": "Purchase", "properties": { "distinct_id": "user123", "time": 1711843200, "amount": 49 } }]\n\`\`\`\n\n## Query: Get events report\nGET https://data.mixpanel.com/api/2.0/export?project_id={project_id}&from_date=2026-01-01&to_date=2026-03-31&event=[\"Signup\"]\nAuth: HTTP Basic (service_account_username:service_account_password)\nReturns newline-delimited JSON.\n\n## Query: Funnel\nGET https://mixpanel.com/api/2.0/funnels?project_id={project_id}&funnel_id={funnel_id}&from_date=2026-01-01&to_date=2026-03-31\n\n## User profiles: Set properties\nPOST https://api.mixpanel.com/engage#profile-set\n\`\`\`json\n[{ "$token": "PROJECT_TOKEN", "$distinct_id": "user123", "$set": { "$name": "Alice", "$email": "alice@example.com" } }]\n\`\`\``,
+  },
+
+  // ═══════════════════════════════════════════════════
+  // CRM (additional)
+  // ═══════════════════════════════════════════════════
+
+  {
+    id: 'intercom', name: 'Intercom', slug: 'intercom',
+    description: 'Customer messaging platform for support, engagement, and onboarding',
+    category: 'crm', color: '#1F8DED',
+    icon: 'M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM9 11H7V9h2v2zm4 0h-2V9h2v2zm4 0h-2V9h2v2z',
+    connector: { slug: 'intercom', base_url: 'https://api.intercom.io' },
+    fields: [{ key: 'api_key', label: 'Access Token', type: 'password', placeholder: 'dG9rZW5...', required: true, help: 'Intercom > Settings > Integrations > Developer Hub > Your App > Authentication' }],
+    content: `# Intercom API\n\nAuth: Authorization: Bearer {access_token}\nAlways include: Accept: application/json\nFor specific API versions add: Intercom-Version: 2.10\n\n## Create or update contact\nPOST /contacts\n\`\`\`json\n{\n  "role": "user",\n  "email": "user@example.com",\n  "name": "Alice Smith",\n  "custom_attributes": { "plan": "pro" }\n}\n\`\`\`\n\n## Search contacts\nPOST /contacts/search\n\`\`\`json\n{\n  "query": { "field": "email", "operator": "=", "value": "alice@example.com" }\n}\n\`\`\`\n\n## List conversations\nGET /conversations?order=updated_at&sort=desc&per_page=10\n\n## Create conversation (send message as admin)\nPOST /conversations\n\`\`\`json\n{\n  "from": { "type": "admin", "id": "ADMIN_ID" },\n  "to": { "type": "user", "id": "CONTACT_ID" },\n  "subject": "Hey there",\n  "body": "Hello, how can we help you?"\n}\n\`\`\`\n\n## Reply to conversation\nPOST /conversations/{id}/reply\n\`\`\`json\n{\n  "message_type": "comment",\n  "type": "admin",\n  "admin_id": "ADMIN_ID",\n  "body": "Thanks for reaching out!"\n}\n\`\`\`\n\n## Add tag to contact\nPOST /contacts/{id}/tags\n\`\`\`json\n{ "id": "TAG_ID" }\n\`\`\`\n\nUse connector_slug="intercom" for auth.`,
+  },
+
+  // ═══════════════════════════════════════════════════
+  // SEARCH (additional)
+  // ═══════════════════════════════════════════════════
+
+  {
+    id: 'algolia', name: 'Algolia', slug: 'algolia',
+    description: 'Hosted search engine with instant results and AI ranking',
+    category: 'search', color: '#003DFF',
+    icon: 'M12 2a10 10 0 110 20A10 10 0 0112 2zm0 4a6 6 0 100 12A6 6 0 0012 6zm0 2a4 4 0 110 8 4 4 0 010-8z',
+    connector: { slug: 'algolia' },
+    fields: [
+      { key: 'api_key', label: 'Admin API Key', type: 'password', placeholder: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx', required: true, help: 'Algolia Dashboard > API Keys > Admin API Key (or a limited-scope key)' },
+      { key: 'base_url', label: 'App ID', type: 'text', placeholder: 'XXXXXXXXXX', required: true, help: 'Algolia Dashboard > API Keys > Application ID' },
+    ],
+    content: `# Algolia Search API\n\nAuth uses two headers on every request:\n- X-Algolia-API-Key: {api_key}\n- X-Algolia-Application-Id: {app_id}\n\nBase URL pattern: https://{app_id}.algolia.net/1\nOr use DNS-load-balanced: https://{app_id}-dsn.algolia.net/1 (for search)\n\n## Search an index\nPOST /indexes/{indexName}/query\n\`\`\`json\n{\n  "query": "red shoes",\n  "hitsPerPage": 10,\n  "filters": "price < 100",\n  "attributesToRetrieve": ["name", "price", "image"]\n}\n\`\`\`\n\n## Add / replace object\nPUT /indexes/{indexName}/{objectID}\n\`\`\`json\n{ "name": "Red Sneakers", "price": 89.99, "category": "footwear" }\n\`\`\`\n\n## Add object (auto-generate ID)\nPOST /indexes/{indexName}\n\`\`\`json\n{ "name": "Blue Jeans", "price": 49.99 }\n\`\`\`\n\n## Partial update\nPOST /indexes/{indexName}/{objectID}/partial\n\`\`\`json\n{ "price": 79.99 }\n\`\`\`\n\n## Delete object\nDELETE /indexes/{indexName}/{objectID}\n\n## Batch operations\nPOST /indexes/{indexName}/batch\n\`\`\`json\n{\n  "requests": [\n    { "action": "addObject", "body": { "name": "Product A", "price": 10 } },\n    { "action": "deleteObject", "body": { "objectID": "123" } }\n  ]\n}\n\`\`\`\n\n## Clear index\nPOST /indexes/{indexName}/clear\n\n## List indices\nGET /indexes`,
+  },
+
+  {
+    id: 'serper', name: 'Serper (Google Search)', slug: 'serper',
+    description: 'Real-time Google Search results via a simple API',
+    category: 'search', color: '#EA4335',
+    icon: 'M21.35 11.1h-9.17v2.73h6.51c-.33 3.81-3.5 5.44-6.5 5.44C8.36 19.27 5 16.25 5 12c0-4.1 3.2-7.27 7.2-7.27 3.09 0 4.9 1.97 4.9 1.97L19 4.72S16.56 2 12.1 2C6.42 2 2.03 6.8 2.03 12c0 5.05 4.13 10 10.22 10 5.35 0 9.25-3.67 9.25-9.09 0-1.15-.15-1.81-.15-1.81z',
+    connector: { slug: 'serper', base_url: 'https://google.serper.dev' },
+    fields: [{ key: 'api_key', label: 'API Key', type: 'password', placeholder: 'xxxxxxx...', required: true, help: 'serper.dev > Dashboard > API Key' }],
+    content: `# Serper Google Search API\n\nAuth: X-API-KEY header\n\n## Web search\nPOST /search\n\`\`\`json\n{\n  "q": "best AI tools 2026",\n  "num": 10,\n  "gl": "us",\n  "hl": "en"\n}\n\`\`\`\n\nResponse includes: organic results (title, link, snippet, position), knowledge graph, answer box, related searches.\n\n## Image search\nPOST /images\n\`\`\`json\n{ "q": "cats", "num": 10 }\n\`\`\`\n\n## News search\nPOST /news\n\`\`\`json\n{ "q": "AI news", "num": 10, "tbs": "qdr:d" }\n\`\`\`\ntbs values: qdr:h (past hour), qdr:d (past day), qdr:w (past week), qdr:m (past month)\n\n## Shopping search\nPOST /shopping\n\`\`\`json\n{ "q": "running shoes", "num": 10 }\n\`\`\`\n\n## Autocomplete suggestions\nPOST /autocomplete\n\`\`\`json\n{ "q": "best way to" }\n\`\`\`\n\nUse connector_slug="serper" for auth.`,
+  },
+
 ]
