@@ -1961,6 +1961,97 @@ export async function getOperatorProvidersAction(): Promise<string[]> {
   return raw.split(',').map(s => s.trim()).filter(Boolean)
 }
 
+// ─── Agent Skill Assignments ─────────────────────────────────────────────────
+
+export async function getAgentSkillAssignmentsAction(agentId: string): Promise<ActionResult<string[]>> {
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+    const { data, error } = await supabase
+      .from('agent_skill_assignments')
+      .select('skill_id')
+      .eq('agent_id', agentId)
+      .eq('entity_id', entityId)
+    if (error) return dbFail(error)
+    return ok((data ?? []).map((r: { skill_id: string }) => r.skill_id))
+  } catch (e) {
+    return dbError(e)
+  }
+}
+
+export async function setAgentSkillAssignmentsAction(agentId: string, skillIds: string[]): Promise<ActionResult<null>> {
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+    const { data: agent } = await supabase.from('agents').select('id').eq('id', agentId).eq('entity_id', entityId).single()
+    if (!agent) return fail('Agent not found')
+    await supabase.from('agent_skill_assignments').delete().eq('agent_id', agentId).eq('entity_id', entityId)
+    if (skillIds.length > 0) {
+      const rows = skillIds.map(skill_id => ({ agent_id: agentId, skill_id, entity_id: entityId }))
+      const { error } = await supabase.from('agent_skill_assignments').insert(rows)
+      if (error) return dbFail(error)
+    }
+    return ok(null)
+  } catch (e) {
+    return dbError(e)
+  }
+}
+
+// ─── Agent Assignments (orchestrator → sub-agents) ───────────────────────────
+
+export async function getOrchestratorAssignmentsAction(orchestratorId: string): Promise<ActionResult<string[]>> {
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+    const { data, error } = await supabase
+      .from('agent_assignments')
+      .select('sub_agent_id')
+      .eq('orchestrator_id', orchestratorId)
+      .eq('entity_id', entityId)
+    if (error) return dbFail(error)
+    return ok((data ?? []).map((r: { sub_agent_id: string }) => r.sub_agent_id))
+  } catch (e) { return dbError(e) }
+}
+
+export async function setOrchestratorAssignmentsAction(orchestratorId: string, subAgentIds: string[]): Promise<ActionResult<null>> {
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+    const { data: orch } = await supabase.from('agents').select('id').eq('id', orchestratorId).eq('entity_id', entityId).single()
+    if (!orch) return fail('Orchestrator not found')
+    await supabase.from('agent_assignments').delete().eq('orchestrator_id', orchestratorId).eq('entity_id', entityId)
+    if (subAgentIds.length > 0) {
+      const rows = subAgentIds.map(sub_agent_id => ({ orchestrator_id: orchestratorId, sub_agent_id, entity_id: entityId }))
+      const { error } = await supabase.from('agent_assignments').insert(rows)
+      if (error) return dbFail(error)
+    }
+    return ok(null)
+  } catch (e) { return dbError(e) }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function getAllAgentAssignmentsAction(): Promise<ActionResult<{ orchestrator_id: string; sub_agent_id: string }[]>> {
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+    const { data, error } = await supabase
+      .from('agent_assignments')
+      .select('orchestrator_id, sub_agent_id')
+      .eq('entity_id', entityId)
+    if (error) return dbFail(error)
+    return ok(data ?? [])
+  } catch (e) { return dbError(e) }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function getAllSkillAssignmentsAction(): Promise<ActionResult<{ agent_id: string; slug: string }[]>> {
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+    const { data, error } = await supabase
+      .from('agent_skill_assignments')
+      .select('agent_id, agent_skills(slug)')
+      .eq('entity_id', entityId)
+    if (error) return dbFail(error)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return ok((data ?? []).map((r: any) => ({ agent_id: r.agent_id, slug: r.agent_skills?.slug ?? '' })).filter((r: { agent_id: string; slug: string }) => r.slug))
+  } catch (e) { return dbError(e) }
+}
+
 // ─── Billing Actions ─────────────────────────────────────────────────────────
 
 export async function getBillingRunsAction(): Promise<any[]> {

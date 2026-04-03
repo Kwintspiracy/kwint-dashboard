@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { getAgentsAction, createAgentAction, updateAgentAction, deleteAgentAction, setDefaultAgentAction, activateTelegramAction, deactivateTelegramAction, getLlmKeysAction, getOperatorProvidersAction } from '@/lib/actions'
+import { getAgentsAction, createAgentAction, updateAgentAction, deleteAgentAction, setDefaultAgentAction, activateTelegramAction, deactivateTelegramAction, getLlmKeysAction, getOperatorProvidersAction, getSkillsAction, getAgentSkillAssignmentsAction, setAgentSkillAssignmentsAction, getOrchestratorAssignmentsAction, setOrchestratorAssignmentsAction, getAllAgentAssignmentsAction, getAllSkillAssignmentsAction } from '@/lib/actions'
 import { timeAgo } from '@/lib/utils'
 import { toast } from 'sonner'
 import { useData } from '@/hooks/useData'
@@ -172,12 +172,34 @@ export default function AgentsPage() {
   const { data: agentsRaw = [], isLoading: loading, mutate } = useData(['agents', eid], getAgentsAction)
   const { data: llmKeysRaw = [] } = useData(['llm-keys', eid], getLlmKeysAction)
   const { data: operatorProvidersRaw = [] } = useData(['operator-providers'], getOperatorProvidersAction)
+  const { data: skillsRaw = [] } = useData(['skills', eid], getSkillsAction)
+  const { data: allAssignmentsRaw } = useData(['agent-assignments', eid], getAllAgentAssignmentsAction)
+  const { data: allSkillAssignmentsRaw } = useData(['all-skill-assignments', eid], getAllSkillAssignmentsAction)
   const configuredProviders = new Set(
     (llmKeysRaw as { provider: string; is_active: boolean }[]).filter(k => k.is_active).map(k => k.provider)
   )
   const operatorProviders = new Set(operatorProvidersRaw as string[])
   const agents = agentsRaw as Agent[]
+  type Skill = { id: string; name: string; slug: string; active: boolean }
+  const skills = skillsRaw as Skill[]
+  type AgentAssignment = { orchestrator_id: string; sub_agent_id: string }
+  const allAssignments: AgentAssignment[] = (allAssignmentsRaw as { ok: boolean; data?: AgentAssignment[] } | undefined)?.ok
+    ? ((allAssignmentsRaw as { ok: true; data: AgentAssignment[] }).data ?? [])
+    : []
+  // skillMap: agent_id → slug[]
+  const skillMap: Record<string, string[]> = {}
+  const rawSkillAssignments = (allSkillAssignmentsRaw as { ok: boolean; data?: { agent_id: string; slug: string }[] } | undefined)?.ok
+    ? ((allSkillAssignmentsRaw as { ok: true; data: { agent_id: string; slug: string }[] }).data ?? [])
+    : []
+  for (const r of rawSkillAssignments) {
+    if (!skillMap[r.agent_id]) skillMap[r.agent_id] = []
+    skillMap[r.agent_id].push(r.slug)
+  }
+
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [assignedSkillIds, setAssignedSkillIds] = useState<string[]>([])
+  const [assignedAgentIds, setAssignedAgentIds] = useState<string[]>([])
+  const [viewMode, setViewMode] = useState<'list' | 'hierarchy'>('list')
   const [showAdd, setShowAdd] = useState(false)
   const [showTemplates, setShowTemplates] = useState(false)
   const [form, setForm] = useState({
@@ -188,6 +210,12 @@ export default function AgentsPage() {
   })
   const [capInput, setCapInput] = useState('')
   const [telegramStatus, setTelegramStatus] = useState('')
+
+  useEffect(() => {
+    if (!editingId) { setAssignedSkillIds([]); setAssignedAgentIds([]); return }
+    getAgentSkillAssignmentsAction(editingId).then(r => { if (r.ok) setAssignedSkillIds(r.data) })
+    getOrchestratorAssignmentsAction(editingId).then(r => { if (r.ok) setAssignedAgentIds(r.data) })
+  }, [editingId])
 
   function slugify(name: string) {
     return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
@@ -265,6 +293,10 @@ export default function AgentsPage() {
         capabilities: form.capabilities,
       })
       if (!result.ok) { toast.error(result.error); return }
+      await Promise.all([
+        setAgentSkillAssignmentsAction(editingId, assignedSkillIds),
+        form.role === 'orchestrator' ? setOrchestratorAssignmentsAction(editingId, assignedAgentIds) : Promise.resolve(),
+      ])
       toast.success('Agent updated')
       setEditingId(null)
     } else {
@@ -276,6 +308,13 @@ export default function AgentsPage() {
         capabilities: form.capabilities,
       })
       if (!result.ok) { toast.error(result.error); return }
+      const newId = (result as { ok: true; data: { id: string } }).data?.id
+      if (newId) {
+        await Promise.all([
+          setAgentSkillAssignmentsAction(newId, assignedSkillIds),
+          form.role === 'orchestrator' ? setOrchestratorAssignmentsAction(newId, assignedAgentIds) : Promise.resolve(),
+        ])
+      }
       toast.success('Agent created')
       setShowAdd(false)
     }
@@ -287,6 +326,10 @@ export default function AgentsPage() {
   return (
     <div className="space-y-5 max-w-7xl">
       <PageHeader title="Agents" count={agents.length}>
+        <div className="flex items-center gap-1 bg-neutral-800/50 border border-neutral-800 rounded-lg p-0.5">
+          <button onClick={() => setViewMode('list')} className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${viewMode === 'list' ? 'bg-neutral-700 text-white' : 'text-neutral-500 hover:text-neutral-300'}`}>List</button>
+          <button onClick={() => setViewMode('hierarchy')} className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${viewMode === 'hierarchy' ? 'bg-neutral-700 text-white' : 'text-neutral-500 hover:text-neutral-300'}`}>Hierarchy</button>
+        </div>
         <button
           onClick={() => { setShowTemplates(true); setShowAdd(false); setEditingId(null) }}
           className="px-4 py-2 text-xs font-semibold border border-neutral-700 text-neutral-300 rounded-lg hover:border-neutral-500 hover:text-white transition-colors"
@@ -298,7 +341,7 @@ export default function AgentsPage() {
         </button>
       </PageHeader>
 
-      <div className="bg-neutral-900/50 border border-neutral-800/50 rounded-xl overflow-x-auto">
+      {viewMode === 'list' && <div className="bg-neutral-900/50 border border-neutral-800/50 rounded-xl overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-neutral-800/50">
@@ -389,7 +432,84 @@ export default function AgentsPage() {
           </tbody>
         </table>
         {agents.length === 0 && <EmptyState message="No agents yet" />}
-      </div>
+      </div>}
+
+      {viewMode === 'hierarchy' && (() => {
+        // Build orchestrator→children map
+        const childMap: Record<string, string[]> = {}
+        const assignedAsSubIds = new Set<string>()
+        for (const a of allAssignments) {
+          if (!childMap[a.orchestrator_id]) childMap[a.orchestrator_id] = []
+          childMap[a.orchestrator_id].push(a.sub_agent_id)
+          assignedAsSubIds.add(a.sub_agent_id)
+        }
+        const agentMap = new Map(agents.map(a => [a.id, a]))
+
+        type HNode = { agent: Agent; children: HNode[] }
+        function buildNode(id: string): HNode {
+          const agent = agentMap.get(id)!
+          return { agent, children: (childMap[id] ?? []).map(cid => agentMap.has(cid) ? buildNode(cid) : null).filter(Boolean) as HNode[] }
+        }
+
+        const roots = agents.filter(a => a.role === 'orchestrator' && !assignedAsSubIds.has(a.id)).map(a => buildNode(a.id))
+        const unassigned = agents.filter(a => !assignedAsSubIds.has(a.id) && a.role !== 'orchestrator')
+
+        function AgentChip({ slug }: { slug: string }) {
+          return <span className="text-[10px] px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-700/50 text-neutral-500 font-mono">{slug}</span>
+        }
+
+        function NodeRow({ node, depth }: { node: HNode; depth: number }) {
+          const a = node.agent
+          const agentSkills = skillMap[a.id] ?? []
+          return (
+            <div>
+              <div
+                className="flex items-center gap-2.5 px-4 py-2.5 hover:bg-neutral-800/30 transition-colors cursor-pointer group"
+                style={{ paddingLeft: `${1.25 + depth * 1.75}rem` }}
+                onClick={() => { setEditingId(a.id); setShowAdd(false) }}
+              >
+                {depth > 0 && <span className="text-neutral-700 select-none">└</span>}
+                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${a.active ? (a.role === 'orchestrator' ? 'bg-violet-400' : 'bg-emerald-400') : 'bg-neutral-600'}`} />
+                <span className="text-sm font-medium text-neutral-200 group-hover:text-white transition-colors">{a.name}</span>
+                {a.role === 'orchestrator' && <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-950/60 border border-violet-800/40 text-violet-400">orchestrator</span>}
+                {agentSkills.map(s => <AgentChip key={s} slug={s} />)}
+                <span className="text-xs text-neutral-700 font-mono ml-auto group-hover:text-neutral-500">{a.slug}</span>
+              </div>
+              {node.children.length > 0 && (
+                <div className="border-l border-neutral-800/60 ml-8">
+                  {node.children.map(child => <NodeRow key={child.agent.id} node={child} depth={depth + 1} />)}
+                </div>
+              )}
+            </div>
+          )
+        }
+
+        return (
+          <div className="bg-neutral-900/50 border border-neutral-800/50 rounded-xl overflow-hidden">
+            {agents.length === 0 && <EmptyState message="No agents yet" />}
+            {roots.map(node => <NodeRow key={node.agent.id} node={node} depth={0} />)}
+            {unassigned.length > 0 && (
+              <>
+                {roots.length > 0 && <div className="border-t border-neutral-800/50 mx-4 my-1" />}
+                <div className="px-4 py-2">
+                  <p className="text-[10px] text-neutral-600 font-semibold uppercase tracking-wider mb-1">Unassigned</p>
+                  {unassigned.map(a => {
+                    const agentSkills = skillMap[a.id] ?? []
+                    return (
+                      <div key={a.id} className="flex items-center gap-2.5 py-2 hover:bg-neutral-800/30 rounded-lg px-2 -mx-2 transition-colors cursor-pointer group" onClick={() => { setEditingId(a.id); setShowAdd(false) }}>
+                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${a.active ? 'bg-emerald-400' : 'bg-neutral-600'}`} />
+                        <span className="text-sm text-neutral-300 group-hover:text-white transition-colors">{a.name}</span>
+                        {agentSkills.map(s => <span key={s} className="text-[10px] px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-700/50 text-neutral-500 font-mono">{s}</span>)}
+                        <span className="text-xs text-neutral-700 font-mono ml-auto group-hover:text-neutral-500">{a.slug}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+        )
+      })()}
 
       {showTemplates && (
         <div className="bg-neutral-900/50 border border-neutral-800/50 rounded-xl p-6 space-y-5">
@@ -620,6 +740,88 @@ export default function AgentsPage() {
               </p>
             </div>
           </div>
+
+          {/* Skills Assignment */}
+          <div className="border-t border-neutral-800/50 pt-5">
+            <p className="text-xs text-neutral-400 font-semibold uppercase tracking-wider mb-1">Skills</p>
+            <p className="text-xs text-neutral-500 mb-3">
+              Select which skills this agent can use. Leave all unchecked to allow all workspace skills.
+            </p>
+            {skills.length === 0 ? (
+              <p className="text-xs text-neutral-600">
+                No skills yet — install from{' '}
+                <a href="/connectors" className="underline hover:text-neutral-400 transition-colors">Connectors → Marketplace</a>
+              </p>
+            ) : (
+              <div className="flex flex-col gap-1">
+                {skills.map(skill => {
+                  const checked = assignedSkillIds.includes(skill.id)
+                  return (
+                    <label key={skill.id} className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-neutral-800/30 cursor-pointer transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => {
+                          setAssignedSkillIds(prev =>
+                            checked ? prev.filter(id => id !== skill.id) : [...prev, skill.id]
+                          )
+                        }}
+                        className="rounded border-neutral-700 bg-neutral-800 accent-emerald-500"
+                      />
+                      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${skill.active ? 'bg-emerald-400' : 'bg-neutral-600'}`} />
+                      <span className="text-sm text-neutral-200">{skill.name}</span>
+                      <span className="text-xs text-neutral-600 font-mono ml-auto">{skill.slug}</span>
+                    </label>
+                  )
+                })}
+              </div>
+            )}
+            {assignedSkillIds.length === 0 && skills.length > 0 && (
+              <p className="text-[11px] text-neutral-600 mt-2">
+                All {skills.length} workspace skill{skills.length !== 1 ? 's' : ''} available (no restrictions).
+              </p>
+            )}
+          </div>
+
+          {/* Assigned agents (orchestrators only) */}
+          {form.role === 'orchestrator' && (
+            <div className="border-t border-neutral-800/50 pt-5">
+              <p className="text-xs text-neutral-400 font-semibold uppercase tracking-wider mb-1">Assigned agents</p>
+              <p className="text-xs text-neutral-500 mb-3">
+                Select which agents this orchestrator can delegate to. Leave all unchecked to allow all workspace agents.
+              </p>
+              {agents.filter(a => a.id !== editingId).length === 0 ? (
+                <p className="text-xs text-neutral-600">No other agents yet.</p>
+              ) : (
+                <div className="flex flex-col gap-1">
+                  {agents.filter(a => a.id !== editingId).map(a => {
+                    const checked = assignedAgentIds.includes(a.id)
+                    const agentSkills = skillMap[a.id] ?? []
+                    return (
+                      <label key={a.id} className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-neutral-800/30 cursor-pointer transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => setAssignedAgentIds(prev => checked ? prev.filter(id => id !== a.id) : [...prev, a.id])}
+                          className="rounded border-neutral-700 bg-neutral-800 accent-violet-500"
+                        />
+                        <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${a.active ? (a.role === 'orchestrator' ? 'bg-violet-400' : 'bg-emerald-400') : 'bg-neutral-600'}`} />
+                        <span className="text-sm text-neutral-200">{a.name}</span>
+                        {a.role === 'orchestrator' && <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-950/60 border border-violet-800/40 text-violet-400">orchestrator</span>}
+                        {agentSkills.map(s => <span key={s} className="text-[10px] px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-700/50 text-neutral-500 font-mono">{s}</span>)}
+                        <span className="text-xs text-neutral-600 font-mono ml-auto">{a.slug}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+              )}
+              {assignedAgentIds.length === 0 && agents.filter(a => a.id !== editingId).length > 0 && (
+                <p className="text-[11px] text-neutral-600 mt-2">
+                  All {agents.filter(a => a.id !== editingId).length} workspace agents available (no restrictions).
+                </p>
+              )}
+            </div>
+          )}
 
           <div>
             <label className="block text-xs text-neutral-400 font-semibold uppercase tracking-wider mb-1.5">
