@@ -177,8 +177,8 @@ input:focus, select:focus, textarea:focus { border-color: var(--border-focus); }
     -webkit-overflow-scrolling: touch;
   }
 
-  /* Stat cards: ensure text fits */
-  h1 { font-size: 1.125rem !important; }
+  /* Stat cards: ensure text fits — scoped to dashboard, not landing page */
+  main h1 { font-size: 1.125rem !important; }
 }
 
 /* Tablet adjustments */

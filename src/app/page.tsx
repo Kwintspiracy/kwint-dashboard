@@ -52,7 +52,7 @@ export default function LandingPage() {
           <div className="font-mono text-[10px] sm:text-xs text-neutral-500 mb-6 sm:mb-8">
             <span className="text-emerald-500">~</span> v1.0 &middot; open source &middot; MIT license
           </div>
-          <h1 className="text-5xl sm:text-8xl md:text-[9.5rem] font-bold text-white leading-[0.9] tracking-tighter">
+          <h1 className="text-[3.5rem] sm:text-8xl md:text-[9.5rem] font-bold text-white leading-[0.9] tracking-tighter">
             Multi-agent AI,
             <br />
             managed visually.
