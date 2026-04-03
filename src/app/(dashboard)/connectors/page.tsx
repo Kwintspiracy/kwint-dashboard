@@ -162,6 +162,7 @@ export default function ConnectorsPage() {
       const q = search.toLowerCase()
       return t.name.toLowerCase().includes(q) || t.description.toLowerCase().includes(q)
     })
+    .sort((a, b) => a.name.localeCompare(b.name))
 
   if (loading) return <CardSkeleton />
 
@@ -191,6 +192,7 @@ export default function ConnectorsPage() {
         </button>
         <button onClick={() => setTab('marketplace')} className={tabClass('marketplace')}>
           Marketplace
+          <span className="ml-1.5 text-xs text-neutral-500">({SKILL_TEMPLATES.length})</span>
         </button>
       </div>
 
@@ -314,12 +316,13 @@ export default function ConnectorsPage() {
               const categoryLabel = SKILL_CATEGORIES[template.category]?.label ?? template.category
               return (
                 <div key={template.id}
-                  className="bg-neutral-900/50 border border-neutral-800/50 rounded-xl p-5 hover:border-neutral-700 transition-all flex flex-col gap-4"
-                  style={{ borderLeftColor: template.color, borderLeftWidth: '4px' }}>
+                  className="bg-neutral-900/50 border border-neutral-800/50 rounded-xl p-5 hover:border-neutral-700 transition-all flex flex-col gap-4">
                   <div className="flex items-start gap-3">
                     <div className="shrink-0">
-                      <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${template.color}18` }}>
-                        <svg viewBox="0 0 24 24" className="w-5 h-5" fill={template.color}><path d={template.icon} /></svg>
+                      <div className={`rounded-lg flex items-center justify-center${template.darkBrandIcon ? ' bg-white/10' : ''}`} style={{ width: 46, height: 46 }}>
+                        {template.brandIcon
+                          ? <img src={template.brandIcon} alt={template.name} style={{ width: 46, height: 46 }} />
+                          : <svg viewBox="0 0 24 24" className="w-7 h-7" fill={template.color}><path d={template.icon} /></svg>}
                       </div>
                     </div>
                     <div className="min-w-0 flex-1">
@@ -357,8 +360,10 @@ export default function ConnectorsPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-neutral-900 border border-neutral-800/50 rounded-2xl w-full max-w-md shadow-2xl">
             <div className="flex items-center gap-3 px-6 py-5 border-b border-neutral-800/50">
-              <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: `${installing.color}18` }}>
-                <svg viewBox="0 0 24 24" className="w-5 h-5" fill={installing.color}><path d={installing.icon} /></svg>
+              <div className={`rounded-lg flex items-center justify-center shrink-0${installing.darkBrandIcon ? ' bg-white/10' : ''}`} style={{ width: 46, height: 46 }}>
+                {installing.brandIcon
+                  ? <img src={installing.brandIcon} alt={installing.name} style={{ width: 46, height: 46 }} />
+                  : <svg viewBox="0 0 24 24" className="w-7 h-7" fill={installing.color}><path d={installing.icon} /></svg>}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-white">{installing.name}</p>

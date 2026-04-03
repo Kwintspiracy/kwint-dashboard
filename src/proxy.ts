@@ -29,18 +29,20 @@ export async function proxy(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname
   const isPublicPath =
+    pathname === '/' ||
     pathname.startsWith('/login') ||
     pathname.startsWith('/auth/') ||
     pathname.startsWith('/_next') ||
     pathname.startsWith('/favicon') ||
     pathname.startsWith('/api/health') ||
-    pathname.startsWith('/onboarding')
+    pathname.startsWith('/onboarding') ||
+    pathname.startsWith('/docs')
 
   if (!user && !isPublicPath) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  if (user && pathname === '/login') {
+  if (user && (pathname === '/login' || pathname === '/')) {
     return NextResponse.redirect(new URL('/stats', request.url))
   }
 

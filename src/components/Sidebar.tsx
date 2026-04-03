@@ -13,11 +13,14 @@ import {
   ClockCountdown,
   ListMagnifyingGlass,
   ShieldCheck,
+  HardDrives,
   List,
   X,
   Moon,
   Sun,
   SignOut,
+  GearSix,
+  CurrencyDollar,
   type Icon,
 } from '@phosphor-icons/react'
 import { useTheme } from '@/components/ThemeProvider'
@@ -43,6 +46,7 @@ const NAV_ITEMS: NavGroup[] = [
       { href: '/memories', label: 'Memories', icon: Brain },
       { href: '/connectors', label: 'Connectors', icon: Plug },
       { href: '/skills', label: 'Skills', icon: BookOpenText },
+      { href: '/mcp-servers', label: 'MCP Servers', icon: HardDrives },
     ],
   },
   {
@@ -51,6 +55,13 @@ const NAV_ITEMS: NavGroup[] = [
       { href: '/automations', label: 'Automations', icon: ClockCountdown },
       { href: '/approvals', label: 'Approvals', icon: ShieldCheck },
       { href: '/logs', label: 'Logs', icon: ListMagnifyingGlass },
+    ],
+  },
+  {
+    section: 'Workspace',
+    items: [
+      { href: '/billing', label: 'Billing', icon: CurrencyDollar },
+      { href: '/settings', label: 'Settings', icon: GearSix },
     ],
   },
 ]

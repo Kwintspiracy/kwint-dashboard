@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { getMemoriesAction, updateMemoryAction, deleteMemoryAction, createMemoryAction, getMemoryCountAction, getAgentsAction, searchMemoriesSemanticAction, backfillEmbeddingsAction } from '@/lib/actions'
+import { getMemoriesAction, updateMemoryAction, deleteMemoryAction, createMemoryAction, getMemoryCountAction, getAgentsAction, searchMemoriesSemanticAction, backfillEmbeddingsAction, archiveStaleMemoriesAction, unarchiveMemoryAction } from '@/lib/actions'
 import { timeAgo } from '@/lib/utils'
 import { useData } from '@/hooks/useData'
 import { useAuth } from '@/components/AuthProvider'
@@ -11,7 +11,12 @@ import EmptyState from '@/components/EmptyState'
 import StatCardSkeleton from '@/components/skeletons/StatCardSkeleton'
 import { toast } from 'sonner'
 
-type Memory = { id: string; fact: string; category: string; importance: number; agent_id: string | null; source?: string; created_at: string; updated_at: string; similarity?: number }
+type Memory = {
+  id: string; fact: string; category: string; importance: number;
+  agent_id: string | null; source?: string; archived?: boolean;
+  access_count?: number; last_accessed_at?: string;
+  created_at: string; updated_at: string; similarity?: number
+}
 type Agent = { id: string; name: string; slug: string; is_default: boolean }
 
 const CATEGORIES = ['preference', 'context', 'outcome', 'learned_rule'] as const
@@ -35,13 +40,17 @@ export default function MemoriesPage() {
   const [newImp, setNewImp] = useState(3)
   const [newAgentId, setNewAgentId] = useState('')
   const [backfilling, setBackfilling] = useState(false)
+  const [archiving, setArchiving] = useState(false)
+  const [showArchived, setShowArchived] = useState(false)
   const [view, setView] = useState<'all' | 'by-agent' | 'timeline'>('all')
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── Data ─────────────────────────────────────────────────────
   const { data: memoriesRaw = [], isLoading: loading, mutate } = useData(
-    ['memories', eid, catFilter, agentFilter],
-    () => getMemoriesAction(catFilter || undefined, agentFilter || undefined)
+    ['memories', eid, catFilter, agentFilter, showArchived],
+    () => showArchived
+      ? getMemoriesAction(undefined, agentFilter || undefined, true)
+      : getMemoriesAction(catFilter || undefined, agentFilter || undefined, false)
   )
   const memories = memoriesRaw as Memory[]
 
@@ -110,6 +119,18 @@ export default function MemoriesPage() {
     } finally { setBackfilling(false) }
   }
 
+  async function handleArchiveStale() {
+    if (!confirm('Archive memories not accessed in 90+ days with importance ≤ 2?')) return
+    setArchiving(true)
+    try {
+      const result = await archiveStaleMemoriesAction({})
+      if (!result.ok) { toast.error(result.error); return }
+      const n = result.data.archived
+      toast.success(n === 0 ? 'No stale memories to archive' : `Archived ${n} stale ${n === 1 ? 'memory' : 'memories'}`)
+      mutate(); mutateCounts()
+    } finally { setArchiving(false) }
+  }
+
   // ── Loading ──────────────────────────────────────────────────
   if (loading) return (
     <div className="space-y-5 max-w-7xl">
@@ -127,6 +148,14 @@ export default function MemoriesPage() {
         <button onClick={handleBackfill} disabled={backfilling}
           className="px-3 py-2 text-xs text-neutral-400 hover:text-white border border-neutral-800 rounded-lg hover:border-neutral-600 transition-colors disabled:opacity-50">
           {backfilling ? 'Embedding...' : '⚡ Embed all'}
+        </button>
+        <button onClick={handleArchiveStale} disabled={archiving}
+          className="px-3 py-2 text-xs text-neutral-400 hover:text-white border border-neutral-800 rounded-lg hover:border-neutral-600 transition-colors disabled:opacity-50">
+          {archiving ? 'Archiving...' : '🗄 Archive stale'}
+        </button>
+        <button onClick={() => setShowArchived(!showArchived)}
+          className={`px-3 py-2 text-xs border rounded-lg transition-colors ${showArchived ? 'border-amber-700 text-amber-400 bg-amber-900/20' : 'border-neutral-800 text-neutral-400 hover:text-white hover:border-neutral-600'}`}>
+          {showArchived ? 'Hide archived' : 'Show archived'}
         </button>
         <button onClick={() => setShowAdd(!showAdd)}
           className="px-4 py-2 text-xs font-semibold bg-white text-black rounded-lg hover:bg-neutral-200 transition-colors">
@@ -329,14 +358,24 @@ export default function MemoriesPage() {
 
 // ── Memory Row Component ─────────────────────────────────────────────────────
 
+function decayInfo(m: Memory): { label: string; stale: boolean } {
+  if (!m.last_accessed_at) return { label: 'never accessed', stale: true }
+  const days = Math.floor((Date.now() - new Date(m.last_accessed_at).getTime()) / 86400000)
+  const stale = days >= 30
+  const label = days === 0 ? 'accessed today' : days === 1 ? 'accessed 1d ago' : `accessed ${days}d ago`
+  return { label, stale }
+}
+
 function MemoryRow({ m, agents, onUpdate, onDelete }: {
   m: Memory; agents: Agent[]
   onUpdate: () => void; onDelete: () => void
 }) {
+  const { label: accessedLabel, stale } = decayInfo(m)
+
   return (
     <div className="px-5 py-4 flex items-start gap-4 hover:bg-neutral-800/20 transition-colors group">
       <div className="flex-1 min-w-0">
-        <p className="text-sm text-neutral-200 leading-relaxed">{m.fact}</p>
+        <p className={`text-sm leading-relaxed ${m.archived ? 'text-neutral-500' : 'text-neutral-200'}`}>{m.fact}</p>
         <div className="flex flex-wrap items-center gap-2 mt-2">
           <Badge label={m.category.replace('_', ' ')} color={CAT_COLORS[m.category] ?? 'neutral'} />
           <span className="text-[10px] text-neutral-500">
@@ -347,25 +386,45 @@ function MemoryRow({ m, agents, onUpdate, onDelete }: {
               ✦ Auto-learned
             </span>
           )}
+          {m.archived && (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-neutral-800 text-neutral-500 border border-neutral-700">
+              archived
+            </span>
+          )}
           {m.similarity != null && (
             <span className="text-[10px] font-semibold text-emerald-400">{Math.round(m.similarity * 100)}% match</span>
           )}
+          {/* Decay info */}
+          {(m.access_count !== undefined) && (
+            <span className="text-[10px] text-neutral-600 tabular-nums">{m.access_count} {m.access_count === 1 ? 'read' : 'reads'}</span>
+          )}
+          <span className={`text-[10px] ${stale ? 'text-amber-700' : 'text-neutral-700'}`}>
+            {stale && '⚠ '}{accessedLabel}
+          </span>
           <span className="text-[10px] text-neutral-700">{timeAgo(m.updated_at)}</span>
         </div>
       </div>
       <div className="flex items-center gap-0.5 shrink-0 pt-0.5">
-        {[1, 2, 3, 4, 5].map(n => (
+        {!m.archived && [1, 2, 3, 4, 5].map(n => (
           <button key={n}
             onClick={async () => { const r = await updateMemoryAction(m.id, { importance: n }); if (!r.ok) toast.error(r.error); else onUpdate() }}
             className={`text-base leading-none transition-colors ${n <= m.importance ? 'text-amber-400' : 'text-neutral-800 group-hover:text-neutral-700 hover:text-amber-400'}`}>
             ★
           </button>
         ))}
-        <button
-          onClick={async () => { if (confirm('Delete this memory?')) { const r = await deleteMemoryAction(m.id); if (!r.ok) toast.error(r.error); else { toast.success('Deleted'); onDelete() } } }}
-          className="ml-2 text-sm text-neutral-700 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100">
-          ×
-        </button>
+        {m.archived ? (
+          <button
+            onClick={async () => { const r = await unarchiveMemoryAction(m.id); if (!r.ok) toast.error(r.error); else { toast.success('Unarchived'); onUpdate() } }}
+            className="ml-2 text-[10px] text-neutral-600 hover:text-emerald-400 transition-colors opacity-0 group-hover:opacity-100 whitespace-nowrap">
+            Unarchive
+          </button>
+        ) : (
+          <button
+            onClick={async () => { if (confirm('Delete this memory?')) { const r = await deleteMemoryAction(m.id); if (!r.ok) toast.error(r.error); else { toast.success('Deleted'); onDelete() } } }}
+            className="ml-2 text-sm text-neutral-700 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100">
+            ×
+          </button>
+        )}
       </div>
     </div>
   )

@@ -1,0 +1,86 @@
+<svg width="37" height="36" viewBox="0 0 37 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g clip-path="url(#clip0_202_8250)">
+<mask id="mask0_202_8250" style="mask-type:alpha" maskUnits="userSpaceOnUse" x="0" y="0" width="37" height="37">
+<path fill-rule="evenodd" clip-rule="evenodd" d="M18.0022 35.0652C16.495 35.6685 14.8499 36.0004 13.1272 36.0004C5.87845 36.0004 0.00219727 30.1241 0.00219727 22.8754C0.00219727 18.7484 1.90695 15.0664 4.8853 12.6603C5.13025 5.62697 10.9091 0.000396729 18.0022 0.000396729C25.0952 0.000396729 30.8741 5.62697 31.1191 12.6603C34.0975 15.0664 36.0022 18.7484 36.0022 22.8754C36.0022 30.1241 30.1259 36.0004 22.8772 36.0004C21.1545 36.0004 19.5094 35.6685 18.0022 35.0652Z" fill="url(#paint0_linear_202_8250)"/>
+</mask>
+<g mask="url(#mask0_202_8250)">
+<path fill-rule="evenodd" clip-rule="evenodd" d="M18.0023 10.6856C22.8371 12.6209 26.2522 17.3494 26.2522 22.8754C26.2522 23.0311 26.2495 23.1861 26.2441 23.3405C23.9912 25.1605 21.124 26.2504 18.0022 26.2504C14.8804 26.2504 12.0132 25.1605 9.7603 23.3405C9.7549 23.1862 9.7522 23.0311 9.7522 22.8754C9.7522 17.3494 13.1674 12.6209 18.0023 10.6856Z" fill="url(#paint1_linear_202_8250)"/>
+<g filter="url(#filter0_f_202_8250)">
+<path d="M31.1191 13.4103C28.8662 11.5903 25.999 10.5004 22.8772 10.5004C15.6284 10.5004 9.7522 16.3766 9.7522 23.6254C9.7522 23.7811 9.7549 23.9361 9.7603 24.0905C6.78194 21.6844 4.8772 18.0023 4.8772 13.8754C4.8772 6.62665 10.7534 0.750397 18.0022 0.750397C25.0952 0.750397 30.8741 6.37697 31.1191 13.4103Z" fill="black" fill-opacity="0.32"/>
+</g>
+<g filter="url(#filter1_f_202_8250)">
+<path d="M31.1191 12.8028C28.8662 10.9828 25.999 9.89288 22.8772 9.89288C15.6284 9.89288 9.7522 15.7691 9.7522 23.0179C9.7522 23.1736 9.7549 23.3286 9.7603 23.483C6.78194 21.0769 4.8772 17.3948 4.8772 13.2679C4.8772 6.01913 10.7534 0.142883 18.0022 0.142883C25.0952 0.142883 30.8741 5.76946 31.1191 12.8028Z" fill="black" fill-opacity="0.24"/>
+</g>
+<path fill-rule="evenodd" clip-rule="evenodd" d="M31.1191 12.6603C28.8662 10.8403 25.999 9.7504 22.8772 9.7504C15.6284 9.7504 9.7522 15.6266 9.7522 22.8754C9.7522 23.0311 9.7549 23.1861 9.7603 23.3405C6.78194 20.9344 4.8772 17.2523 4.8772 13.1254C4.8772 5.87665 10.7534 0.000396729 18.0022 0.000396729C25.0952 0.000396729 30.8741 5.62697 31.1191 12.6603Z" fill="url(#paint2_linear_202_8250)"/>
+<g filter="url(#filter2_f_202_8250)">
+<path d="M26.2441 24.0906C23.9912 25.9106 21.124 27.0005 18.0022 27.0005C10.7534 27.0005 4.8772 21.1242 4.8772 13.8755C4.8772 13.7198 4.8799 13.5648 4.8853 13.4104C1.90695 15.8164 0.00219727 19.4985 0.00219727 23.6255C0.00219727 30.8742 5.87845 36.7505 13.1272 36.7505C20.2202 36.7505 25.9991 31.1239 26.2441 24.0906Z" fill="black" fill-opacity="0.32"/>
+</g>
+<g filter="url(#filter3_f_202_8250)">
+<path d="M26.2441 23.4831C23.9912 25.3031 21.124 26.393 18.0022 26.393C10.7534 26.393 4.8772 20.5167 4.8772 13.268C4.8772 13.1123 4.8799 12.9573 4.8853 12.8029C1.90695 15.209 0.00219727 18.891 0.00219727 23.018C0.00219727 30.2667 5.87845 36.143 13.1272 36.143C20.2202 36.143 25.9991 30.5165 26.2441 23.4831Z" fill="black" fill-opacity="0.24"/>
+</g>
+<path fill-rule="evenodd" clip-rule="evenodd" d="M26.2441 23.3405C23.9912 25.1605 21.124 26.2504 18.0022 26.2504C10.7534 26.2504 4.8772 20.3741 4.8772 13.1254C4.8772 12.9697 4.8799 12.8147 4.8853 12.6603C1.90695 15.0663 0.00219727 18.7484 0.00219727 22.8754C0.00219727 30.1241 5.87845 36.0004 13.1272 36.0004C20.2202 36.0004 25.9991 30.3738 26.2441 23.3405Z" fill="url(#paint3_linear_202_8250)"/>
+<g filter="url(#filter4_f_202_8250)">
+<path d="M18.0022 35.8152C22.837 33.8799 26.2522 29.1515 26.2522 23.6254C26.2522 18.0993 22.837 13.3709 18.0022 11.4356C19.5094 10.8323 21.1545 10.5004 22.8772 10.5004C30.1259 10.5004 36.0022 16.3766 36.0022 23.6254C36.0022 30.8741 30.1259 36.7504 22.8772 36.7504C21.1545 36.7504 19.5094 36.4185 18.0022 35.8152Z" fill="black" fill-opacity="0.32"/>
+</g>
+<g filter="url(#filter5_f_202_8250)">
+<path d="M18.0022 35.2077C22.837 33.2724 26.2522 28.544 26.2522 23.0179C26.2522 17.4918 22.837 12.7634 18.0022 10.8281C19.5094 10.2248 21.1545 9.89288 22.8772 9.89288C30.1259 9.89288 36.0022 15.7691 36.0022 23.0179C36.0022 30.2666 30.1259 36.1429 22.8772 36.1429C21.1545 36.1429 19.5094 35.811 18.0022 35.2077Z" fill="black" fill-opacity="0.24"/>
+</g>
+<path fill-rule="evenodd" clip-rule="evenodd" d="M18.0022 35.0652C22.837 33.1299 26.2522 28.4015 26.2522 22.8754C26.2522 17.3493 22.837 12.6209 18.0022 10.6856C19.5094 10.0823 21.1545 9.7504 22.8772 9.7504C30.1259 9.7504 36.0022 15.6266 36.0022 22.8754C36.0022 30.1241 30.1259 36.0004 22.8772 36.0004C21.1545 36.0004 19.5094 35.6685 18.0022 35.0652Z" fill="url(#paint4_linear_202_8250)"/>
+</g>
+</g>
+<defs>
+<filter id="filter0_f_202_8250" x="-3.1228" y="-7.2496" width="42.2419" height="39.3401" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+<feFlood flood-opacity="0" result="BackgroundImageFix"/>
+<feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/>
+<feGaussianBlur stdDeviation="4" result="effect1_foregroundBlur_202_8250"/>
+</filter>
+<filter id="filter1_f_202_8250" x="4.1172" y="-0.617117" width="27.7619" height="24.8601" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+<feFlood flood-opacity="0" result="BackgroundImageFix"/>
+<feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/>
+<feGaussianBlur stdDeviation="0.38" result="effect1_foregroundBlur_202_8250"/>
+</filter>
+<filter id="filter2_f_202_8250" x="-7.9978" y="5.4104" width="42.2419" height="39.3401" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+<feFlood flood-opacity="0" result="BackgroundImageFix"/>
+<feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/>
+<feGaussianBlur stdDeviation="4" result="effect1_foregroundBlur_202_8250"/>
+</filter>
+<filter id="filter3_f_202_8250" x="-0.757803" y="12.0429" width="27.7619" height="24.8601" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+<feFlood flood-opacity="0" result="BackgroundImageFix"/>
+<feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/>
+<feGaussianBlur stdDeviation="0.38" result="effect1_foregroundBlur_202_8250"/>
+</filter>
+<filter id="filter4_f_202_8250" x="10.0022" y="2.5004" width="34" height="42.25" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+<feFlood flood-opacity="0" result="BackgroundImageFix"/>
+<feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/>
+<feGaussianBlur stdDeviation="4" result="effect1_foregroundBlur_202_8250"/>
+</filter>
+<filter id="filter5_f_202_8250" x="17.2422" y="9.13288" width="19.52" height="27.77" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+<feFlood flood-opacity="0" result="BackgroundImageFix"/>
+<feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/>
+<feGaussianBlur stdDeviation="0.38" result="effect1_foregroundBlur_202_8250"/>
+</filter>
+<linearGradient id="paint0_linear_202_8250" x1="11.6272" y1="20.4379" x2="33.0642" y2="41.1735" gradientUnits="userSpaceOnUse">
+<stop stop-color="#40C4F5"/>
+<stop offset="1" stop-color="#0095E6"/>
+</linearGradient>
+<linearGradient id="paint1_linear_202_8250" x1="9.7522" y1="10.6856" x2="25.8473" y2="26.6584" gradientUnits="userSpaceOnUse">
+<stop stop-color="#2064AE"/>
+<stop offset="1" stop-color="#27518A"/>
+</linearGradient>
+<linearGradient id="paint2_linear_202_8250" x1="9.3541" y1="2.07525" x2="18.6203" y2="24.2377" gradientUnits="userSpaceOnUse">
+<stop stop-color="#7CECFF"/>
+<stop offset="1" stop-color="#50E6FF"/>
+</linearGradient>
+<linearGradient id="paint3_linear_202_8250" x1="11.6272" y1="20.4379" x2="33.0642" y2="41.1735" gradientUnits="userSpaceOnUse">
+<stop stop-color="#40C4F5"/>
+<stop offset="1" stop-color="#0095E6"/>
+</linearGradient>
+<linearGradient id="paint4_linear_202_8250" x1="17.0647" y1="9.7504" x2="30.1897" y2="33.0004" gradientUnits="userSpaceOnUse">
+<stop stop-color="#0095E6"/>
+<stop offset="1" stop-color="#0078D4"/>
+</linearGradient>
+<clipPath id="clip0_202_8250">
+<rect width="37" height="36.0004" fill="white"/>
+</clipPath>
+</defs>
+</svg>

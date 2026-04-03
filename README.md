@@ -1,36 +1,81 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Kwint Agents — Dashboard
 
-## Getting Started
+Multi-agent AI management platform. Create agents with personalities, connect 59+ APIs, watch them learn from every task. Bring your own LLM key or use the operator's fallback.
 
-First, run the development server:
+## Architecture
+
+Two separate deployments:
+
+| Repo | Stack | Role |
+|------|-------|------|
+| `kwint-dashboard` (this) | Next.js 16, React 19, Supabase, Tailwind 4 | UI + server actions |
+| `Kwint-Agent-One` | Python 3.12, FastAPI, Anthropic SDK | Agent runner |
+
+## Quick start — Vercel
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+# 1. Clone both repos
+git clone https://github.com/Kwintspiracy/kwint-dashboard.git
+git clone https://github.com/Kwintspiracy/Kwint-Agent-One.git
+
+# 2. Deploy dashboard
+cd kwint-dashboard && npm i && npx vercel --prod
+
+# 3. Deploy backend
+cd ../Kwint-Agent-One && npx vercel --prod
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+**Environment variables (dashboard — set in Vercel):**
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```
+NEXT_PUBLIC_SUPABASE_URL=https://yourproject.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
+SUPABASE_SERVICE_ROLE_KEY=eyJ...
+NEXT_PUBLIC_AGENT_API_URL=https://your-agent.vercel.app
+API_SECRET_KEY=<random secret shared with backend>
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+**Environment variables (backend — set in Vercel):**
 
-## Learn More
+```
+ANTHROPIC_API_KEY=sk-ant-...        # operator fallback key
+SUPABASE_URL=https://yourproject.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=eyJ...
+API_SECRET_KEY=<same as dashboard>
+WORKER_SECRET=<random secret>
+APP_URL=https://your-agent.vercel.app
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Quick start — Local dev
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+# Dashboard
+cd kwint-dashboard && npm i && npm run dev   # → http://localhost:3000
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+# Backend
+cd Kwint-Agent-One && pip install -r requirements.txt && npx vercel dev
+```
 
-## Deploy on Vercel
+## BYOK — Bring Your Own Key
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Users can add their own LLM API keys in **Settings → LLM Provider Keys**. Supported providers: Anthropic, OpenAI, Google AI, Mistral, Groq, Cohere, DeepSeek, Together AI, OpenRouter, Ollama, Mammoth AI.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+When a user has their own key configured, the runner uses it directly — the cost is billed to their provider account. Without a key, runs fall back to the operator's `ANTHROPIC_API_KEY`. Both paths are tracked in `agent_runs.key_source` and visible on the **Billing** page.
+
+## Database
+
+Uses Supabase (PostgreSQL + pgvector + auth + realtime). Apply migrations from `supabase/migrations/` in order via the Supabase SQL Editor.
+
+## Commands
+
+```bash
+npm run dev          # Dev server
+npm run build        # Production build
+npm run lint         # ESLint
+npm test             # Vitest unit tests
+npm run e2e          # Playwright e2e tests
+```
+
+## License
+
+MIT

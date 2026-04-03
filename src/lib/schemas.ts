@@ -79,8 +79,19 @@ export const CreateMemorySchema = z.object({
 
 export const UpdateMemorySchema = CreateMemorySchema.partial()
 
+export const ArchiveStaleMemoriesSchema = z.object({
+  days_threshold: z.number().int().min(1).max(365).optional().default(90),
+  min_importance: z.number().int().min(1).max(5).optional().default(2),
+})
+
+export const UnarchiveMemorySchema = z.object({
+  id: z.string().uuid(),
+})
+
 export type CreateMemoryInput = z.infer<typeof CreateMemorySchema>
 export type UpdateMemoryInput = z.infer<typeof UpdateMemorySchema>
+export type ArchiveStaleMemoriesInput = z.infer<typeof ArchiveStaleMemoriesSchema>
+export type UnarchiveMemoryInput = z.infer<typeof UnarchiveMemorySchema>
 
 // ─── Schedule / Automation ───────────────────────────────────────────────────
 
@@ -169,6 +180,25 @@ export const UpdateTriggerSchema = CreateTriggerSchema.partial().extend({
 export type CreateTriggerInput = z.infer<typeof CreateTriggerSchema>
 export type UpdateTriggerInput = z.infer<typeof UpdateTriggerSchema>
 
+// ─── Plugin ──────────────────────────────────────────────────────────────────
+
+export const CreatePluginSchema = z.object({
+  name: z.string().min(1, 'Name is required').max(120),
+  slug: SlugSchema,
+  description: z.string().max(500).optional(),
+  plugin_type: z.enum(['webhook', 'transform', 'schedule']),
+  hook: z.enum(['pre_task', 'post_task', 'pre_tool', 'post_tool', 'on_memory_save']),
+  webhook_url: z.string().url('Must be a valid URL').optional().or(z.literal('')),
+  config: z.record(z.string(), z.unknown()).optional(),
+})
+
+export const UpdatePluginSchema = CreatePluginSchema.partial().extend({
+  active: z.boolean().optional(),
+})
+
+export type CreatePluginInput = z.infer<typeof CreatePluginSchema>
+export type UpdatePluginInput = z.infer<typeof UpdatePluginSchema>
+
 // ─── Entity ──────────────────────────────────────────────────────────────────
 
 export const CreateEntitySchema = z.object({
@@ -181,3 +211,38 @@ export const CreateEntitySchema = z.object({
 })
 export const UpdateEntitySchema = CreateEntitySchema.partial()
 export type CreateEntityInput = z.infer<typeof CreateEntitySchema>
+
+// ─── LLM Key ──────────────────────────────────────────────────────────────────
+
+export const SaveLlmKeySchema = z.object({
+  provider: z.string().min(1, 'Provider is required'),
+  api_key: z.string().default(''),
+  base_url: z.string().nullable().optional(),
+  nickname: z.string().max(80).nullable().optional(),
+})
+
+export type SaveLlmKeyInput = z.infer<typeof SaveLlmKeySchema>
+
+// ─── MCP Server ───────────────────────────────────────────────────────────────
+
+export const CreateMcpServerSchema = z.object({
+  name: z.string().min(1, 'Name is required').max(120),
+  slug: SlugSchema,
+  transport: z.enum(['http', 'stdio']),
+  url: z
+    .string()
+    .url('Must be a valid URL')
+    .refine(
+      (u) => u.startsWith('http://') || u.startsWith('https://'),
+      'URL must start with http:// or https://',
+    )
+    .nullable()
+    .optional(),
+  command: z.string().max(500).nullable().optional(),
+  active: z.boolean().default(true),
+})
+
+export const UpdateMcpServerSchema = CreateMcpServerSchema.partial()
+
+export type CreateMcpServerInput = z.infer<typeof CreateMcpServerSchema>
+export type UpdateMcpServerInput = z.infer<typeof UpdateMcpServerSchema>

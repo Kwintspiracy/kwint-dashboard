@@ -11,6 +11,7 @@ import {
   UpdateSkillSchema,
   CreateMemorySchema,
   UpdateMemorySchema,
+  ArchiveStaleMemoriesSchema,
   CreateScheduleSchema,
   UpdateScheduleSchema,
   ResolveApprovalSchema,
@@ -20,6 +21,11 @@ import {
   UpdateTriggerSchema,
   CreateEntitySchema,
   UpdateEntitySchema,
+  CreateMcpServerSchema,
+  UpdateMcpServerSchema,
+  CreatePluginSchema,
+  UpdatePluginSchema,
+  SaveLlmKeySchema,
   JobsPageSchema,
   ToolCallsPageSchema,
   type JobsPageInput,
@@ -445,9 +451,10 @@ export async function getSkillsAction(): Promise<any[]> {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function getMemoriesAction(category?: string, agentId?: string): Promise<any[]> {
+export async function getMemoriesAction(category?: string, agentId?: string, includeArchived = false): Promise<any[]> {
   const { supabase, entityId } = await requireAuthWithEntity()
   let query = supabase.from('agent_memory').select('*').eq('entity_id', entityId).order('updated_at', { ascending: false })
+  if (!includeArchived) query = query.eq('archived', false)
   if (category) query = query.eq('category', category)
   if (agentId) query = query.eq('agent_id', agentId)
   const { data, error } = await query
@@ -906,6 +913,54 @@ export async function deleteMemoryAction(id: string): Promise<ActionResult> {
 
     if (error) return dbFail(error)
     return ok(undefined)
+  } catch (e) {
+    return dbError(e)
+  }
+}
+
+export async function unarchiveMemoryAction(id: string): Promise<ActionResult<unknown>> {
+  if (!id || typeof id !== 'string') return fail('Invalid memory ID')
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+    const { data, error } = await supabase
+      .from('agent_memory')
+      .update({ archived: false })
+      .eq('id', id)
+      .eq('entity_id', entityId)
+      .select()
+      .single()
+
+    if (error) return dbFail(error)
+    return ok(data)
+  } catch (e) {
+    return dbError(e)
+  }
+}
+
+export async function archiveStaleMemoriesAction(
+  raw: unknown = {},
+): Promise<ActionResult<{ archived: number }>> {
+  const parsed = ArchiveStaleMemoriesSchema.safeParse(raw)
+  if (!parsed.success) return fail(parsed.error.message)
+
+  const { days_threshold, min_importance } = parsed.data
+
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+
+    const cutoff = new Date(Date.now() - days_threshold * 24 * 60 * 60 * 1000).toISOString()
+
+    const { data, error } = await supabase
+      .from('agent_memory')
+      .update({ archived: true })
+      .eq('entity_id', entityId)
+      .eq('archived', false)
+      .lt('last_accessed_at', cutoff)
+      .lte('importance', min_importance)
+      .select('id')
+
+    if (error) return dbFail(error)
+    return ok({ archived: (data || []).length })
   } catch (e) {
     return dbError(e)
   }
@@ -1468,4 +1523,409 @@ export async function backfillEmbeddingsAction(): Promise<ActionResult<{ count: 
   }
 
   return ok({ count })
+}
+
+// ─── MCP Server Actions ───────────────────────────────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function getMcpServersAction(): Promise<any[]> {
+  const { supabase, entityId } = await requireAuthWithEntity()
+  const { data, error } = await supabase
+    .from('mcp_servers')
+    .select('*')
+    .eq('entity_id', entityId)
+    .order('name')
+  if (error) { console.error('[actions]', error.message); throw new Error('Failed to load MCP servers') }
+  return data || []
+}
+
+export async function createMcpServerAction(raw: unknown): Promise<ActionResult<unknown>> {
+  const parsed = CreateMcpServerSchema.safeParse(raw)
+  if (!parsed.success) return fail(parsed.error.issues[0].message)
+
+  // Validate transport-specific requirements
+  if (parsed.data.transport === 'http' && !parsed.data.url) {
+    return fail('URL is required for HTTP transport')
+  }
+  if (parsed.data.transport === 'stdio' && !parsed.data.command) {
+    return fail('Command is required for stdio transport')
+  }
+
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+    const { data, error } = await supabase
+      .from('mcp_servers')
+      .insert({ ...parsed.data, entity_id: entityId })
+      .select()
+      .single()
+    if (error) return error.code === '23505' ? fail('An MCP server with this slug already exists') : dbFail(error)
+    return ok(data)
+  } catch (e) { return dbError(e) }
+}
+
+export async function updateMcpServerAction(id: string, raw: unknown): Promise<ActionResult<unknown>> {
+  const parsed = UpdateMcpServerSchema.safeParse(raw)
+  if (!parsed.success) return fail(parsed.error.issues[0].message)
+
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+    const { data, error } = await supabase
+      .from('mcp_servers')
+      .update({ ...parsed.data, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .eq('entity_id', entityId)
+      .select()
+      .single()
+    if (error) return dbFail(error)
+    return ok(data)
+  } catch (e) { return dbError(e) }
+}
+
+export async function deleteMcpServerAction(id: string): Promise<ActionResult> {
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+    const { error } = await supabase
+      .from('mcp_servers')
+      .delete()
+      .eq('id', id)
+      .eq('entity_id', entityId)
+    if (error) return dbFail(error)
+    return ok(undefined)
+  } catch (e) { return dbError(e) }
+}
+
+export async function toggleMcpServerActiveAction(id: string, active: boolean): Promise<ActionResult> {
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+    const { error } = await supabase
+      .from('mcp_servers')
+      .update({ active, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .eq('entity_id', entityId)
+    if (error) return dbFail(error)
+    return ok(undefined)
+  } catch (e) { return dbError(e) }
+}
+
+export async function testMcpServerAction(id: string): Promise<ActionResult<{ tool_count: number; tools: string[] }>> {
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+
+    // Load the server record
+    const { data: server, error } = await supabase
+      .from('mcp_servers')
+      .select('*')
+      .eq('id', id)
+      .eq('entity_id', entityId)
+      .single()
+    if (error || !server) return fail('MCP server not found')
+    if (server.transport !== 'http') return fail('Connection test is only supported for HTTP transport')
+    if (!server.url) return fail('Server has no URL configured')
+
+    // Validate URL — block private IPs and metadata endpoints (SSRF prevention)
+    const url: string = server.url
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      return fail('Server URL must start with http:// or https://')
+    }
+    try {
+      const parsed = new URL(url)
+      const hostname = parsed.hostname.toLowerCase()
+      const blocked = ['localhost', '127.0.0.1', '0.0.0.0', '::1', '[::1]',
+        '169.254.169.254', 'metadata.google.internal']
+      const blockedPrefixes = ['10.', '192.168.', '172.16.', '172.17.', '172.18.', '172.19.',
+        '172.20.', '172.21.', '172.22.', '172.23.', '172.24.', '172.25.',
+        '172.26.', '172.27.', '172.28.', '172.29.', '172.30.', '172.31.', '169.254.']
+      if (blocked.includes(hostname) || blockedPrefixes.some(p => hostname.startsWith(p))) {
+        return fail('Cannot connect to private or internal addresses')
+      }
+    } catch { return fail('Invalid server URL') }
+
+    // Call tools/list via the dashboard (server-side fetch)
+    const payload = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} })
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: payload,
+      signal: AbortSignal.timeout(10_000),
+    })
+
+    if (!res.ok) {
+      return fail(`MCP server returned HTTP ${res.status}`)
+    }
+
+    const json = await res.json().catch(() => null)
+    if (!json || json.error) {
+      return fail(`MCP server returned an error: ${json?.error?.message ?? 'unknown'}`)
+    }
+
+    const tools: unknown[] = json?.result?.tools ?? []
+    const toolNames = (tools as { name?: string }[])
+      .filter((t) => typeof t?.name === 'string')
+      .map((t) => t.name as string)
+
+    return ok({ tool_count: toolNames.length, tools: toolNames })
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    return fail(`Connection failed: ${msg.slice(0, 200)}`)
+  }
+}
+
+// ─── Plugin Actions ──────────────────────────────────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function getPluginsAction(): Promise<any[]> {
+  const { supabase, entityId } = await requireAuthWithEntity()
+  const { data, error } = await supabase
+    .from('agent_plugins')
+    .select('*')
+    .eq('entity_id', entityId)
+    .order('created_at', { ascending: false })
+  if (error) { console.error('[actions]', error.message); throw new Error('Failed to load plugins') }
+  return data || []
+}
+
+export async function createPluginAction(raw: unknown): Promise<ActionResult<unknown>> {
+  const parsed = CreatePluginSchema.safeParse(raw)
+  if (!parsed.success) return fail(parsed.error.issues[0].message)
+
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+    const { webhook_url, ...rest } = parsed.data
+    const { data, error } = await supabase
+      .from('agent_plugins')
+      .insert({
+        ...rest,
+        webhook_url: webhook_url || null,
+        entity_id: entityId,
+      })
+      .select()
+      .single()
+    if (error) return error.code === '23505' ? fail('A plugin with this slug already exists') : dbFail(error)
+    return ok(data)
+  } catch (e) { return dbError(e) }
+}
+
+export async function updatePluginAction(id: string, raw: unknown): Promise<ActionResult<unknown>> {
+  const parsed = UpdatePluginSchema.safeParse(raw)
+  if (!parsed.success) return fail(parsed.error.issues[0].message)
+
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+    const { webhook_url, ...rest } = parsed.data
+    const { data, error } = await supabase
+      .from('agent_plugins')
+      .update({
+        ...rest,
+        ...(webhook_url !== undefined ? { webhook_url: webhook_url || null } : {}),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .eq('entity_id', entityId)
+      .select()
+      .single()
+    if (error) return dbFail(error)
+    return ok(data)
+  } catch (e) { return dbError(e) }
+}
+
+export async function deletePluginAction(id: string): Promise<ActionResult> {
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+    const { error } = await supabase
+      .from('agent_plugins')
+      .delete()
+      .eq('id', id)
+      .eq('entity_id', entityId)
+    if (error) return dbFail(error)
+    return ok(undefined)
+  } catch (e) { return dbError(e) }
+}
+
+export async function togglePluginActiveAction(id: string, active: boolean): Promise<ActionResult> {
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+    const { error } = await supabase
+      .from('agent_plugins')
+      .update({ active, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .eq('entity_id', entityId)
+    if (error) return dbFail(error)
+    return ok(undefined)
+  } catch (e) { return dbError(e) }
+}
+
+// ─── Prompt Improvement ───────────────────────────────────────────────────────
+
+export async function analyzeJobFailureAction(
+  jobId: string,
+): Promise<ActionResult<{ diagnosis: string; suggestion: string }>> {
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+
+    const { data: job, error: jobErr } = await supabase
+      .from('agent_jobs')
+      .select('task, error, result, agent_id')
+      .eq('id', jobId)
+      .eq('entity_id', entityId)
+      .single()
+    if (jobErr || !job) return fail('Job not found')
+    if (!job.agent_id) return fail('Job has no associated agent')
+
+    const { data: agent, error: agentErr } = await supabase
+      .from('agents')
+      .select('personality, name')
+      .eq('id', job.agent_id)
+      .eq('entity_id', entityId)
+      .single()
+    if (agentErr || !agent) return fail('Agent not found')
+
+    const apiKey = process.env.ANTHROPIC_API_KEY
+    if (!apiKey) return fail('ANTHROPIC_API_KEY is not configured')
+
+    const prompt = `You are an AI prompt optimizer. An AI agent failed to complete a task.
+
+System prompt:
+<prompt>${agent.personality.slice(0, 2000)}</prompt>
+
+Task:
+<task>${job.task.slice(0, 500)}</task>
+
+Failure:
+<error>${(job.error || job.result || 'Unknown failure').slice(0, 500)}</error>
+
+Respond with ONLY a valid JSON object, no markdown:
+{"diagnosis":"one sentence explaining the root cause, max 20 words","suggestion":"specific text to append to the system prompt, 2-4 sentences, be concrete"}`
+
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 400,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    })
+
+    if (!res.ok) return fail('Analysis request failed')
+
+    const data = await res.json()
+    const text = data.content?.[0]?.text ?? ''
+
+    // Strip markdown code fences if present
+    const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
+
+    let parsed: { diagnosis: string; suggestion: string }
+    try {
+      parsed = JSON.parse(cleaned)
+    } catch {
+      return fail('Could not parse analysis response')
+    }
+
+    if (!parsed.diagnosis || !parsed.suggestion) return fail('Incomplete analysis response')
+    return ok(parsed)
+  } catch (e) {
+    return dbError(e)
+  }
+}
+
+export async function applyPromptSuggestionAction(
+  agentId: string,
+  appendText: string,
+): Promise<ActionResult<unknown>> {
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+
+    const { data: agent, error: fetchErr } = await supabase
+      .from('agents')
+      .select('personality')
+      .eq('id', agentId)
+      .eq('entity_id', entityId)
+      .single()
+    if (fetchErr || !agent) return fail('Agent not found')
+
+    const updatedPersonality = agent.personality.trimEnd() + '\n\n' + appendText.trim()
+
+    const { error } = await supabase
+      .from('agents')
+      .update({ personality: updatedPersonality })
+      .eq('id', agentId)
+      .eq('entity_id', entityId)
+    if (error) return dbFail(error)
+    return ok(undefined)
+  } catch (e) {
+    return dbError(e)
+  }
+}
+
+// ─── LLM Keys ─────────────────────────────────────────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function getLlmKeysAction(): Promise<any[]> {
+  const { supabase, entityId } = await requireAuthWithEntity()
+  const { data, error } = await supabase
+    .from('entity_llm_keys')
+    .select('id, provider, api_key, base_url, nickname, is_active, created_at, updated_at')
+    .eq('entity_id', entityId)
+    .order('created_at', { ascending: true })
+  if (error) throw new Error(error.message)
+  return data ?? []
+}
+
+export async function saveLlmKeyAction(
+  raw: unknown,
+): Promise<ActionResult<unknown>> {
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+    const parsed = SaveLlmKeySchema.safeParse(raw)
+    if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? 'Invalid input')
+    const { provider, api_key, base_url, nickname } = parsed.data
+
+    const { data, error } = await supabase
+      .from('entity_llm_keys')
+      .upsert(
+        { entity_id: entityId, provider, api_key, base_url: base_url ?? null, nickname: nickname ?? null },
+        { onConflict: 'entity_id,provider' },
+      )
+      .select()
+      .single()
+    if (error) return dbFail(error)
+    return ok(data)
+  } catch (e) {
+    return dbError(e)
+  }
+}
+
+export async function deleteLlmKeyAction(
+  provider: string,
+): Promise<ActionResult<void>> {
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+    const { error } = await supabase
+      .from('entity_llm_keys')
+      .delete()
+      .eq('entity_id', entityId)
+      .eq('provider', provider)
+    if (error) return dbFail(error)
+    return ok(undefined)
+  } catch (e) {
+    return dbError(e)
+  }
+}
+
+// ─── Billing Actions ─────────────────────────────────────────────────────────
+
+export async function getBillingRunsAction(): Promise<any[]> {
+  const { supabase, entityId } = await requireAuthWithEntity()
+  const { data, error } = await supabase
+    .from('agent_runs')
+    .select('id, agent_id, input_tokens, output_tokens, tokens_used, key_source, created_at, success, agents(name, model)')
+    .eq('entity_id', entityId)
+    .order('created_at', { ascending: false })
+    .limit(200)
+  if (error) throw new Error(error.message)
+  return data ?? []
 }

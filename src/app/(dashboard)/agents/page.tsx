@@ -11,6 +11,7 @@ import Badge from '@/components/Badge'
 import EmptyState from '@/components/EmptyState'
 import TableSkeleton from '@/components/skeletons/TableSkeleton'
 import { AGENT_TEMPLATES, type AgentTemplate } from '@/lib/agent-templates'
+import { LLM_PROVIDERS, getProviderForModel } from '@/lib/llm-providers'
 
 type Agent = {
   id: string; name: string; slug: string; personality: string
@@ -21,11 +22,13 @@ type Agent = {
   created_at: string; updated_at: string
 }
 
-const MODELS = [
-  { value: 'claude-sonnet-4-6', label: 'Sonnet 4.6' },
-  { value: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5' },
-  { value: 'claude-opus-4-6', label: 'Opus 4.6' },
-]
+// Flat list for table display (provider: Model label)
+function modelDisplayLabel(value: string): string {
+  const provider = getProviderForModel(value)
+  const model = provider?.models.find((m) => m.value === value)
+  if (!model) return value
+  return `${provider!.name} — ${model.label}`
+}
 
 export default function AgentsPage() {
   const { activeEntity } = useAuth()
@@ -201,7 +204,7 @@ export default function AgentsPage() {
                   )}
                 </td>
                 <td className="px-5 py-3.5 text-neutral-500 font-mono text-xs">{a.slug}</td>
-                <td className="px-5 py-3.5 text-neutral-500 text-xs">{MODELS.find(m => m.value === a.model)?.label || a.model}</td>
+                <td className="px-5 py-3.5 text-neutral-500 text-xs">{modelDisplayLabel(a.model)}</td>
                 <td className="px-5 py-3.5">
                   {a.role === 'orchestrator' ? (
                     <Badge label="orchestrator" color="blue" />
@@ -322,9 +325,15 @@ export default function AgentsPage() {
                 value={form.model} onChange={(e) => updateForm('model', e.target.value)}
                 className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-3 py-2 text-xs text-neutral-300 focus:border-neutral-600 focus:outline-none transition-colors"
               >
-                <option value="claude-sonnet-4-6">Sonnet 4.6</option>
-                <option value="claude-haiku-4-5-20251001">Haiku 4.5 (fast, cheap)</option>
-                <option value="claude-opus-4-6-20260827">Opus 4.6 (powerful)</option>
+                {LLM_PROVIDERS.map((provider) => (
+                  <optgroup key={provider.id} label={provider.name}>
+                    {provider.models.map((m) => (
+                      <option key={m.value} value={m.value}>
+                        {m.label}{m.description ? ` — ${m.description}` : ''}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
               </select>
             </div>
             <div>
@@ -431,6 +440,43 @@ export default function AgentsPage() {
                   className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors"
                 />
               </div>
+            </div>
+          </div>
+
+          {/* Slack Configuration */}
+          <div className="border-t border-neutral-800/50 pt-5">
+            <p className="text-xs text-neutral-400 font-semibold uppercase tracking-wider mb-3">Slack</p>
+            <div className="bg-neutral-800/30 border border-neutral-800 rounded-lg px-4 py-3 space-y-2">
+              <p className="text-xs text-neutral-300 font-medium">Environment-level setup (applies to all agents)</p>
+              <ol className="text-xs text-neutral-500 space-y-1 list-decimal list-inside">
+                <li>Create a Slack app at <span className="font-mono text-neutral-400">api.slack.com/apps</span></li>
+                <li>Set env var <span className="font-mono text-neutral-400">SLACK_SIGNING_SECRET</span> (from App Credentials)</li>
+                <li>Set env var <span className="font-mono text-neutral-400">SLACK_BOT_TOKEN</span> (xoxb-... OAuth token)</li>
+                <li>Under Event Subscriptions, set Request URL to:</li>
+              </ol>
+              <p className="font-mono text-xs text-emerald-400 bg-neutral-900/60 rounded px-3 py-1.5 break-all">
+                https://your-domain/api/slack
+              </p>
+              <p className="text-[10px] text-neutral-600">Subscribe to bot events: <span className="font-mono">message.channels</span>, <span className="font-mono">message.im</span>, <span className="font-mono">app_mention</span></p>
+            </div>
+          </div>
+
+          {/* Discord Configuration */}
+          <div className="border-t border-neutral-800/50 pt-5">
+            <p className="text-xs text-neutral-400 font-semibold uppercase tracking-wider mb-3">Discord</p>
+            <div className="bg-neutral-800/30 border border-neutral-800 rounded-lg px-4 py-3 space-y-2">
+              <p className="text-xs text-neutral-300 font-medium">Environment-level setup (applies to all agents)</p>
+              <ol className="text-xs text-neutral-500 space-y-1 list-decimal list-inside">
+                <li>Create an app at <span className="font-mono text-neutral-400">discord.com/developers/applications</span></li>
+                <li>Set env var <span className="font-mono text-neutral-400">DISCORD_PUBLIC_KEY</span> (from General Information)</li>
+                <li>Set env var <span className="font-mono text-neutral-400">DISCORD_BOT_TOKEN</span> (bot token)</li>
+                <li>Set env var <span className="font-mono text-neutral-400">DISCORD_APP_ID</span> (application ID)</li>
+                <li>Under General Information, set Interactions Endpoint URL to:</li>
+              </ol>
+              <p className="font-mono text-xs text-indigo-400 bg-neutral-900/60 rounded px-3 py-1.5 break-all">
+                https://your-domain/api/discord
+              </p>
+              <p className="text-[10px] text-neutral-600">Register slash commands (e.g. <span className="font-mono">/ask</span>) with a <span className="font-mono">message</span> string option via Discord&apos;s API or developer portal.</p>
             </div>
           </div>
 

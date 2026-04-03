@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { getToolCallsAction } from '@/lib/actions'
 import { useData } from '@/hooks/useData'
 import { useAuth } from '@/components/AuthProvider'
@@ -86,9 +86,8 @@ export default function LogsPage() {
               const expanded = expandedId === call.id
               const inputStr = call.tool_input ? JSON.stringify(call.tool_input) : ''
               return (
-                <>
+                <React.Fragment key={call.id}>
                   <tr
-                    key={call.id}
                     role="button"
                     tabIndex={0}
                     onClick={() => setExpandedId(expanded ? null : call.id)}
@@ -144,7 +143,7 @@ export default function LogsPage() {
                       </td>
                     </tr>
                   )}
-                </>
+                </React.Fragment>
               )
             })}
           </tbody>
