@@ -61,43 +61,59 @@ function dbFail(e: { message: string }): ActionResult<never> {
 
 // ─── Auth Guard ──────────────────────────────────────────────────────────────
 
-async function requireAuth(): Promise<Awaited<ReturnType<typeof createServerSupabaseClient>>> {
+async function requireAuth() {
   const supabase = await createServerSupabaseClient()
   const { data: { user }, error } = await supabase.auth.getUser()
   if (error || !user) throw new Error('Unauthorized')
-  return supabase
+  return { supabase, user }
 }
 
 async function requireAuthWithEntity() {
-  const supabase = await requireAuth()
-  const entityId = await getActiveEntityId()
+  const { supabase, user } = await requireAuth()
 
-  if (!entityId) {
-    // Auto-resolve: get user's first entity
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('Unauthorized')
-    const { data: entities } = await supabase.from('entities').select('id').eq('user_id', user.id).order('created_at').limit(1)
-    if (!entities || entities.length === 0) throw new Error('No workspace found')
-    const resolved = entities[0].id
+  // Always load entities for the current user — never trust the cookie alone
+  const { data: entities } = await supabase
+    .from('entities')
+    .select('id')
+    .eq('user_id', user.id)
+    .order('created_at')
+  if (!entities || entities.length === 0) throw new Error('No workspace found')
+
+  const validIds = new Set(entities.map(e => e.id))
+  const cookieEntityId = await getActiveEntityId()
+
+  // Use cookie value only if it belongs to this user, otherwise fall back to first entity
+  const entityId = cookieEntityId && validIds.has(cookieEntityId)
+    ? cookieEntityId
+    : entities[0].id
+
+  // Fix stale / cross-user cookie immediately
+  if (entityId !== cookieEntityId) {
     try {
       const cookieStore = await cookies()
-      cookieStore.set('kwint_active_entity', resolved, { path: '/', maxAge: 60 * 60 * 24 * 365, httpOnly: true, sameSite: 'lax', secure: true })
+      cookieStore.set('kwint_active_entity', entityId, { path: '/', maxAge: 60 * 60 * 24 * 365, httpOnly: true, sameSite: 'lax', secure: true })
     } catch {}
-    return { supabase, entityId: resolved }
   }
 
   return { supabase, entityId }
 }
 
+// ─── Session Cleanup ─────────────────────────────────────────────────────────
+
+export async function clearSessionCookiesAction(): Promise<void> {
+  const cookieStore = await cookies()
+  cookieStore.delete('kwint_active_entity')
+  cookieStore.delete('kwint_has_entities')
+}
+
 // ─── Entity Actions ──────────────────────────────────────────────────────────
 
 export async function getEntitiesAction() {
-  const supabase = await requireAuth()
-  const { data: { user } } = await supabase.auth.getUser()
+  const { supabase, user } = await requireAuth()
   const { data, error } = await supabase
     .from('entities')
     .select('*')
-    .eq('user_id', user!.id)
+    .eq('user_id', user.id)
     .order('created_at')
   if (error) { console.error('[actions]', error.message); throw new Error('Failed to load workspaces') }
   return data || []
@@ -138,14 +154,13 @@ export async function createEntityAction(raw: unknown): Promise<ActionResult<{ i
 }
 
 export async function updateEntityAction(id: string, raw: unknown): Promise<ActionResult> {
-  const supabase = await requireAuth()
+  const { supabase, user } = await requireAuth()
   const parsed = UpdateEntitySchema.safeParse(raw)
   if (!parsed.success) return fail(parsed.error.issues[0].message)
 
   // Verify ownership
-  const { data: { user } } = await supabase.auth.getUser()
   const { data: entity } = await supabase.from('entities').select('user_id').eq('id', id).single()
-  if (!entity || entity.user_id !== user!.id) return fail('Not authorized')
+  if (!entity || entity.user_id !== user.id) return fail('Not authorized')
 
   try {
     const { error } = await supabase
@@ -158,13 +173,12 @@ export async function updateEntityAction(id: string, raw: unknown): Promise<Acti
 }
 
 export async function deleteEntityAction(id: string): Promise<ActionResult> {
-  const supabase = await requireAuth()
-  const { data: { user } } = await supabase.auth.getUser()
+  const { supabase, user } = await requireAuth()
   const { data: entity } = await supabase.from('entities').select('user_id').eq('id', id).single()
-  if (!entity || entity.user_id !== user!.id) return fail('Not authorized')
+  if (!entity || entity.user_id !== user.id) return fail('Not authorized')
 
   // Don't allow deleting the last entity
-  const { count } = await supabase.from('entities').select('id', { count: 'exact', head: true }).eq('user_id', user!.id)
+  const { count } = await supabase.from('entities').select('id', { count: 'exact', head: true }).eq('user_id', user.id)
   if ((count ?? 0) <= 1) return fail('Cannot delete your only workspace')
 
   try {
@@ -185,7 +199,7 @@ export async function switchEntityAction(entityId: string): Promise<ActionResult
 
     const cookieStore = await cookies()
     cookieStore.set('kwint_active_entity', entityId, { path: '/', maxAge: 60 * 60 * 24 * 365, httpOnly: true, sameSite: 'lax', secure: true })
-    cookieStore.set('kwint_has_entities', '1', { path: '/', maxAge: 60 * 60 * 24 * 365, httpOnly: true, secure: true })
+    cookieStore.set('kwint_has_entities', user.id, { path: '/', maxAge: 60 * 60 * 24 * 365, httpOnly: true, secure: true })
     return ok(undefined)
   } catch (e) {
     console.error('[switchEntity]', e)
@@ -217,8 +231,25 @@ export async function migrateExistingDataAction(entityId: string): Promise<Actio
 
 // ─── Batched Stats (single request instead of 10) ────────────────────────────
 
+const EMPTY_STATS = {
+  jobCounts: { completed: 0, failed: 0, pending: 0, processing: 0, total: 0 },
+  totalTokens: 0,
+  jobsPerDay: [] as { date: string; completed: number; failed: number; pending: number }[],
+  toolUsage: [] as { name: string; count: number }[],
+  avgDuration: 0,
+  successRate: 100,
+  channels: [] as { name: string; value: number }[],
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  recentJobs: [] as any[],
+  agentMap: {} as Record<string, string>,
+  allAgents: [] as { id: string; name: string }[],
+  costByAgent: [] as { name: string; input_tokens: number; output_tokens: number; total_tokens: number; runs: number }[],
+}
+
 export async function getAllStatsAction() {
-  const { supabase, entityId } = await requireAuthWithEntity()
+  const authResult = await requireAuthWithEntity().catch(() => null)
+  if (!authResult) return EMPTY_STATS
+  const { supabase, entityId } = authResult
 
   const [counts, tokens, tools, dur, rate, chans, agents, costData] = await Promise.all([
     supabase.rpc('get_job_counts', { p_entity_id: entityId }),
@@ -1177,12 +1208,14 @@ export async function deactivateTelegramAction(
 // ─── Budget Actions ──────────────────────────────────────────────────────────
 
 export async function getBudgetsAction() {
-  const { supabase, entityId } = await requireAuthWithEntity()
+  const authResult = await requireAuthWithEntity().catch(() => null)
+  if (!authResult) return []
+  const { supabase, entityId } = authResult
   const { data, error } = await supabase
     .from('agent_budgets')
     .select('*, agents(name, slug)')
     .eq('entity_id', entityId)
-  if (error) { console.error('[actions]', error.message); throw new Error('Failed to load data') }
+  if (error) { console.error('[actions]', error.message); return [] }
   return data || []
 }
 
@@ -1220,7 +1253,9 @@ export async function deleteBudgetAction(id: string): Promise<ActionResult> {
 }
 
 export async function getAgentUsageAction(agentId: string) {
-  const { supabase, entityId } = await requireAuthWithEntity()
+  const authResult = await requireAuthWithEntity().catch(() => null)
+  if (!authResult) return { daily: 0, monthly: 0 }
+  const { supabase, entityId } = authResult
   const [daily, monthly] = await Promise.all([
     supabase.rpc('get_daily_token_usage', { p_agent_id: agentId, p_entity_id: entityId }),
     supabase.rpc('get_monthly_token_usage', { p_agent_id: agentId, p_entity_id: entityId }),
@@ -1914,6 +1949,16 @@ export async function deleteLlmKeyAction(
   } catch (e) {
     return dbError(e)
   }
+}
+
+// ─── Operator Config ─────────────────────────────────────────────────────────
+
+// Returns provider IDs that the SaaS operator has configured at the platform level.
+// Operator sets OPERATOR_PROVIDERS=anthropic,openai (comma-separated) in env vars.
+// These models are available to users without their own key, but billed by the operator.
+export async function getOperatorProvidersAction(): Promise<string[]> {
+  const raw = process.env.OPERATOR_PROVIDERS ?? ''
+  return raw.split(',').map(s => s.trim()).filter(Boolean)
 }
 
 // ─── Billing Actions ─────────────────────────────────────────────────────────

@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { getAgentsAction, createAgentAction, updateAgentAction, deleteAgentAction, setDefaultAgentAction, activateTelegramAction, deactivateTelegramAction } from '@/lib/actions'
+import { useState, useRef, useEffect } from 'react'
+import { getAgentsAction, createAgentAction, updateAgentAction, deleteAgentAction, setDefaultAgentAction, activateTelegramAction, deactivateTelegramAction, getLlmKeysAction, getOperatorProvidersAction } from '@/lib/actions'
 import { timeAgo } from '@/lib/utils'
 import { toast } from 'sonner'
 import { useData } from '@/hooks/useData'
@@ -30,11 +30,152 @@ function modelDisplayLabel(value: string): string {
   return `${provider!.name} — ${model.label}`
 }
 
+const ROLES = [
+  { value: 'agent', label: 'Agent', description: 'Executes tasks independently', color: 'text-neutral-300' },
+  { value: 'orchestrator', label: 'Orchestrator', description: 'Delegates to other agents', color: 'text-blue-300' },
+]
+
+function RolePicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  const selected = ROLES.find(r => r.value === value) ?? ROLES[0]
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between gap-2 bg-neutral-800/50 border border-neutral-800 rounded-lg pl-3 pr-2.5 py-2.5 text-xs hover:border-neutral-700 focus:border-neutral-600 focus:outline-none transition-colors"
+      >
+        <span className={`font-medium ${selected.color}`}>{selected.label}</span>
+        <svg className={`w-3.5 h-3.5 text-neutral-500 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="absolute z-50 top-full left-0 mt-1 w-56 bg-neutral-950 border border-neutral-800 rounded-xl shadow-2xl overflow-hidden">
+          {ROLES.map(role => (
+            <button
+              key={role.value}
+              type="button"
+              onClick={() => { onChange(role.value); setOpen(false) }}
+              className={`w-full text-left flex items-center gap-3 px-3 py-2.5 transition-colors ${role.value === value ? 'bg-neutral-800' : 'hover:bg-neutral-800/60'}`}
+            >
+              <div className="flex-1 min-w-0">
+                <p className={`text-xs font-medium ${role.color}`}>{role.label}</p>
+                <p className="text-[10px] text-neutral-600 mt-0.5">{role.description}</p>
+              </div>
+              {role.value === value && (
+                <svg className="w-3.5 h-3.5 text-emerald-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ModelPicker({ value, onChange, configuredProviders, operatorProviders }: {
+  value: string
+  onChange: (v: string) => void
+  configuredProviders: Set<string>
+  operatorProviders: Set<string>
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  const selectedProvider = getProviderForModel(value)
+  const selectedModel = selectedProvider?.models.find(m => m.value === value)
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between gap-2 bg-neutral-800/50 border border-neutral-800 rounded-lg pl-3 pr-2.5 py-2.5 text-xs text-neutral-200 hover:border-neutral-700 focus:border-neutral-600 focus:outline-none transition-colors"
+      >
+        <span className="truncate">
+          {selectedProvider && selectedModel
+            ? <><span style={{ color: selectedProvider.color }} className="font-medium">{selectedProvider.name}</span> — {selectedModel.label}</>
+            : <span className="text-neutral-500">Select model</span>}
+        </span>
+        <svg className={`w-3.5 h-3.5 text-neutral-500 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="absolute z-50 top-full left-0 mt-1 w-72 bg-neutral-950 border border-neutral-800 rounded-xl shadow-2xl overflow-hidden" style={{ maxHeight: 360, overflowY: 'auto' }}>
+          {LLM_PROVIDERS.map(provider => {
+            const hasOwnKey = configuredProviders.has(provider.id)
+            const hasOperatorKey = operatorProviders.has(provider.id)
+            const available = hasOwnKey || hasOperatorKey
+            return (
+              <div key={provider.id}>
+                <div className="flex items-center gap-2 px-3 pt-3 pb-1.5 sticky top-0 bg-neutral-950 z-10">
+                  <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: provider.color }}>{provider.name}</span>
+                  {hasOwnKey ? (
+                    <span className="text-[10px] text-emerald-400 bg-emerald-950/60 border border-emerald-900/40 px-1.5 py-0.5 rounded-full leading-none">your key</span>
+                  ) : hasOperatorKey ? (
+                    <span className="text-[10px] text-amber-400 bg-amber-950/60 border border-amber-900/40 px-1.5 py-0.5 rounded-full leading-none" title="Available via SaaS — usage is billed to you">via SaaS · billed</span>
+                  ) : (
+                    <span className="text-[10px] text-neutral-600">no key — <a href="/settings" className="underline hover:text-neutral-400 transition-colors">add in Settings</a></span>
+                  )}
+                </div>
+                {provider.models.map(model => (
+                  <button
+                    key={model.value}
+                    type="button"
+                    onClick={() => { onChange(model.value); setOpen(false) }}
+                    className={`w-full text-left flex items-center gap-2.5 px-3 py-2 transition-colors ${model.value === value ? 'bg-neutral-800' : 'hover:bg-neutral-800/60'}`}
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${hasOwnKey ? 'bg-emerald-400' : hasOperatorKey ? 'bg-amber-400' : 'bg-neutral-700'}`} />
+                    <span className={`text-xs flex-1 ${model.value === value ? 'text-white font-medium' : available ? 'text-neutral-200' : 'text-neutral-500'}`}>{model.label}</span>
+                    {model.description && <span className="text-[10px] text-neutral-600 shrink-0">{model.description}</span>}
+                  </button>
+                ))}
+                <div className="h-px bg-neutral-800/60 mx-3 my-1" />
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function AgentsPage() {
   const { activeEntity } = useAuth()
   const eid = activeEntity?.id
 
   const { data: agentsRaw = [], isLoading: loading, mutate } = useData(['agents', eid], getAgentsAction)
+  const { data: llmKeysRaw = [] } = useData(['llm-keys', eid], getLlmKeysAction)
+  const { data: operatorProvidersRaw = [] } = useData(['operator-providers'], getOperatorProvidersAction)
+  const configuredProviders = new Set(
+    (llmKeysRaw as { provider: string; is_active: boolean }[]).filter(k => k.is_active).map(k => k.provider)
+  )
+  const operatorProviders = new Set(operatorProvidersRaw as string[])
   const agents = agentsRaw as Agent[]
   const [editingId, setEditingId] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
@@ -321,30 +462,11 @@ export default function AgentsPage() {
             </div>
             <div>
               <label className="block text-xs text-neutral-400 font-semibold uppercase tracking-wider mb-1.5">Model</label>
-              <select
-                value={form.model} onChange={(e) => updateForm('model', e.target.value)}
-                className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-3 py-2 text-xs text-neutral-300 focus:border-neutral-600 focus:outline-none transition-colors"
-              >
-                {LLM_PROVIDERS.map((provider) => (
-                  <optgroup key={provider.id} label={provider.name}>
-                    {provider.models.map((m) => (
-                      <option key={m.value} value={m.value}>
-                        {m.label}{m.description ? ` — ${m.description}` : ''}
-                      </option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
+              <ModelPicker value={form.model} onChange={v => updateForm('model', v)} configuredProviders={configuredProviders} operatorProviders={operatorProviders} />
             </div>
             <div>
               <label className="block text-xs text-neutral-400 font-semibold uppercase tracking-wider mb-1.5">Role</label>
-              <select
-                value={form.role} onChange={(e) => updateForm('role', e.target.value)}
-                className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-3 py-2 text-xs text-neutral-300 focus:border-neutral-600 focus:outline-none transition-colors"
-              >
-                <option value="agent">Agent</option>
-                <option value="orchestrator">Orchestrator</option>
-              </select>
+              <RolePicker value={form.role} onChange={v => updateForm('role', v)} />
             </div>
           </div>
 

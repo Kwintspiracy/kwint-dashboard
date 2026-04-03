@@ -15,12 +15,14 @@ export async function GET(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return new Response('Unauthorized', { status: 401 })
 
-  // Verify job belongs to user's active entity
-  const entityId = request.cookies.get('kwint_active_entity')?.value
-  if (!entityId) return new Response('No workspace', { status: 400 })
+  // Verify job belongs to this user — load their entity IDs and check ownership directly
+  const { data: userEntities } = await supabase
+    .from('entities').select('id').eq('user_id', user.id)
+  const entityIds = (userEntities ?? []).map((e: { id: string }) => e.id)
+  if (entityIds.length === 0) return new Response('No workspace', { status: 400 })
 
   const { data: jobCheck } = await supabase
-    .from('agent_jobs').select('id').eq('id', jobId).eq('entity_id', entityId).single()
+    .from('agent_jobs').select('id').eq('id', jobId).in('entity_id', entityIds).single()
   if (!jobCheck) return new Response('Not found', { status: 404 })
 
   // Use a service-role client for polling inside the stream (runs after response boundary)

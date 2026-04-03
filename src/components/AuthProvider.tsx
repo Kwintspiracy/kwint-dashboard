@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase'
-import { switchEntityAction } from '@/lib/actions'
+import { switchEntityAction, clearSessionCookiesAction } from '@/lib/actions'
 import type { User } from '@supabase/supabase-js'
 
 export type Entity = {
@@ -96,7 +96,16 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   useEffect(() => {
     const supabase = createClient()
 
-    supabase.auth.getUser().then(async ({ data: { user } }) => {
+    supabase.auth.getUser().then(async ({ data: { user }, error }) => {
+      if (error) {
+        const msg = error.message.toLowerCase()
+        if (msg.includes('refresh token') || msg.includes('invalid token')) {
+          // Stale cookie — clear local session and redirect to login
+          await supabase.auth.signOut({ scope: 'local' })
+          window.location.href = '/login'
+          return
+        }
+      }
       setUser(user)
       if (user) {
         const list = await fetchEntities(user.id)
@@ -132,6 +141,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   async function signOut() {
     const supabase = createClient()
     await supabase.auth.signOut()
+    await clearSessionCookiesAction()
     localStorage.removeItem(ENTITY_KEY)
     window.location.href = '/login'
   }

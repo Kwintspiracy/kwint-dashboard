@@ -152,6 +152,11 @@ export default function ConnectorsPage() {
 
   // ── Derived state ────────────────────────────────────
 
+  // Map connector slug → template for icon lookup
+  const templateByConnectorSlug = Object.fromEntries(
+    SKILL_TEMPLATES.flatMap(t => t.connector?.slug ? [[t.connector.slug, t]] : [])
+  )
+
   const installedSlugs = new Set(connectors.map(c => c.slug))
   const isFormOpen = editingId !== null || showAdd
   const categories = [ALL_CATEGORIES, ...Object.keys(SKILL_CATEGORIES)]
@@ -211,11 +216,26 @@ export default function ConnectorsPage() {
                 }`}>
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3">
-                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${c.active ? 'bg-emerald-900/30' : 'bg-neutral-800/50'}`}>
-                      <svg className={`w-5 h-5 ${c.active ? 'text-emerald-400' : 'text-neutral-600'}`} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m9.86-2.54a4.5 4.5 0 00-6.364-6.364L4.5 8.25l4.5 4.5" />
-                      </svg>
-                    </div>
+                    {(() => {
+                      const tpl = templateByConnectorSlug[c.slug]
+                      if (tpl?.brandIcon) return (
+                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0${tpl.darkBrandIcon ? ' bg-white/10' : ''}`}>
+                          <img src={tpl.brandIcon} alt={c.name} className="w-10 h-10" />
+                        </div>
+                      )
+                      if (tpl?.icon) return (
+                        <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 bg-neutral-800/50">
+                          <svg viewBox="0 0 24 24" className="w-6 h-6" fill={tpl.color ?? '#6b7280'}><path d={tpl.icon} /></svg>
+                        </div>
+                      )
+                      return (
+                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${c.active ? 'bg-emerald-900/30' : 'bg-neutral-800/50'}`}>
+                          <svg className={`w-5 h-5 ${c.active ? 'text-emerald-400' : 'text-neutral-600'}`} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m9.86-2.54a4.5 4.5 0 00-6.364-6.364L4.5 8.25l4.5 4.5" />
+                          </svg>
+                        </div>
+                      )
+                    })()}
                     <div>
                       <p className="text-sm font-semibold text-white">{c.name}</p>
                       <p className="text-xs text-neutral-500 font-mono">{c.slug}</p>
