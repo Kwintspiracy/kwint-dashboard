@@ -58,8 +58,8 @@ export default function LandingPage() {
             managed visually.
           </h1>
           <p className="mt-6 sm:mt-8 text-base sm:text-lg md:text-xl text-neutral-400 leading-relaxed font-mono">
-            Create agents with personalities. Connect 59+ APIs.
-            Watch them learn from every task. Bring your own API key. Ship from your browser.
+            Create agents with personalities. Connect 113+ APIs.
+            Orchestrate multi-step workflows. Bring your own API key. Ship from your browser.
           </p>
           <div className="mt-8 sm:mt-10 flex flex-col sm:flex-row gap-3">
             <Link href="/login" className="inline-flex items-center justify-center px-5 py-2.5 text-xs font-mono font-bold text-black bg-emerald-500 rounded hover:bg-emerald-400 transition-colors">
@@ -79,16 +79,17 @@ export default function LandingPage() {
               <span className="ml-2 text-[10px] font-mono text-neutral-500">kwint-agents — bash</span>
             </div>
             <div className="p-4 sm:p-5 font-mono text-[10px] sm:text-xs leading-relaxed">
-              <Line prompt>npx create-kwint-agent researcher</Line>
-              <Line ok>Agent &quot;researcher&quot; created with capabilities: [web-search, data-analysis]</Line>
-              <Line prompt>kwint connect google-sheets stripe github</Line>
-              <Line ok>3 connectors installed → 3 skills generated</Line>
-              <Line prompt>kwint deploy --telegram</Line>
-              <Line ok>Webhook registered. Bot @kwint_researcher_bot is live.</Line>
+              <Line prompt>kwint agent create --template researcher</Line>
+              <Line ok>Agent &quot;researcher&quot; created · capabilities: [web-search, data-analysis]</Line>
+              <Line prompt>kwint connect google-sheets stripe github slack</Line>
+              <Line ok>4 connectors installed → 4 skills generated with full API docs</Line>
+              <Line prompt>kwint orchestrate &quot;research competitors, log to sheets, notify slack&quot;</Line>
+              <Line ok>Orchestrator delegated → researcher + data-analyst running in parallel</Line>
               <Line prompt>kwint status</Line>
-              <Line dim>researcher  ●  active   12 memories   47 jobs   $0.34 spent</Line>
-              <Line dim>manager     ●  active    3 memories    8 jobs   $0.12 spent</Line>
-              <Line ok>2 agents running in workspace &quot;kwint-co&quot;</Line>
+              <Line dim>researcher     ●  active   18 memories   94 jobs   $0.41 spent</Line>
+              <Line dim>data-analyst   ●  active    7 memories   31 jobs   $0.09 spent</Line>
+              <Line dim>orchestrator   ●  active    4 memories   12 jobs   $0.03 spent</Line>
+              <Line ok>3 agents running · workspace &quot;acme-corp&quot; · all systems nominal</Line>
             </div>
           </div>
         </div>
@@ -98,10 +99,10 @@ export default function LandingPage() {
       <section className="border-y border-neutral-900 px-4 sm:px-6">
         <div className="max-w-5xl mx-auto py-8 sm:py-10 grid grid-cols-2 md:grid-cols-4 gap-6 sm:gap-8">
           {[
-            { value: '59', unit: 'connectors', detail: 'one-click install' },
-            { value: '11', unit: 'LLM providers', detail: 'BYOK supported' },
-            { value: '10', unit: 'tools', detail: 'built-in' },
-            { value: '<2s', unit: 'load time', detail: 'SWR cached' },
+            { value: '113', unit: 'integrations', detail: 'one-click install' },
+            { value: '11', unit: 'LLM providers', detail: 'BYOK + operator key' },
+            { value: '8', unit: 'agent templates', detail: 'ready to customize' },
+            { value: '14', unit: 'categories', detail: 'dev · CRM · finance · HR…' },
           ].map(s => (
             <div key={s.unit}>
               <div className="flex items-baseline gap-1">
@@ -120,19 +121,18 @@ export default function LandingPage() {
           <SectionHead tag="01" title="Capabilities" />
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-px bg-neutral-900/50 border border-neutral-800 rounded-lg overflow-hidden mt-8 sm:mt-12">
             {[
-              { title: 'Agent CRUD', desc: 'Personalities, model selection, capability tags, role assignment. Templates or custom.', k: 'core' },
-              { title: 'Orchestration', desc: 'delegate_task with smart routing. Parallel execution. Capability-based auto-matching.', k: 'core' },
-              { title: 'Vector Memory', desc: 'pgvector semantic search. Auto-embeddings. Meaning-based recall, not keywords.', k: 'intelligence' },
-              { title: 'Self-Improving', desc: 'Post-task reflection via Haiku. Auto-saves learned_rule. Gets smarter per task.', k: 'intelligence' },
-              { title: 'Marketplace', desc: '59 connectors. Google, Stripe, GitHub, Slack, Discord, Figma... One-click install.', k: 'integrations' },
-              { title: 'Approval Gates', desc: 'Per-tool human review. Auto-approve rules. Block rules. Push notifications.', k: 'safety' },
-              { title: 'Cost Budgets', desc: 'Daily/monthly token limits. Auto-pause. Visual usage bars. Alert thresholds.', k: 'control' },
-              { title: 'Scheduling', desc: 'Visual cron builder. Webhook triggers. Heartbeat objectives. Event-driven.', k: 'automation' },
-              { title: 'Skill Versions', desc: 'Every edit tracked. Rollback anytime. Inline test before deploy.', k: 'dev' },
-              { title: 'Observability', desc: 'Trace trees. Per-agent costs. SSE streaming. Real-time job status.', k: 'monitoring' },
-              { title: 'Workspaces', desc: 'Entity isolation. Multi-workspace. Onboarding flow. Context switching.', k: 'multi-tenant' },
-              { title: 'Security', desc: 'Auth + RLS. Fail-closed. hmac secrets. Redacted logs. Cookie hardening.', k: 'security' },
-              { title: 'BYOK', desc: '11 providers: Anthropic, OpenAI, Gemini, Mistral, Groq, DeepSeek... Add your own key → lower costs. Operator key as fallback.', k: 'control' },
+              { title: 'Agent Builder', desc: '8 ready-made templates — researcher, analyst, support, devops… Or build from scratch with a custom system prompt.', k: 'core' },
+              { title: 'Orchestration', desc: 'delegate_task routes work to specialist agents by capability. Parallel execution. Auto-matching. Multi-step pipelines.', k: 'core' },
+              { title: 'Vector Memory', desc: 'pgvector semantic search. Auto-embeddings on every save. Meaning-based recall across sessions — not keyword lookup.', k: 'intelligence' },
+              { title: 'Self-Improving', desc: 'Post-task reflection via fast model. Auto-saves learned_rule to memory. Agents get measurably smarter per task.', k: 'intelligence' },
+              { title: 'Marketplace', desc: '113 connectors across 14 categories — Slack, GitHub, Stripe, Notion, Salesforce, Jira, HubSpot, Figma and more.', k: 'integrations' },
+              { title: 'Approval Gates', desc: 'Per-tool human-in-the-loop. Auto-approve rules. Block rules. Real-time push notifications before sensitive actions.', k: 'safety' },
+              { title: 'Cost Budgets', desc: 'Daily/monthly token limits per agent. Auto-pause on overage. Visual usage bars. Alert thresholds. Billing attribution.', k: 'control' },
+              { title: 'Scheduling', desc: 'Visual cron builder. Webhook triggers. Heartbeat objectives. Telegram, Slack, Discord, API — event-driven execution.', k: 'automation' },
+              { title: 'Skill Versions', desc: 'Every edit tracked. One-click rollback. Inline test before deploy. Skills linked to connectors with live API docs.', k: 'dev' },
+              { title: 'Observability', desc: 'Full trace trees. Per-agent cost breakdown. SSE streaming. Real-time job status. Tool-call timelines.', k: 'monitoring' },
+              { title: 'Workspaces', desc: 'Entity isolation with full RLS. Multi-workspace. Onboarding flow. Instant context switching in the sidebar.', k: 'multi-tenant' },
+              { title: 'BYOK', desc: '11 providers: Anthropic, OpenAI, Gemini, Mistral, Groq, DeepSeek, Cohere, Together, OpenRouter… Use your own key or the operator fallback.', k: 'control' },
             ].map(f => (
               <div key={f.title} className="bg-[#0d0d0d] p-4 sm:p-5 hover:bg-[#131313] transition-colors group">
                 <div className="flex items-center justify-between mb-2">
@@ -146,17 +146,47 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* ── Templates ──────────────────────────────────────── */}
+      <section className="py-16 sm:py-24 px-4 sm:px-6 border-t border-neutral-900">
+        <div className="max-w-5xl mx-auto">
+          <SectionHead tag="02" title="Agent templates" />
+          <p className="text-xs font-mono text-neutral-500 mt-3">8 pre-built personalities. Customize before saving.</p>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-8 sm:mt-10">
+            {[
+              { icon: '🔍', name: 'Research Assistant', desc: 'Web search · summarise · cite sources', role: 'agent' },
+              { icon: '💻', name: 'Code Reviewer', desc: 'Review PRs · suggest fixes · security scan', role: 'agent' },
+              { icon: '📊', name: 'Data Analyst', desc: 'Query DBs · chart trends · export reports', role: 'agent' },
+              { icon: '🎧', name: 'Customer Support', desc: 'Ticket triage · FAQ · escalation logic', role: 'agent' },
+              { icon: '✍️', name: 'Content Writer', desc: 'Draft · edit · SEO · multi-format', role: 'agent' },
+              { icon: '📋', name: 'Project Manager', desc: 'Track tasks · update boards · send digests', role: 'agent' },
+              { icon: '📣', name: 'Social Media', desc: 'Schedule posts · monitor mentions · engage', role: 'agent' },
+              { icon: '🎼', name: 'Orchestrator', desc: 'Delegates to specialists · parallel pipelines', role: 'orchestrator' },
+            ].map(t => (
+              <div key={t.name} className="bg-[#0d0d0d] border border-neutral-800 rounded-lg p-4 hover:border-neutral-700 transition-colors">
+                <div className="flex items-start justify-between mb-2">
+                  <span className="text-xl leading-none">{t.icon}</span>
+                  <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded-full ${t.role === 'orchestrator' ? 'bg-blue-950/60 text-blue-400 border border-blue-900/40' : 'bg-neutral-800 text-neutral-500 border border-neutral-700'}`}>{t.role}</span>
+                </div>
+                <p className="text-xs font-mono font-bold text-white mt-2">{t.name}</p>
+                <p className="text-[10px] font-mono text-neutral-500 mt-1 leading-relaxed">{t.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* ── How it works ───────────────────────────────────── */}
       <section id="how-it-works" className="py-16 sm:py-24 px-4 sm:px-6 border-t border-neutral-900">
         <div className="max-w-5xl mx-auto">
-          <SectionHead tag="02" title="Setup" />
+          <SectionHead tag="03" title="Setup" />
           <div className="mt-8 sm:mt-12 space-y-6 sm:space-y-8">
             {[
-              { cmd: 'create workspace', out: 'Sign up → name your entity → existing data migrates automatically.' },
-              { cmd: 'create agent --template researcher', out: '8 templates ready. Or write a personality from scratch. Capabilities auto-tag.' },
-              { cmd: 'connect stripe google-sheets github', out: 'Marketplace → click Install → agent gets API docs as a loadable skill.' },
-              { cmd: 'deploy --channel telegram', out: 'Dashboard → agent → Set up bot → paste token → webhook registered. Live.' },
-              { cmd: 'watch', out: 'Agent completes tasks → reflects → saves rules → semantic memory grows → smarter next time.' },
+              { cmd: 'workspace create', out: 'Sign up → name your workspace → onboarding guides you through the first agent.' },
+              { cmd: 'agent create --template researcher', out: '8 templates ready. Or write a personality from scratch. Capability tags enable smart auto-routing.' },
+              { cmd: 'connect stripe google-sheets notion slack', out: 'Marketplace → click Install → connector + skill created automatically. Agent gets full API docs.' },
+              { cmd: 'orchestrate --parallel', out: 'Orchestrator delegates to specialist agents by capability. Results merged and returned to you.' },
+              { cmd: 'deploy --channel telegram', out: 'Paste bot token → webhook registered instantly. Also available: Slack, Discord, webhook, REST API.' },
+              { cmd: 'watch --reflect', out: 'Agent completes tasks → reflects → saves learned_rule → semantic memory grows → smarter next time.' },
             ].map((s, i) => (
               <div key={i} className="border-l-2 border-neutral-800 pl-4 sm:pl-6">
                 <div className="font-mono text-xs">
@@ -173,26 +203,26 @@ export default function LandingPage() {
       {/* ── Architecture ───────────────────────────────────── */}
       <section id="architecture" className="py-16 sm:py-24 px-4 sm:px-6 border-t border-neutral-900">
         <div className="max-w-5xl mx-auto">
-          <SectionHead tag="03" title="Architecture" />
+          <SectionHead tag="04" title="Architecture" />
 
           <div className="grid md:grid-cols-2 gap-6 sm:gap-8 mt-8 sm:mt-12">
             <StackTable title="dashboard" rows={[
               ['next.js', '16 + react 19 + typescript'],
-              ['style', 'tailwind 4, dark/light'],
+              ['style', 'tailwind 4 · dark/light theme'],
               ['data', 'server actions + swr'],
-              ['auth', 'supabase (email + pw)'],
-              ['realtime', 'supabase channels + sse'],
-              ['test', 'vitest 58 + playwright 3'],
-              ['deploy', 'vercel | docker'],
+              ['auth', 'supabase · email + google oauth'],
+              ['realtime', 'sse streaming · 2s poll'],
+              ['test', 'vitest + playwright'],
+              ['deploy', 'vercel · docker · self-hosted'],
             ]} />
             <StackTable title="backend" rows={[
-              ['runtime', 'python 3.12 serverless'],
-              ['llm', '11 providers · Anthropic, OpenAI, Gemini, Mistral, Groq...'],
+              ['runtime', 'python 3.12 · serverless / worker'],
+              ['llm', '11 providers · BYOK + operator key'],
               ['db', 'postgresql + pgvector'],
-              ['memory', 'embeddings + semantic search'],
-              ['tools', '10 built-in + 59 skills'],
-              ['orchestration', 'delegate + classify + parallel'],
-              ['channels', 'telegram, api, webhooks'],
+              ['memory', 'embeddings · semantic search · reflect'],
+              ['tools', '10 built-in · 113 installable skills'],
+              ['orchestration', 'delegate · classify · parallel'],
+              ['channels', 'telegram · slack · discord · webhook · api'],
             ]} />
           </div>
 
@@ -203,13 +233,14 @@ export default function LandingPage() {
               <span className="w-2.5 h-2.5 rounded-full bg-[#28c840]" />
               <span className="ml-2 text-[10px] font-mono text-neutral-500">data-flow.txt</span>
             </div>
-            <pre className="p-4 sm:p-5 text-[10px] sm:text-xs font-mono text-neutral-400 leading-relaxed overflow-x-auto whitespace-pre-wrap sm:whitespace-pre">{`user ─→ backend ─→ claude api
-                     ├─→ tools (search, http, memory, delegate...)
-                     └─→ supabase (jobs, memories, runs)
-         ←── result delivered
-              └─→ reflection ─→ learned_rule saved
-                                └─→ pgvector embedding
-                                     └─→ available next task`}</pre>
+            <pre className="p-4 sm:p-5 text-[10px] sm:text-xs font-mono text-neutral-400 leading-relaxed overflow-x-auto whitespace-pre-wrap sm:whitespace-pre">{`user ──→ backend ──→ llm (anthropic / openai / gemini…)
+                      ├──→ tools (search · http · memory · delegate…)
+                      ├──→ skills (113 api connectors, loaded on demand)
+                      └──→ supabase (jobs · memories · runs · traces)
+          ←── result delivered via sse stream
+               └──→ reflection ──→ learned_rule saved to memory
+                                    └──→ pgvector embedding
+                                         └──→ recalled next task`}</pre>
           </div>
         </div>
       </section>
@@ -217,12 +248,12 @@ export default function LandingPage() {
       {/* ── Docs ───────────────────────────────────────────── */}
       <section id="docs" className="py-16 sm:py-24 px-4 sm:px-6 border-t border-neutral-900">
         <div className="max-w-5xl mx-auto">
-          <SectionHead tag="04" title="Quick start" />
+          <SectionHead tag="05" title="Quick start" />
 
           <div className="mt-8 sm:mt-12 border border-neutral-800 rounded-lg p-4 sm:p-5 bg-[#0d0d0d]">
             <p className="text-xs font-mono text-neutral-400 mb-3">prerequisites</p>
             <div className="font-mono text-[11px] sm:text-xs text-neutral-400 space-y-1">
-              <p>node 20+ &middot; python 3.12+ &middot; <a href="https://supabase.com" className="text-emerald-500 hover:text-emerald-400 underline underline-offset-2" target="_blank" rel="noopener">supabase</a> project &middot; <a href="https://console.anthropic.com" className="text-emerald-500 hover:text-emerald-400 underline underline-offset-2" target="_blank" rel="noopener">anthropic key</a></p>
+              <p>node 20+ &middot; python 3.12+ &middot; <a href="https://supabase.com" className="text-emerald-500 hover:text-emerald-400 underline underline-offset-2" target="_blank" rel="noopener">supabase</a> project &middot; an LLM API key (Anthropic, OpenAI, or any supported provider)</p>
             </div>
           </div>
 
@@ -237,15 +268,15 @@ export default function LandingPage() {
 
           <div className="border border-neutral-800 rounded-b-lg bg-[#0d0d0d] p-4 sm:p-5 space-y-4">
             {activeTab === 'vercel' && <>
-              <CodeBlock title="clone">{`git clone https://github.com/Kwintspiracy/kwint-dashboard.git
-git clone https://github.com/Kwintspiracy/Kwint-Agent-One.git`}</CodeBlock>
+              <CodeBlock title="clone">{`git clone https://github.com/your-org/kwint-dashboard.git
+git clone https://github.com/your-org/kwint-agent-one.git`}</CodeBlock>
               <CodeBlock title="deploy dashboard">{`cd kwint-dashboard && npm i && npx vercel --prod`}</CodeBlock>
-              <CodeBlock title="deploy backend">{`cd Kwint-Agent-One && npx vercel --prod`}</CodeBlock>
+              <CodeBlock title="deploy backend">{`cd kwint-agent-one && npx vercel --prod`}</CodeBlock>
               <div className="font-mono text-[10px] sm:text-[11px] text-neutral-500 space-y-1 mt-3">
                 <p className="text-neutral-400 mb-1">env vars (set in vercel dashboard):</p>
                 <p>NEXT_PUBLIC_SUPABASE_URL &middot; NEXT_PUBLIC_SUPABASE_ANON_KEY</p>
                 <p>NEXT_PUBLIC_AGENT_API_URL &middot; ANTHROPIC_API_KEY</p>
-                <p>SUPABASE_SERVICE_ROLE_KEY &middot; API_SECRET_KEY &middot; WORKER_SECRET</p>
+                <p>SUPABASE_SERVICE_ROLE_KEY &middot; API_SECRET_KEY &middot; OPERATOR_PROVIDERS</p>
               </div>
             </>}
             {activeTab === 'docker' && <>
@@ -254,22 +285,20 @@ docker build -t kwint-dashboard \\
   --build-arg NEXT_PUBLIC_SUPABASE_URL=... \\
   --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY=... .
 docker run -p 3000:3000 kwint-dashboard`}</CodeBlock>
-              <CodeBlock title="backend">{`cd Kwint-Agent-One
+              <CodeBlock title="backend">{`cd kwint-agent-one
 docker build -t kwint-agent .
 docker run -p 3001:3001 \\
   -e ANTHROPIC_API_KEY=... \\
   -e SUPABASE_URL=... \\
   -e SUPABASE_SERVICE_ROLE_KEY=... \\
   -e API_SECRET_KEY=... \\
-  -e WORKER_SECRET=... \\
-  -e APP_URL=http://localhost:3001 \\
   kwint-agent`}</CodeBlock>
-              <CodeBlock title="or use compose">{`cd Kwint-Agent-One && docker compose up`}</CodeBlock>
+              <CodeBlock title="or use compose">{`cd kwint-agent-one && docker compose up`}</CodeBlock>
             </>}
             {activeTab === 'local' && <>
               <CodeBlock title="dashboard">{`cd kwint-dashboard && npm i && npm run dev`}</CodeBlock>
-              <CodeBlock title="backend">{`cd Kwint-Agent-One && pip install -r requirements.txt && npx vercel dev`}</CodeBlock>
-              <CodeBlock title="tests">{`npm test && npm run e2e && pytest tests/`}</CodeBlock>
+              <CodeBlock title="backend">{`cd kwint-agent-one && pip install -r requirements.txt && python api/server.py`}</CodeBlock>
+              <CodeBlock title="tests">{`npm test && npm run e2e`}</CodeBlock>
             </>}
           </div>
         </div>
@@ -280,9 +309,10 @@ docker run -p 3001:3001 \\
         <div className="max-w-xl mx-auto text-center">
           <p className="font-mono text-xs text-neutral-500 mb-4">ready?</p>
           <h2 className="text-2xl sm:text-3xl font-bold text-white">Deploy your first agent.</h2>
+          <p className="mt-3 text-xs font-mono text-neutral-500">113 integrations · 11 LLM providers · self-improving memory</p>
           <div className="mt-6 sm:mt-8">
             <Link href="/login" className="inline-flex px-6 py-2.5 text-xs font-mono font-bold text-black bg-emerald-500 rounded hover:bg-emerald-400 transition-colors">
-              sign in →
+              get started →
             </Link>
           </div>
         </div>
@@ -293,8 +323,8 @@ docker run -p 3001:3001 \\
         <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
           <span className="text-[10px] font-mono text-neutral-500">kwint-agents &middot; MIT &middot; 2026</span>
           <div className="flex items-center gap-6 text-[10px] font-mono text-neutral-500">
-            <a href="https://github.com/Kwintspiracy/kwint-dashboard" className="hover:text-emerald-400 transition-colors" target="_blank" rel="noopener">github</a>
             <a href="#docs" className="hover:text-emerald-400 transition-colors">docs</a>
+            <a href="#features" className="hover:text-emerald-400 transition-colors">features</a>
             <Link href="/login" className="hover:text-emerald-400 transition-colors">sign in</Link>
           </div>
         </div>
