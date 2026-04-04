@@ -1115,7 +1115,7 @@ export async function retryJobAction(task: string): Promise<ActionResult<unknown
     if (task.length > 10000) return fail('Task too long')
     await requireAuth()
     const agentUrl = process.env.NEXT_PUBLIC_AGENT_API_URL
-    const apiKey = process.env.WORKER_SECRET || process.env.API_SECRET_KEY
+    const apiKey = process.env.NEXT_PRIVATE_WORKER || process.env.WORKER_SECRET || process.env.API_SECRET_KEY
 
     if (!agentUrl) return fail('Agent API not configured')
 
@@ -1147,13 +1147,10 @@ export async function activateTelegramAction(
   try {
     await requireAuth()
     const agentUrl = process.env.NEXT_PUBLIC_AGENT_API_URL
-    const apiKey = process.env.WORKER_SECRET || process.env.API_SECRET_KEY
+    const apiKey = process.env.NEXT_PRIVATE_WORKER || process.env.NEXT_PRIVATE_WORKER || process.env.WORKER_SECRET || process.env.API_SECRET_KEY
 
     if (!agentUrl) return fail('NEXT_PUBLIC_AGENT_API_URL is not configured')
-    if (!apiKey) {
-      const envKeys = Object.keys(process.env).filter(k => k.includes('WORKER') || k.includes('SECRET') || k.includes('API_')).join(', ')
-      return fail(`WORKER_SECRET not set. Available keys matching pattern: [${envKeys}]`)
-    }
+    if (!apiKey) return fail('NEXT_PRIVATE_WORKER not set on dashboard')
 
     const res = await fetch(`${agentUrl}/api/telegram_setup`, {
       method: 'POST',
@@ -1184,7 +1181,7 @@ export async function deactivateTelegramAction(
   try {
     await requireAuth()
     const agentUrl = process.env.NEXT_PUBLIC_AGENT_API_URL
-    const apiKey = process.env.WORKER_SECRET || process.env.API_SECRET_KEY
+    const apiKey = process.env.NEXT_PRIVATE_WORKER || process.env.WORKER_SECRET || process.env.API_SECRET_KEY
 
     if (!agentUrl) return fail('NEXT_PUBLIC_AGENT_API_URL is not configured')
 
@@ -1322,7 +1319,7 @@ export async function resolveApprovalAction(
 
   try {
     const agentUrl = process.env.NEXT_PUBLIC_AGENT_API_URL
-    const apiKey = process.env.WORKER_SECRET || process.env.API_SECRET_KEY
+    const apiKey = process.env.NEXT_PRIVATE_WORKER || process.env.WORKER_SECRET || process.env.API_SECRET_KEY
 
     if (!agentUrl) return fail('NEXT_PUBLIC_AGENT_API_URL is not configured')
 
