@@ -1161,9 +1161,10 @@ export async function activateTelegramAction(
     })
 
     if (!res.ok) {
-      const text = await res.text().catch(() => res.statusText)
-      console.error('[actions]', `Agent API ${res.status}:`, text)
-      return fail('The agent service returned an error. Please try again.')
+      const json = await res.json().catch(() => null)
+      const msg = json?.error ?? res.statusText
+      console.error('[actions]', `Agent API ${res.status}:`, msg)
+      return fail(`Telegram setup failed (${res.status}): ${msg}`)
     }
 
     const json = await res.json().catch(() => null)
