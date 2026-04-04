@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { createHmac, timingSafeEqual } from 'crypto'
-import { OAUTH_PROVIDERS, CONNECTOR_OAUTH } from '@/lib/oauth-providers'
+import { OAUTH_PROVIDERS, CONNECTOR_OAUTH, OAUTH_ENV } from '@/lib/oauth-providers'
 
 // Service role client — callback arrives from provider with no user session
 const supabase = createClient(
@@ -79,8 +79,8 @@ export async function GET(request: NextRequest) {
     }
 
     const provider = OAUTH_PROVIDERS[oauthConfig.provider]
-    const clientId = process.env[provider.clientIdEnv]!
-    const clientSecret = process.env[provider.clientSecretEnv]!
+    const clientId = OAUTH_ENV[provider.clientIdEnv]!
+    const clientSecret = OAUTH_ENV[provider.clientSecretEnv]!
     const redirectUri = `${origin}/api/oauth/callback`
     const tokenUrl = connector.oauth_token_url || provider.tokenUrl
 

@@ -2,7 +2,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { NextRequest, NextResponse } from 'next/server'
 import { createHmac } from 'crypto'
 import { cookies } from 'next/headers'
-import { OAUTH_PROVIDERS, CONNECTOR_OAUTH } from '@/lib/oauth-providers'
+import { OAUTH_PROVIDERS, CONNECTOR_OAUTH, OAUTH_ENV } from '@/lib/oauth-providers'
 
 export async function GET(request: NextRequest) {
   const connectorId = request.nextUrl.searchParams.get('connector_id')
@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: `Unknown provider "${oauthConfig.provider}"` }, { status: 400 })
     }
 
-    const clientId = process.env[provider.clientIdEnv]
+    const clientId = OAUTH_ENV[provider.clientIdEnv]
     if (!clientId) {
       return NextResponse.json(
         { error: `${provider.clientIdEnv} is not configured on this server` },
