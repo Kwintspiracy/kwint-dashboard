@@ -1115,7 +1115,7 @@ export async function retryJobAction(task: string): Promise<ActionResult<unknown
     if (task.length > 10000) return fail('Task too long')
     await requireAuth()
     const agentUrl = process.env.NEXT_PUBLIC_AGENT_API_URL
-    const apiKey = process.env.API_SECRET_KEY
+    const apiKey = process.env.WORKER_SECRET || process.env.API_SECRET_KEY
 
     if (!agentUrl) return fail('Agent API not configured')
 
@@ -1147,7 +1147,7 @@ export async function activateTelegramAction(
   try {
     await requireAuth()
     const agentUrl = process.env.NEXT_PUBLIC_AGENT_API_URL
-    const apiKey = process.env.API_SECRET_KEY
+    const apiKey = process.env.WORKER_SECRET || process.env.API_SECRET_KEY
 
     if (!agentUrl) return fail('NEXT_PUBLIC_AGENT_API_URL is not configured')
 
@@ -1180,7 +1180,7 @@ export async function deactivateTelegramAction(
   try {
     await requireAuth()
     const agentUrl = process.env.NEXT_PUBLIC_AGENT_API_URL
-    const apiKey = process.env.API_SECRET_KEY
+    const apiKey = process.env.WORKER_SECRET || process.env.API_SECRET_KEY
 
     if (!agentUrl) return fail('NEXT_PUBLIC_AGENT_API_URL is not configured')
 
@@ -1318,7 +1318,7 @@ export async function resolveApprovalAction(
 
   try {
     const agentUrl = process.env.NEXT_PUBLIC_AGENT_API_URL
-    const apiKey = process.env.API_SECRET_KEY
+    const apiKey = process.env.WORKER_SECRET || process.env.API_SECRET_KEY
 
     if (!agentUrl) return fail('NEXT_PUBLIC_AGENT_API_URL is not configured')
 
