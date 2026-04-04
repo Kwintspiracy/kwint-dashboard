@@ -1157,7 +1157,7 @@ export async function activateTelegramAction(
         'Content-Type': 'application/json',
         ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
       },
-      body: JSON.stringify({ slug, action: 'activate' }),
+      body: JSON.stringify({ agent_slug: slug, action: 'register' }),
     })
 
     if (!res.ok) {
@@ -1189,7 +1189,7 @@ export async function deactivateTelegramAction(
         'Content-Type': 'application/json',
         ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
       },
-      body: JSON.stringify({ slug, action: 'deactivate' }),
+      body: JSON.stringify({ agent_slug: slug, action: 'deregister' }),
     })
 
     if (!res.ok) {
@@ -2020,6 +2020,36 @@ export async function getOrchestratorAssignmentDetailsAction(orchestratorId: str
       .eq('entity_id', entityId)
     if (error) return dbFail(error)
     return ok(data ?? [])
+  } catch (e) { return dbError(e) }
+}
+
+export async function getAgentOrchestratorAction(agentId: string): Promise<ActionResult<string | null>> {
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+    const { data, error } = await supabase
+      .from('agent_assignments')
+      .select('orchestrator_id')
+      .eq('sub_agent_id', agentId)
+      .eq('entity_id', entityId)
+      .limit(1)
+      .maybeSingle()
+    if (error) return dbFail(error)
+    return ok(data?.orchestrator_id ?? null)
+  } catch (e) { return dbError(e) }
+}
+
+export async function setAgentOrchestratorAction(agentId: string, orchestratorId: string | null): Promise<ActionResult<null>> {
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+    // Remove existing orchestrator assignments for this agent
+    await supabase.from('agent_assignments').delete().eq('sub_agent_id', agentId).eq('entity_id', entityId)
+    if (orchestratorId) {
+      const { error } = await supabase.from('agent_assignments').insert({
+        orchestrator_id: orchestratorId, sub_agent_id: agentId, entity_id: entityId,
+      })
+      if (error) return dbFail(error)
+    }
+    return ok(null)
   } catch (e) { return dbError(e) }
 }
 

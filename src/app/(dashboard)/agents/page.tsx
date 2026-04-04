@@ -18,6 +18,7 @@ type Agent = {
   id: string; name: string; slug: string; personality: string
   model: string; active: boolean; is_default: boolean; role: string
   telegram_bot_token: string | null; telegram_bot_username: string | null
+  telegram_webhook_url: string | null
   requires_approval: string[] | null
   capabilities: string[]
   created_at: string; updated_at: string
@@ -933,6 +934,15 @@ export default function AgentsPage() {
                       className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-3 py-2 text-xs text-white font-mono placeholder-neutral-700 focus:border-neutral-600 focus:outline-none transition-colors"
                     />
                   </div>
+                  {(() => {
+                    const webhookUrl = agents.find(a => a.id === editingId)?.telegram_webhook_url
+                    return webhookUrl ? (
+                      <div className="bg-neutral-900/60 border border-neutral-800 rounded-lg px-3 py-2 space-y-0.5">
+                        <p className="text-[10px] text-neutral-600 font-medium">Registered webhook URL</p>
+                        <p className="text-[10px] text-emerald-500 font-mono break-all">{webhookUrl}</p>
+                      </div>
+                    ) : null
+                  })()}
                 </div>
 
                 {/* Slack + Discord — docs only, collapsed */}
