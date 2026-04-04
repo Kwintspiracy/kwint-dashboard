@@ -1,8 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { getConnectorsAction, createConnectorAction, updateConnectorAction, deleteConnectorAction, toggleConnectorActiveAction, createSkillAction, getSkillsAction } from '@/lib/actions'
 import { SKILL_TEMPLATES, SKILL_CATEGORIES, type SkillTemplate } from '@/lib/skill-templates'
+import { CONNECTOR_OAUTH } from '@/lib/oauth-providers'
 import { useData } from '@/hooks/useData'
 import { useAuth } from '@/components/AuthProvider'
 import PageHeader from '@/components/PageHeader'
@@ -16,6 +18,7 @@ type Connector = {
   base_url: string | null; has_key: boolean
   active: boolean; created_at: string
   auth_type: string; oauth_scopes: string | null
+  has_oauth_token: boolean; oauth_account_name: string | null
 }
 
 type AuthType = 'api_key' | 'oauth2' | 'bearer' | 'basic' | 'none'
@@ -41,6 +44,21 @@ const emptyForm = () => ({
 export default function ConnectorsPage() {
   const { activeEntity } = useAuth()
   const eid = activeEntity?.id
+  const searchParams = useSearchParams()
+
+  // Show toast on OAuth redirect
+  useEffect(() => {
+    const success = searchParams.get('oauth_success')
+    const error = searchParams.get('oauth_error')
+    if (success) toast.success(`${success} connected successfully`)
+    if (error) toast.error(`OAuth error: ${error}`)
+    if (success || error) {
+      const url = new URL(window.location.href)
+      url.searchParams.delete('oauth_success')
+      url.searchParams.delete('oauth_error')
+      window.history.replaceState({}, '', url.toString())
+    }
+  }, [searchParams])
 
   const [tab, setTab] = useState<'connectors' | 'marketplace'>('connectors')
 
@@ -309,9 +327,23 @@ export default function ConnectorsPage() {
                     </div>
                   )}
                 </div>
-                <div className="flex gap-2 mt-auto pt-2 border-t border-neutral-800/30">
+                {c.has_oauth_token && c.oauth_account_name && (
+                  <div className="flex items-center gap-1.5 text-xs text-emerald-400">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                    <span className="truncate">{c.oauth_account_name}</span>
+                  </div>
+                )}
+                <div className="flex gap-2 mt-auto pt-2 border-t border-neutral-800/30 flex-wrap">
                   <button onClick={() => startEdit(c)} className="text-xs text-neutral-400 hover:text-white transition-colors">Edit</button>
                   <button onClick={() => handleDelete(c.id)} className="text-xs text-neutral-400 hover:text-red-400 transition-colors">Delete</button>
+                  {CONNECTOR_OAUTH[c.slug] && (
+                    <a
+                      href={`/api/oauth/start?connector_id=${c.id}`}
+                      className="ml-auto text-xs font-medium text-blue-400 hover:text-blue-300 transition-colors"
+                    >
+                      {c.has_oauth_token ? 'Reconnect' : 'Connect'}
+                    </a>
+                  )}
                 </div>
               </div>
             ))}
