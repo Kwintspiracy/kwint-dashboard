@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { getAgentsAction, createAgentAction, updateAgentAction, deleteAgentAction, setDefaultAgentAction, activateTelegramAction, deactivateTelegramAction, getLlmKeysAction, getOperatorProvidersAction, getSkillsAction, getAgentSkillAssignmentsAction, setAgentSkillAssignmentsAction, getOrchestratorAssignmentsAction, setOrchestratorAssignmentsAction, getAllAgentAssignmentsAction, getAllSkillAssignmentsAction } from '@/lib/actions'
+import { getAgentsAction, createAgentAction, updateAgentAction, deleteAgentAction, setDefaultAgentAction, activateTelegramAction, deactivateTelegramAction, getLlmKeysAction, getOperatorProvidersAction, getSkillsAction, getAgentSkillAssignmentsAction, setAgentSkillAssignmentsAction, getOrchestratorAssignmentsAction, getOrchestratorAssignmentDetailsAction, setOrchestratorAssignmentsAction, getAllAgentAssignmentsAction, getAllSkillAssignmentsAction } from '@/lib/actions'
 import { timeAgo } from '@/lib/utils'
 import { toast } from 'sonner'
 import { useData } from '@/hooks/useData'
@@ -199,6 +199,7 @@ export default function AgentsPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [assignedSkillIds, setAssignedSkillIds] = useState<string[]>([])
   const [assignedAgentIds, setAssignedAgentIds] = useState<string[]>([])
+  const [agentInstructions, setAgentInstructions] = useState<Record<string, string>>({})
   const [viewMode, setViewMode] = useState<'list' | 'hierarchy'>('list')
   const [showAdd, setShowAdd] = useState(false)
   const [showTemplates, setShowTemplates] = useState(false)
@@ -212,9 +213,16 @@ export default function AgentsPage() {
   const [telegramStatus, setTelegramStatus] = useState('')
 
   useEffect(() => {
-    if (!editingId) { setAssignedSkillIds([]); setAssignedAgentIds([]); return }
+    if (!editingId) { setAssignedSkillIds([]); setAssignedAgentIds([]); setAgentInstructions({}); return }
     getAgentSkillAssignmentsAction(editingId).then(r => { if (r.ok) setAssignedSkillIds(r.data) })
-    getOrchestratorAssignmentsAction(editingId).then(r => { if (r.ok) setAssignedAgentIds(r.data) })
+    getOrchestratorAssignmentDetailsAction(editingId).then(r => {
+      if (r.ok) {
+        setAssignedAgentIds(r.data.map(d => d.sub_agent_id))
+        const instr: Record<string, string> = {}
+        for (const d of r.data) { if (d.instructions) instr[d.sub_agent_id] = d.instructions }
+        setAgentInstructions(instr)
+      }
+    })
   }, [editingId])
 
   function slugify(name: string) {
@@ -293,9 +301,10 @@ export default function AgentsPage() {
         capabilities: form.capabilities,
       })
       if (!result.ok) { toast.error(result.error); return }
+      const orchAssignments = assignedAgentIds.map(id => ({ sub_agent_id: id, instructions: agentInstructions[id] || null }))
       await Promise.all([
         setAgentSkillAssignmentsAction(editingId, assignedSkillIds),
-        form.role === 'orchestrator' ? setOrchestratorAssignmentsAction(editingId, assignedAgentIds) : Promise.resolve(),
+        form.role === 'orchestrator' ? setOrchestratorAssignmentsAction(editingId, orchAssignments) : Promise.resolve(),
       ])
       toast.success('Agent updated')
       setEditingId(null)
@@ -310,9 +319,10 @@ export default function AgentsPage() {
       if (!result.ok) { toast.error(result.error); return }
       const newId = (result as { ok: true; data: { id: string } }).data?.id
       if (newId) {
+        const orchAssignments = assignedAgentIds.map(id => ({ sub_agent_id: id, instructions: agentInstructions[id] || null }))
         await Promise.all([
           setAgentSkillAssignmentsAction(newId, assignedSkillIds),
-          form.role === 'orchestrator' ? setOrchestratorAssignmentsAction(newId, assignedAgentIds) : Promise.resolve(),
+          form.role === 'orchestrator' ? setOrchestratorAssignmentsAction(newId, orchAssignments) : Promise.resolve(),
         ])
       }
       toast.success('Agent created')
@@ -560,325 +570,397 @@ export default function AgentsPage() {
       )}
 
       {(editingId || showAdd) && (
-        <div className="bg-neutral-900/50 border border-neutral-800/50 rounded-xl p-6 space-y-5">
-          <p className="text-sm font-semibold text-white">{editingId ? 'Edit Agent' : 'New Agent'}</p>
+        <div className="bg-neutral-900/50 border border-neutral-800/50 rounded-xl overflow-hidden">
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div>
-              <label className="block text-xs text-neutral-400 font-semibold uppercase tracking-wider mb-1.5">Name</label>
-              <input
-                value={form.name} onChange={(e) => updateForm('name', e.target.value)}
-                placeholder="e.g. Research Assistant"
-                className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none transition-colors"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-neutral-400 font-semibold uppercase tracking-wider mb-1.5">Slug</label>
-              <input
-                value={form.slug} onChange={(e) => updateForm('slug', e.target.value)}
-                placeholder="e.g. research-assistant"
-                className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-neutral-400 font-semibold uppercase tracking-wider mb-1.5">Model</label>
-              <ModelPicker value={form.model} onChange={v => updateForm('model', v)} configuredProviders={configuredProviders} operatorProviders={operatorProviders} />
-            </div>
-            <div>
-              <label className="block text-xs text-neutral-400 font-semibold uppercase tracking-wider mb-1.5">Role</label>
-              <RolePicker value={form.role} onChange={v => updateForm('role', v)} />
+          {/* ── Form header ── */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800/50 bg-neutral-900/80">
+            <h2 className="text-sm font-semibold text-white">{editingId ? 'Edit Agent' : 'New Agent'}</h2>
+            <div className="flex items-center gap-2">
+              {editingId && form.telegram_bot_token && (
+                <div className="flex items-center gap-2 pr-3 border-r border-neutral-800">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setTelegramStatus('Registering...')
+                      try {
+                        const res = await activateTelegramAction(form.slug)
+                        setTelegramStatus(res.ok ? 'Webhook active!' : `Error: ${res.error}`)
+                      } catch { setTelegramStatus('Failed to connect') }
+                    }}
+                    className="px-3 py-1.5 text-xs font-medium border border-emerald-800 text-emerald-400 rounded-lg hover:bg-emerald-950 transition-colors"
+                  >
+                    Activate Telegram
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setTelegramStatus('Removing...')
+                      try {
+                        const res = await deactivateTelegramAction(form.slug)
+                        setTelegramStatus(res.ok ? 'Webhook removed' : `Error: ${res.error}`)
+                      } catch { setTelegramStatus('Failed') }
+                    }}
+                    className="px-3 py-1.5 text-xs font-medium border border-neutral-700 text-neutral-400 rounded-lg hover:border-red-800 hover:text-red-400 transition-colors"
+                    aria-label="Deactivate Telegram webhook"
+                  >
+                    Deactivate
+                  </button>
+                  {telegramStatus && <span className="text-xs text-neutral-500">{telegramStatus}</span>}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => { setEditingId(null); setShowAdd(false) }}
+                className="px-3 py-1.5 text-xs font-medium border border-neutral-700 text-neutral-400 rounded-lg hover:text-white hover:border-neutral-600 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSave}
+                className="px-4 py-1.5 text-xs font-semibold bg-white text-black rounded-lg hover:bg-neutral-200 transition-colors"
+              >
+                {editingId ? 'Save changes' : 'Create agent'}
+              </button>
             </div>
           </div>
 
-          {form.role === 'orchestrator' && (
-            <p className="text-xs text-blue-400 bg-blue-950/30 border border-blue-900/30 rounded-lg px-4 py-2.5">
-              Orchestrators can delegate tasks to other agents using the delegate_task tool.
-              List available agents in the personality so the orchestrator knows who to call.
-            </p>
-          )}
+          {/* ── Two-column body ── */}
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px]">
 
-          {/* Capabilities */}
-          <div className="border-t border-neutral-800/50 pt-5">
-            <p className="text-xs text-neutral-400 font-semibold uppercase tracking-wider mb-3">Capabilities</p>
-            <div>
-              <label className="block text-xs text-neutral-400 mb-1.5">
-                Capabilities <span className="text-neutral-600 font-normal">(used for smart auto-routing)</span>
-              </label>
-              {form.capabilities.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 mb-2">
-                  {form.capabilities.map(cap => (
-                    <span key={cap} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-violet-950/60 text-violet-300 border border-violet-800/40 rounded-full">
-                      {cap}
-                      <button
-                        type="button"
-                        onClick={() => setForm(prev => ({ ...prev, capabilities: prev.capabilities.filter(c => c !== cap) }))}
-                        className="text-violet-500 hover:text-violet-200 transition-colors leading-none"
-                      >
-                        ×
-                      </button>
-                    </span>
+            {/* Left — Identity + Personality */}
+            <div className="p-6 space-y-6 border-b lg:border-b-0 lg:border-r border-neutral-800/50">
+
+              {/* Identity */}
+              <fieldset className="space-y-4">
+                <legend className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-3">Identity</legend>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor="agent-name" className="block text-xs text-neutral-500 mb-1.5">Name</label>
+                    <input
+                      id="agent-name"
+                      value={form.name} onChange={(e) => updateForm('name', e.target.value)}
+                      placeholder="e.g. Research Assistant"
+                      className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-3 py-2.5 text-sm text-white placeholder-neutral-700 focus:border-neutral-600 focus:outline-none transition-colors"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="agent-slug" className="block text-xs text-neutral-500 mb-1.5">Slug</label>
+                    <input
+                      id="agent-slug"
+                      value={form.slug} onChange={(e) => updateForm('slug', e.target.value)}
+                      placeholder="research-assistant"
+                      className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-3 py-2.5 text-sm text-white font-mono placeholder-neutral-700 focus:border-neutral-600 focus:outline-none transition-colors"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-neutral-500 mb-1.5">Model</label>
+                    <ModelPicker value={form.model} onChange={v => updateForm('model', v)} configuredProviders={configuredProviders} operatorProviders={operatorProviders} />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-neutral-500 mb-1.5">Role</label>
+                    <RolePicker value={form.role} onChange={v => updateForm('role', v)} />
+                  </div>
+                </div>
+                {form.role === 'orchestrator' && (
+                  <p className="text-xs text-blue-400 bg-blue-950/30 border border-blue-900/30 rounded-lg px-3 py-2.5 leading-relaxed">
+                    Delegates tasks via <code className="font-mono bg-blue-950/60 px-1 rounded">delegate_task</code>. Use <code className="font-mono bg-blue-950/60 px-1 rounded">{'{{team}}'}</code> in the personality to control where the agent roster is injected.
+                  </p>
+                )}
+              </fieldset>
+
+              {/* Personality */}
+              <fieldset className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <legend className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">
+                    Personality
+                    <span className="ml-1.5 text-neutral-600 font-normal normal-case tracking-normal">— system prompt</span>
+                  </legend>
+                  <details className="relative text-right">
+                    <summary className="text-[11px] text-neutral-600 hover:text-neutral-400 cursor-pointer select-none transition-colors list-none">
+                      Placeholders ▾
+                    </summary>
+                    <div className="absolute right-0 z-20 mt-1.5 text-left bg-neutral-950 border border-neutral-800 rounded-xl shadow-xl p-3 space-y-2 text-[11px] w-72">
+                      <p className="text-neutral-500 pb-1.5 border-b border-neutral-800">
+                        Any placeholder activates <strong className="text-neutral-300">full-template mode</strong> — runner substitutes only, no auto-assembly.
+                      </p>
+                      {([
+                        ['{{skills}}', 'Skills index for this session'],
+                        ['{{memories}}', 'Recalled memories'],
+                        ['{{team}}', 'Assigned agents roster'],
+                        ['{{date}}', "Today's date"],
+                        ['{{briefing}}', 'Delegation context (sub-agents)'],
+                        ['{{channel}}', 'Channel-specific instructions'],
+                      ] as [string, string][]).map(([ph, desc]) => (
+                        <div key={ph} className="flex items-start gap-2.5">
+                          <code className="text-emerald-400 font-mono shrink-0 mt-px">{ph}</code>
+                          <span className="text-neutral-600 leading-relaxed">{desc}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                </div>
+                <textarea
+                  id="agent-personality"
+                  value={form.personality} onChange={(e) => updateForm('personality', e.target.value)}
+                  placeholder="# Agent: My Agent&#10;&#10;## Who you are&#10;..."
+                  rows={22}
+                  aria-label="Agent personality / system prompt"
+                  className="w-full bg-neutral-950/60 border border-neutral-800 rounded-lg px-4 py-3 text-sm text-neutral-200 font-mono leading-relaxed focus:border-neutral-600 focus:outline-none transition-colors resize-y"
+                />
+
+                {/* Team block preview */}
+                {form.role === 'orchestrator' && (() => {
+                  const teamAgents = agents.filter(a => {
+                    if (a.id === editingId) return false
+                    if (assignedAgentIds.length > 0) return assignedAgentIds.includes(a.id)
+                    return true
+                  })
+                  if (teamAgents.length === 0) return null
+                  const lines = ['## Your team', '', "Use `delegate_task` with the agent's slug:", '']
+                  for (const a of teamAgents) {
+                    const agentSkills = skillMap[a.id] ?? []
+                    const roleTag = a.role === 'orchestrator' ? ' (orchestrator)' : ''
+                    lines.push(`- **${a.name}** — slug: \`${a.slug}\`${roleTag}`)
+                    if (agentSkills.length > 0) {
+                      lines.push('  Skills:')
+                      agentSkills.forEach(s => lines.push(`  - ${s}`))
+                    }
+                    const instr = agentInstructions[a.id]
+                    if (instr) lines.push(`  Instructions: ${instr}`)
+                  }
+                  const hasPlaceholder = form.personality.includes('{{team}}')
+                  return (
+                    <div className="border border-neutral-800/50 rounded-lg overflow-hidden">
+                      <div className="flex items-center justify-between px-3 py-2 bg-neutral-800/20 border-b border-neutral-800/50">
+                        <span className="text-[11px] text-neutral-600 font-medium">
+                          Team preview —{' '}
+                          {hasPlaceholder
+                            ? <span className="text-blue-400">injected at {'{{team}}'}</span>
+                            : <span className="text-neutral-600">appended at end</span>}
+                        </span>
+                        {!hasPlaceholder && (
+                          <button
+                            type="button"
+                            onClick={() => setForm(prev => ({ ...prev, personality: prev.personality + '\n\n{{team}}' }))}
+                            className="text-[11px] text-blue-400 hover:text-blue-300 transition-colors"
+                          >
+                            Insert {'{{team}}'} →
+                          </button>
+                        )}
+                      </div>
+                      <pre className="px-4 py-3 text-xs text-neutral-500 font-mono leading-relaxed overflow-x-auto bg-neutral-950/40 whitespace-pre-wrap">
+                        {lines.join('\n')}
+                      </pre>
+                    </div>
+                  )
+                })()}
+              </fieldset>
+            </div>
+
+            {/* Right sidebar — Config */}
+            <div className="p-5 space-y-5 bg-neutral-950/20">
+
+              {/* Skills */}
+              <section aria-labelledby="section-skills">
+                <h3 id="section-skills" className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-1">Skills</h3>
+                <p className="text-[11px] text-neutral-600 mb-2.5">Leave unchecked to allow all workspace skills.</p>
+                {skills.length === 0 ? (
+                  <p className="text-xs text-neutral-600">
+                    No skills yet —{' '}
+                    <a href="/connectors" className="text-neutral-400 underline hover:text-white transition-colors">install from Marketplace</a>
+                  </p>
+                ) : (
+                  <div className="flex flex-col">
+                    {skills.map(skill => {
+                      const checked = assignedSkillIds.includes(skill.id)
+                      return (
+                        <label key={skill.id} className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-neutral-800/30 cursor-pointer transition-colors">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => setAssignedSkillIds(prev => checked ? prev.filter(id => id !== skill.id) : [...prev, skill.id])}
+                            className="rounded border-neutral-700 bg-neutral-800 accent-emerald-500"
+                          />
+                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${skill.active ? 'bg-emerald-400' : 'bg-neutral-600'}`} />
+                          <span className="text-xs text-neutral-300 flex-1 truncate">{skill.name}</span>
+                          <span className="text-[10px] text-neutral-700 font-mono">{skill.slug}</span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                )}
+                {assignedSkillIds.length === 0 && skills.length > 0 && (
+                  <p className="text-[11px] text-neutral-700 mt-1.5">All {skills.length} skills available.</p>
+                )}
+              </section>
+
+              {/* Assigned agents (orchestrators only) */}
+              {form.role === 'orchestrator' && (
+                <section aria-labelledby="section-team" className="border-t border-neutral-800/50 pt-5">
+                  <h3 id="section-team" className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-1">Team</h3>
+                  <p className="text-[11px] text-neutral-600 mb-2.5">Leave unchecked to allow all workspace agents.</p>
+                  {agents.filter(a => a.id !== editingId).length === 0 ? (
+                    <p className="text-xs text-neutral-600">No other agents yet.</p>
+                  ) : (
+                    <div className="flex flex-col gap-1.5">
+                      {agents.filter(a => a.id !== editingId).map(a => {
+                        const checked = assignedAgentIds.includes(a.id)
+                        const agentSkills = skillMap[a.id] ?? []
+                        return (
+                          <div key={a.id} className={`rounded-lg border overflow-hidden transition-colors ${checked ? 'border-violet-900/50' : 'border-neutral-800/40'}`}>
+                            <label className="flex items-center gap-2 px-2.5 py-2 cursor-pointer hover:bg-neutral-800/20 transition-colors">
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => setAssignedAgentIds(prev => checked ? prev.filter(id => id !== a.id) : [...prev, a.id])}
+                                className="rounded border-neutral-700 bg-neutral-800 accent-violet-500 shrink-0"
+                              />
+                              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${a.active ? (a.role === 'orchestrator' ? 'bg-violet-400' : 'bg-emerald-400') : 'bg-neutral-600'}`} />
+                              <span className="text-xs text-neutral-300 flex-1 truncate">{a.name}</span>
+                              {agentSkills.length > 0 && (
+                                <span className="text-[10px] text-neutral-700 shrink-0">{agentSkills.length} skills</span>
+                              )}
+                            </label>
+                            {checked && (
+                              <div className="px-2.5 pb-2 pt-1 border-t border-neutral-800/30 bg-neutral-900/30">
+                                <textarea
+                                  value={agentInstructions[a.id] ?? ''}
+                                  onChange={e => setAgentInstructions(prev => ({ ...prev, [a.id]: e.target.value }))}
+                                  placeholder={`When to use ${a.name}, constraints…`}
+                                  rows={2}
+                                  aria-label={`Instructions for ${a.name}`}
+                                  className="w-full bg-transparent border border-neutral-800 rounded px-2.5 py-1.5 text-[11px] text-neutral-400 placeholder-neutral-700 font-mono leading-relaxed focus:border-neutral-600 focus:outline-none transition-colors resize-none"
+                                />
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                  {assignedAgentIds.length === 0 && agents.filter(a => a.id !== editingId).length > 0 && (
+                    <p className="text-[11px] text-neutral-700 mt-1.5">All agents available.</p>
+                  )}
+                </section>
+              )}
+
+              {/* Capabilities */}
+              <section aria-labelledby="section-caps" className="border-t border-neutral-800/50 pt-5">
+                <h3 id="section-caps" className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-1">Capabilities</h3>
+                <p className="text-[11px] text-neutral-600 mb-2.5">Used for smart auto-routing.</p>
+                {form.capabilities.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {form.capabilities.map(cap => (
+                      <span key={cap} className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium bg-violet-950/60 text-violet-300 border border-violet-800/40 rounded-full">
+                        {cap}
+                        <button
+                          type="button"
+                          aria-label={`Remove capability ${cap}`}
+                          onClick={() => setForm(prev => ({ ...prev, capabilities: prev.capabilities.filter(c => c !== cap) }))}
+                          className="text-violet-500 hover:text-violet-200 transition-colors leading-none"
+                        >×</button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <input
+                  id="cap-input"
+                  value={capInput}
+                  onChange={e => setCapInput(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      const val = capInput.trim().toLowerCase().replace(/\s+/g, '-')
+                      if (val && !form.capabilities.includes(val)) {
+                        setForm(prev => ({ ...prev, capabilities: [...prev.capabilities, val] }))
+                      }
+                      setCapInput('')
+                    }
+                  }}
+                  placeholder="Add capability, press Enter"
+                  aria-label="Add capability"
+                  className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-700 focus:border-neutral-600 focus:outline-none transition-colors"
+                />
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {['data-analysis', 'code-review', 'web-search', 'email', 'scheduling', 'research'].map(s => (
+                    <button
+                      key={s} type="button"
+                      onClick={() => { if (!form.capabilities.includes(s)) setForm(prev => ({ ...prev, capabilities: [...prev.capabilities, s] })) }}
+                      disabled={form.capabilities.includes(s)}
+                      className="px-2 py-0.5 text-[10px] bg-neutral-800 text-neutral-500 border border-neutral-800 rounded-full hover:border-violet-800 hover:text-violet-400 transition-colors disabled:opacity-20 disabled:cursor-default"
+                    >{s}</button>
                   ))}
                 </div>
-              )}
-              <input
-                value={capInput}
-                onChange={e => setCapInput(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault()
-                    const val = capInput.trim().toLowerCase().replace(/\s+/g, '-')
-                    if (val && !form.capabilities.includes(val)) {
-                      setForm(prev => ({ ...prev, capabilities: [...prev.capabilities, val] }))
-                    }
-                    setCapInput('')
-                  }
-                }}
-                placeholder="Type a capability and press Enter"
-                className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none transition-colors"
-              />
-              <div className="flex flex-wrap gap-1.5 mt-2">
-                <span className="text-[10px] text-neutral-600 mr-1 self-center">Suggestions:</span>
-                {['data-analysis', 'code-review', 'web-search', 'email', 'scheduling', 'research'].map(s => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => {
-                      if (!form.capabilities.includes(s)) {
-                        setForm(prev => ({ ...prev, capabilities: [...prev.capabilities, s] }))
-                      }
-                    }}
-                    disabled={form.capabilities.includes(s)}
-                    className="px-2 py-0.5 text-[10px] font-medium bg-neutral-800 text-neutral-400 border border-neutral-700 rounded-full hover:border-violet-700 hover:text-violet-300 transition-colors disabled:opacity-30 disabled:cursor-default"
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
+              </section>
 
-          {/* Telegram Configuration */}
-          <div className="border-t border-neutral-800/50 pt-5">
-            <p className="text-xs text-neutral-400 font-semibold uppercase tracking-wider mb-3">Telegram Bot</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs text-neutral-400 mb-1.5">
-                  Bot Token <span className="text-neutral-600 font-normal">(from @BotFather)</span>
-                </label>
+              {/* Human-in-the-Loop */}
+              <section aria-labelledby="section-approval" className="border-t border-neutral-800/50 pt-5">
+                <h3 id="section-approval" className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-1">Approval</h3>
+                <p className="text-[11px] text-neutral-600 mb-2.5">Tools that require human sign-off before execution.</p>
                 <input
-                  value={form.telegram_bot_token} onChange={(e) => updateForm('telegram_bot_token', e.target.value)}
-                  placeholder="123456:ABC-DEF..."
-                  type="password"
-                  className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors"
+                  id="requires-approval"
+                  value={form.requires_approval}
+                  onChange={(e) => updateForm('requires_approval', e.target.value)}
+                  placeholder="http_request, delegate_task"
+                  aria-label="Tools requiring approval, comma-separated"
+                  className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-3 py-2 text-xs text-white font-mono placeholder-neutral-700 focus:border-neutral-600 focus:outline-none transition-colors"
                 />
-              </div>
-              <div>
-                <label className="block text-xs text-neutral-400 mb-1.5">
-                  Bot Username <span className="text-neutral-600 font-normal">(without @)</span>
-                </label>
-                <input
-                  value={form.telegram_bot_username} onChange={(e) => updateForm('telegram_bot_username', e.target.value)}
-                  placeholder="my_agent_bot"
-                  className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Slack Configuration */}
-          <div className="border-t border-neutral-800/50 pt-5">
-            <p className="text-xs text-neutral-400 font-semibold uppercase tracking-wider mb-3">Slack</p>
-            <div className="bg-neutral-800/30 border border-neutral-800 rounded-lg px-4 py-3 space-y-2">
-              <p className="text-xs text-neutral-300 font-medium">Environment-level setup (applies to all agents)</p>
-              <ol className="text-xs text-neutral-500 space-y-1 list-decimal list-inside">
-                <li>Create a Slack app at <span className="font-mono text-neutral-400">api.slack.com/apps</span></li>
-                <li>Set env var <span className="font-mono text-neutral-400">SLACK_SIGNING_SECRET</span> (from App Credentials)</li>
-                <li>Set env var <span className="font-mono text-neutral-400">SLACK_BOT_TOKEN</span> (xoxb-... OAuth token)</li>
-                <li>Under Event Subscriptions, set Request URL to:</li>
-              </ol>
-              <p className="font-mono text-xs text-emerald-400 bg-neutral-900/60 rounded px-3 py-1.5 break-all">
-                https://your-domain/api/slack
-              </p>
-              <p className="text-[10px] text-neutral-600">Subscribe to bot events: <span className="font-mono">message.channels</span>, <span className="font-mono">message.im</span>, <span className="font-mono">app_mention</span></p>
-            </div>
-          </div>
-
-          {/* Discord Configuration */}
-          <div className="border-t border-neutral-800/50 pt-5">
-            <p className="text-xs text-neutral-400 font-semibold uppercase tracking-wider mb-3">Discord</p>
-            <div className="bg-neutral-800/30 border border-neutral-800 rounded-lg px-4 py-3 space-y-2">
-              <p className="text-xs text-neutral-300 font-medium">Environment-level setup (applies to all agents)</p>
-              <ol className="text-xs text-neutral-500 space-y-1 list-decimal list-inside">
-                <li>Create an app at <span className="font-mono text-neutral-400">discord.com/developers/applications</span></li>
-                <li>Set env var <span className="font-mono text-neutral-400">DISCORD_PUBLIC_KEY</span> (from General Information)</li>
-                <li>Set env var <span className="font-mono text-neutral-400">DISCORD_BOT_TOKEN</span> (bot token)</li>
-                <li>Set env var <span className="font-mono text-neutral-400">DISCORD_APP_ID</span> (application ID)</li>
-                <li>Under General Information, set Interactions Endpoint URL to:</li>
-              </ol>
-              <p className="font-mono text-xs text-indigo-400 bg-neutral-900/60 rounded px-3 py-1.5 break-all">
-                https://your-domain/api/discord
-              </p>
-              <p className="text-[10px] text-neutral-600">Register slash commands (e.g. <span className="font-mono">/ask</span>) with a <span className="font-mono">message</span> string option via Discord&apos;s API or developer portal.</p>
-            </div>
-          </div>
-
-          {/* Approval Configuration */}
-          <div className="border-t border-neutral-800/50 pt-5">
-            <p className="text-xs text-neutral-400 font-semibold uppercase tracking-wider mb-3">Human-in-the-Loop</p>
-            <div>
-              <label className="block text-xs text-neutral-400 mb-1.5">
-                Tools requiring approval <span className="text-neutral-600 font-normal">(comma-separated, e.g. http_request, send_notification)</span>
-              </label>
-              <input
-                value={form.requires_approval}
-                onChange={(e) => updateForm('requires_approval', e.target.value)}
-                placeholder="http_request, send_notification, delegate_task"
-                className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors"
-              />
-              <p className="text-[10px] text-neutral-600 mt-1">
-                Available tools: web_search, save_memory, query_database, send_notification, http_request, manage_skill, load_skill, delegate_task
-              </p>
-            </div>
-          </div>
-
-          {/* Skills Assignment */}
-          <div className="border-t border-neutral-800/50 pt-5">
-            <p className="text-xs text-neutral-400 font-semibold uppercase tracking-wider mb-1">Skills</p>
-            <p className="text-xs text-neutral-500 mb-3">
-              Select which skills this agent can use. Leave all unchecked to allow all workspace skills.
-            </p>
-            {skills.length === 0 ? (
-              <p className="text-xs text-neutral-600">
-                No skills yet — install from{' '}
-                <a href="/connectors" className="underline hover:text-neutral-400 transition-colors">Connectors → Marketplace</a>
-              </p>
-            ) : (
-              <div className="flex flex-col gap-1">
-                {skills.map(skill => {
-                  const checked = assignedSkillIds.includes(skill.id)
-                  return (
-                    <label key={skill.id} className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-neutral-800/30 cursor-pointer transition-colors">
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => {
-                          setAssignedSkillIds(prev =>
-                            checked ? prev.filter(id => id !== skill.id) : [...prev, skill.id]
-                          )
-                        }}
-                        className="rounded border-neutral-700 bg-neutral-800 accent-emerald-500"
-                      />
-                      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${skill.active ? 'bg-emerald-400' : 'bg-neutral-600'}`} />
-                      <span className="text-sm text-neutral-200">{skill.name}</span>
-                      <span className="text-xs text-neutral-600 font-mono ml-auto">{skill.slug}</span>
-                    </label>
-                  )
-                })}
-              </div>
-            )}
-            {assignedSkillIds.length === 0 && skills.length > 0 && (
-              <p className="text-[11px] text-neutral-600 mt-2">
-                All {skills.length} workspace skill{skills.length !== 1 ? 's' : ''} available (no restrictions).
-              </p>
-            )}
-          </div>
-
-          {/* Assigned agents (orchestrators only) */}
-          {form.role === 'orchestrator' && (
-            <div className="border-t border-neutral-800/50 pt-5">
-              <p className="text-xs text-neutral-400 font-semibold uppercase tracking-wider mb-1">Assigned agents</p>
-              <p className="text-xs text-neutral-500 mb-3">
-                Select which agents this orchestrator can delegate to. Leave all unchecked to allow all workspace agents.
-              </p>
-              {agents.filter(a => a.id !== editingId).length === 0 ? (
-                <p className="text-xs text-neutral-600">No other agents yet.</p>
-              ) : (
-                <div className="flex flex-col gap-1">
-                  {agents.filter(a => a.id !== editingId).map(a => {
-                    const checked = assignedAgentIds.includes(a.id)
-                    const agentSkills = skillMap[a.id] ?? []
-                    return (
-                      <label key={a.id} className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-neutral-800/30 cursor-pointer transition-colors">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => setAssignedAgentIds(prev => checked ? prev.filter(id => id !== a.id) : [...prev, a.id])}
-                          className="rounded border-neutral-700 bg-neutral-800 accent-violet-500"
-                        />
-                        <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${a.active ? (a.role === 'orchestrator' ? 'bg-violet-400' : 'bg-emerald-400') : 'bg-neutral-600'}`} />
-                        <span className="text-sm text-neutral-200">{a.name}</span>
-                        {a.role === 'orchestrator' && <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-950/60 border border-violet-800/40 text-violet-400">orchestrator</span>}
-                        {agentSkills.map(s => <span key={s} className="text-[10px] px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-700/50 text-neutral-500 font-mono">{s}</span>)}
-                        <span className="text-xs text-neutral-600 font-mono ml-auto">{a.slug}</span>
-                      </label>
-                    )
-                  })}
-                </div>
-              )}
-              {assignedAgentIds.length === 0 && agents.filter(a => a.id !== editingId).length > 0 && (
-                <p className="text-[11px] text-neutral-600 mt-2">
-                  All {agents.filter(a => a.id !== editingId).length} workspace agents available (no restrictions).
+                <p className="text-[10px] text-neutral-700 mt-1.5 leading-relaxed">
+                  web_search · save_memory · http_request · send_notification · delegate_task · load_skill
                 </p>
-              )}
+              </section>
+
+              {/* Channels */}
+              <section aria-labelledby="section-channels" className="border-t border-neutral-800/50 pt-5">
+                <h3 id="section-channels" className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-3">Channels</h3>
+
+                {/* Telegram — has editable fields */}
+                <div className="space-y-2.5 mb-3">
+                  <p className="text-[11px] text-neutral-500 font-medium">Telegram</p>
+                  <div>
+                    <label htmlFor="tg-token" className="block text-[11px] text-neutral-600 mb-1">Bot Token</label>
+                    <input
+                      id="tg-token"
+                      value={form.telegram_bot_token} onChange={(e) => updateForm('telegram_bot_token', e.target.value)}
+                      placeholder="123456:ABC-DEF..."
+                      type="password"
+                      className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-3 py-2 text-xs text-white font-mono placeholder-neutral-700 focus:border-neutral-600 focus:outline-none transition-colors"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="tg-username" className="block text-[11px] text-neutral-600 mb-1">Bot Username <span className="text-neutral-700">(without @)</span></label>
+                    <input
+                      id="tg-username"
+                      value={form.telegram_bot_username} onChange={(e) => updateForm('telegram_bot_username', e.target.value)}
+                      placeholder="my_agent_bot"
+                      className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-3 py-2 text-xs text-white font-mono placeholder-neutral-700 focus:border-neutral-600 focus:outline-none transition-colors"
+                    />
+                  </div>
+                </div>
+
+                {/* Slack + Discord — docs only, collapsed */}
+                <details className="group">
+                  <summary className="text-[11px] text-neutral-600 hover:text-neutral-400 cursor-pointer select-none transition-colors list-none flex items-center gap-1">
+                    <svg className="w-3 h-3 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+                    Slack & Discord setup
+                  </summary>
+                  <div className="mt-2.5 space-y-3">
+                    <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-3 space-y-1.5">
+                      <p className="text-[11px] text-neutral-400 font-medium">Slack <span className="text-neutral-600 font-normal">(env-level)</span></p>
+                      <p className="text-[10px] text-neutral-600 leading-relaxed">Set <code className="font-mono">SLACK_SIGNING_SECRET</code> + <code className="font-mono">SLACK_BOT_TOKEN</code>, then point Event Subscriptions to:</p>
+                      <code className="block text-[10px] text-emerald-500 bg-neutral-950 rounded px-2 py-1 break-all">https://your-domain/api/slack</code>
+                    </div>
+                    <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-3 space-y-1.5">
+                      <p className="text-[11px] text-neutral-400 font-medium">Discord <span className="text-neutral-600 font-normal">(env-level)</span></p>
+                      <p className="text-[10px] text-neutral-600 leading-relaxed">Set <code className="font-mono">DISCORD_PUBLIC_KEY</code> + <code className="font-mono">DISCORD_BOT_TOKEN</code> + <code className="font-mono">DISCORD_APP_ID</code>, then set Interactions URL to:</p>
+                      <code className="block text-[10px] text-indigo-400 bg-neutral-950 rounded px-2 py-1 break-all">https://your-domain/api/discord</code>
+                    </div>
+                  </div>
+                </details>
+              </section>
+
             </div>
-          )}
-
-          <div>
-            <label className="block text-xs text-neutral-400 font-semibold uppercase tracking-wider mb-1.5">
-              Personality{' '}
-              <span className="text-neutral-600 font-normal normal-case tracking-normal">
-                — the agent&apos;s system prompt, rules, and behavior
-              </span>
-            </label>
-            <textarea
-              value={form.personality} onChange={(e) => updateForm('personality', e.target.value)}
-              placeholder="# Agent: My Agent..."
-              rows={20}
-              className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-3 text-sm text-neutral-200 font-mono leading-relaxed focus:border-neutral-600 focus:outline-none transition-colors resize-y"
-            />
-          </div>
-
-          <div className="flex gap-2 items-center">
-            <button onClick={handleSave} className="px-4 py-2 text-xs font-semibold bg-white text-black rounded-lg hover:bg-neutral-200 transition-colors">
-              {editingId ? 'Save changes' : 'Create agent'}
-            </button>
-            <button
-              onClick={() => { setEditingId(null); setShowAdd(false) }}
-              className="px-4 py-2 text-xs font-medium border border-neutral-700 text-neutral-400 rounded-lg hover:text-white hover:border-neutral-600 transition-colors"
-            >
-              Cancel
-            </button>
-            {editingId && form.telegram_bot_token && (
-              <div className="flex items-center gap-2 ml-4 border-l border-neutral-800 pl-4">
-                <button
-                  onClick={async () => {
-                    const slug = form.slug
-                    setTelegramStatus('Registering...')
-                    try {
-                      const res = await activateTelegramAction(slug)
-                      setTelegramStatus(res.ok ? 'Webhook active!' : `Error: ${res.error}`)
-                    } catch (e) { setTelegramStatus('Failed to connect') }
-                  }}
-                  className="px-4 py-2 text-xs font-medium border border-emerald-800 text-emerald-400 rounded-lg hover:bg-emerald-950 transition-colors"
-                >
-                  Activate Telegram
-                </button>
-                <button
-                  onClick={async () => {
-                    const slug = form.slug
-                    setTelegramStatus('Removing...')
-                    try {
-                      const res = await deactivateTelegramAction(slug)
-                      setTelegramStatus(res.ok ? 'Webhook removed' : `Error: ${res.error}`)
-                    } catch (e) { setTelegramStatus('Failed') }
-                  }}
-                  className="px-4 py-2 text-xs font-medium border border-neutral-700 text-neutral-400 rounded-lg hover:border-red-800 hover:text-red-400 transition-colors"
-                >
-                  Deactivate
-                </button>
-                {telegramStatus && <span className="text-xs text-neutral-500">{telegramStatus}</span>}
-              </div>
-            )}
           </div>
         </div>
       )}
@@ -902,9 +984,7 @@ Use \`delegate_task\` with the agent's slug and a **detailed** task description.
 Example — BAD: "Edit the spreadsheet"
 Example — GOOD: "Write the value 'Done' in cell B5 of spreadsheet ID 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms, sheet 'Tasks'"
 
-## Available agents
-
-The list of available agents is auto-injected below. Use their slugs with delegate_task.
+{{team}}
 
 ## Tools
 

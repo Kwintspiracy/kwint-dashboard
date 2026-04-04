@@ -39,6 +39,14 @@ export const CreateConnectorSchema = z.object({
   slug: SlugSchema,
   base_url: z.string().url('Must be a valid URL').nullable().optional(),
   api_key: z.string().nullable().optional(),
+  auth_type: z.enum(['api_key', 'oauth2', 'bearer', 'basic', 'none']).default('api_key'),
+  oauth_client_id: z.string().nullable().optional(),
+  oauth_client_secret: z.string().nullable().optional(),
+  oauth_refresh_token: z.string().nullable().optional(),
+  oauth_access_token: z.string().nullable().optional(),
+  oauth_token_expires_at: z.string().nullable().optional(),
+  oauth_token_url: z.string().nullable().optional(),
+  oauth_scopes: z.string().nullable().optional(),
 })
 
 export const UpdateConnectorSchema = CreateConnectorSchema.partial().extend({

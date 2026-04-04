@@ -16,6 +16,9 @@ export type SkillTemplate = {
   connector?: {
     slug: string
     base_url?: string
+    auth_type?: 'api_key' | 'oauth2' | 'bearer' | 'basic' | 'none'
+    oauth_token_url?: string
+    oauth_scopes?: string
   }
   fields: {
     key: string
@@ -67,9 +70,18 @@ export const SKILL_TEMPLATES: SkillTemplate[] = [
     category: 'google', color: '#EA4335',
     icon: 'M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z',
     brandIcon: '/app-icons/gmail.svg',
-    connector: { slug: 'gmail', base_url: 'https://gmail.googleapis.com' },
-    fields: [{ key: 'api_key', label: 'Gmail API Key', type: 'password', placeholder: 'AIza...', required: true, help: 'From Google Cloud Console' }],
-    content: `# Gmail API\n\n## Send email\nPOST /gmail/v1/users/me/messages/send\n\n## List messages\nGET /gmail/v1/users/me/messages?maxResults=10\n\nUse connector_slug="gmail" for auth.`,
+    connector: {
+      slug: 'gmail', base_url: 'https://gmail.googleapis.com',
+      auth_type: 'oauth2',
+      oauth_token_url: 'https://oauth2.googleapis.com/token',
+      oauth_scopes: 'https://www.googleapis.com/auth/gmail.modify',
+    },
+    fields: [
+      { key: 'oauth_client_id', label: 'Client ID', type: 'text', placeholder: 'xxxxxx.apps.googleusercontent.com', required: true, help: 'Google Cloud Console → Credentials → OAuth 2.0 Client IDs' },
+      { key: 'oauth_client_secret', label: 'Client Secret', type: 'password', placeholder: 'GOCSPX-...', required: true, help: 'Google Cloud Console → Credentials → OAuth 2.0 Client IDs' },
+      { key: 'oauth_refresh_token', label: 'Refresh Token', type: 'password', placeholder: '1//...', required: true, help: 'Generate at developers.google.com/oauthplayground — enable "offline access", use scope gmail.modify' },
+    ],
+    content: `# Gmail API\n\nOAuth2 — the runner auto-refreshes the access token using the stored refresh token.\n\n## List messages\nGET /gmail/v1/users/me/messages?maxResults=10\n\n## Read unread\nGET /gmail/v1/users/me/messages?q=is:unread&maxResults=10\n\n## Get message\nGET /gmail/v1/users/me/messages/{id}?format=full\n\n## Send email\nPOST /gmail/v1/users/me/messages/send\n\`\`\`json\n{"raw": "<base64url-encoded RFC 2822 message>"}\n\`\`\`\n\nUse connector_slug="gmail" for auth.`,
   },
   {
     id: 'google-drive', name: 'Google Drive', slug: 'google-drive',
@@ -77,9 +89,18 @@ export const SKILL_TEMPLATES: SkillTemplate[] = [
     category: 'google', color: '#FBBC04',
     icon: 'M7.71 3.5L1.15 15l3.43 6 6.55-11.5L7.71 3.5zm1.14 0l6.56 11.5H22L15.44 3.5H8.85zM15 16l-3.43 6h13.72l3.43-6H15z',
     brandIcon: '/app-icons/google-drive.svg',
-    connector: { slug: 'google-drive', base_url: 'https://www.googleapis.com/drive/v3' },
-    fields: [{ key: 'api_key', label: 'Drive API Key', type: 'password', placeholder: 'AIza...', required: true }],
-    content: `# Google Drive API\n\n## List files\nGET /files?q=trashed=false&fields=files(id,name,mimeType)\n\n## Search\nGET /files?q=name contains 'report'\n\nUse connector_slug="google-drive" for auth.`,
+    connector: {
+      slug: 'google-drive', base_url: 'https://www.googleapis.com/drive/v3',
+      auth_type: 'oauth2',
+      oauth_token_url: 'https://oauth2.googleapis.com/token',
+      oauth_scopes: 'https://www.googleapis.com/auth/drive',
+    },
+    fields: [
+      { key: 'oauth_client_id', label: 'Client ID', type: 'text', placeholder: 'xxxxxx.apps.googleusercontent.com', required: true, help: 'Google Cloud Console → Credentials → OAuth 2.0 Client IDs' },
+      { key: 'oauth_client_secret', label: 'Client Secret', type: 'password', placeholder: 'GOCSPX-...', required: true, help: 'Google Cloud Console → Credentials → OAuth 2.0 Client IDs' },
+      { key: 'oauth_refresh_token', label: 'Refresh Token', type: 'password', placeholder: '1//...', required: true, help: 'Generate at developers.google.com/oauthplayground — enable "offline access", use scope drive' },
+    ],
+    content: `# Google Drive API\n\nOAuth2 — the runner auto-refreshes the access token using the stored refresh token.\n\n## List files\nGET /files?q=trashed=false&fields=files(id,name,mimeType)\n\n## Search\nGET /files?q=name+contains+'report'\n\n## Get file metadata\nGET /files/{fileId}\n\n## Download file\nGET /files/{fileId}?alt=media\n\nUse connector_slug="google-drive" for auth.`,
   },
 
   // ═══════════════════════════════════════════════════

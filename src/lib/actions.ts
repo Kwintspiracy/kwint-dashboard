@@ -2010,14 +2010,33 @@ export async function getOrchestratorAssignmentsAction(orchestratorId: string): 
   } catch (e) { return dbError(e) }
 }
 
-export async function setOrchestratorAssignmentsAction(orchestratorId: string, subAgentIds: string[]): Promise<ActionResult<null>> {
+export async function getOrchestratorAssignmentDetailsAction(orchestratorId: string): Promise<ActionResult<{ sub_agent_id: string; instructions: string | null }[]>> {
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+    const { data, error } = await supabase
+      .from('agent_assignments')
+      .select('sub_agent_id, instructions')
+      .eq('orchestrator_id', orchestratorId)
+      .eq('entity_id', entityId)
+    if (error) return dbFail(error)
+    return ok(data ?? [])
+  } catch (e) { return dbError(e) }
+}
+
+export async function setOrchestratorAssignmentsAction(
+  orchestratorId: string,
+  assignments: { sub_agent_id: string; instructions?: string | null }[]
+): Promise<ActionResult<null>> {
   try {
     const { supabase, entityId } = await requireAuthWithEntity()
     const { data: orch } = await supabase.from('agents').select('id').eq('id', orchestratorId).eq('entity_id', entityId).single()
     if (!orch) return fail('Orchestrator not found')
     await supabase.from('agent_assignments').delete().eq('orchestrator_id', orchestratorId).eq('entity_id', entityId)
-    if (subAgentIds.length > 0) {
-      const rows = subAgentIds.map(sub_agent_id => ({ orchestrator_id: orchestratorId, sub_agent_id, entity_id: entityId }))
+    if (assignments.length > 0) {
+      const rows = assignments.map(({ sub_agent_id, instructions }) => ({
+        orchestrator_id: orchestratorId, sub_agent_id, entity_id: entityId,
+        instructions: instructions || null,
+      }))
       const { error } = await supabase.from('agent_assignments').insert(rows)
       if (error) return dbFail(error)
     }

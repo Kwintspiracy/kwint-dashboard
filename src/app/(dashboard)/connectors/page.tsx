@@ -15,9 +15,28 @@ type Connector = {
   id: string; name: string; slug: string
   base_url: string | null; has_key: boolean
   active: boolean; created_at: string
+  auth_type: string; oauth_scopes: string | null
+}
+
+type AuthType = 'api_key' | 'oauth2' | 'bearer' | 'basic' | 'none'
+
+const AUTH_TYPE_LABELS: Record<AuthType, string> = {
+  api_key: 'API Key',
+  oauth2: 'OAuth2',
+  bearer: 'Bearer Token',
+  basic: 'Basic Auth',
+  none: 'No Auth',
 }
 
 const ALL_CATEGORIES = 'All'
+
+const emptyForm = () => ({
+  name: '', slug: '', base_url: '',
+  auth_type: 'api_key' as AuthType,
+  api_key: '',
+  oauth_client_id: '', oauth_client_secret: '', oauth_refresh_token: '',
+  oauth_token_url: '', oauth_scopes: '',
+})
 
 export default function ConnectorsPage() {
   const { activeEntity } = useAuth()
@@ -25,12 +44,10 @@ export default function ConnectorsPage() {
 
   const [tab, setTab] = useState<'connectors' | 'marketplace'>('connectors')
 
-  // Form state
   const [editingId, setEditingId] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
-  const [form, setForm] = useState({ name: '', slug: '', base_url: '', api_key: '' })
+  const [form, setForm] = useState(emptyForm())
 
-  // Marketplace state
   const [categoryFilter, setCategoryFilter] = useState<string>(ALL_CATEGORIES)
   const [search, setSearch] = useState('')
   const [installing, setInstalling] = useState<SkillTemplate | null>(null)
@@ -43,13 +60,19 @@ export default function ConnectorsPage() {
 
   function startEdit(c: Connector) {
     setEditingId(c.id)
-    setForm({ name: c.name, slug: c.slug, base_url: c.base_url || '', api_key: '' })
+    setForm({
+      name: c.name, slug: c.slug, base_url: c.base_url || '',
+      auth_type: (c.auth_type as AuthType) || 'api_key',
+      api_key: '',
+      oauth_client_id: '', oauth_client_secret: '', oauth_refresh_token: '',
+      oauth_token_url: '', oauth_scopes: c.oauth_scopes || '',
+    })
     setShowAdd(false)
   }
 
   function startAdd() {
     setEditingId(null)
-    setForm({ name: '', slug: '', base_url: '', api_key: '' })
+    setForm(emptyForm())
     setShowAdd(true)
   }
 
@@ -66,18 +89,28 @@ export default function ConnectorsPage() {
   function cancelForm() { setEditingId(null); setShowAdd(false) }
 
   async function handleSave() {
+    const base = { name: form.name, slug: form.slug, base_url: form.base_url || null, auth_type: form.auth_type }
+    const creds: Record<string, unknown> = {}
+
+    if (form.auth_type === 'api_key' || form.auth_type === 'bearer') {
+      if (form.api_key) creds.api_key = form.api_key
+    } else if (form.auth_type === 'oauth2') {
+      if (form.oauth_client_id) creds.oauth_client_id = form.oauth_client_id
+      if (form.oauth_client_secret) creds.oauth_client_secret = form.oauth_client_secret
+      if (form.oauth_refresh_token) creds.oauth_refresh_token = form.oauth_refresh_token
+      if (form.oauth_token_url) creds.oauth_token_url = form.oauth_token_url
+      if (form.oauth_scopes) creds.oauth_scopes = form.oauth_scopes
+    } else if (form.auth_type === 'basic') {
+      if (form.api_key) creds.api_key = form.api_key
+    }
+
     if (editingId) {
-      const patch: Record<string, unknown> = { name: form.name, slug: form.slug, base_url: form.base_url || null }
-      if (form.api_key) patch.api_key = form.api_key
-      const result = await updateConnectorAction(editingId, patch)
+      const result = await updateConnectorAction(editingId, { ...base, ...creds })
       if (!result.ok) { toast.error(result.error); return }
       toast.success('Connector updated')
       setEditingId(null)
     } else {
-      const result = await createConnectorAction({
-        name: form.name, slug: form.slug,
-        base_url: form.base_url || undefined, api_key: form.api_key || undefined,
-      })
+      const result = await createConnectorAction({ ...base, ...creds } as Parameters<typeof createConnectorAction>[0])
       if (!result.ok) { toast.error(result.error); return }
       toast.success('Connector created')
       setShowAdd(false)
@@ -90,6 +123,7 @@ export default function ConnectorsPage() {
     if (!result.ok) { toast.error(result.error); return }
     mutate()
   }
+
   async function handleDelete(id: string) {
     if (confirm('Delete this connector? Skills linked to it will be unlinked.')) {
       const result = await deleteConnectorAction(id)
@@ -119,22 +153,29 @@ export default function ConnectorsPage() {
     if (!installing) return
     setInstallLoading(true)
     try {
-      // Create the connector
       let connectorId: string | null = null
       if (installing.connector) {
-        const connResult = await createConnectorAction({
+        const connPayload: Record<string, unknown> = {
           name: installing.name,
           slug: installing.connector.slug,
           base_url: installing.connector.base_url || undefined,
-          api_key: installForm['api_key'] || undefined,
-        })
+          auth_type: installing.connector.auth_type || 'api_key',
+        }
+        // Map all template fields from the form
+        for (const field of installing.fields) {
+          if (installForm[field.key]) connPayload[field.key] = installForm[field.key]
+        }
+        // Set OAuth defaults from template
+        if (installing.connector.oauth_token_url) connPayload.oauth_token_url = installing.connector.oauth_token_url
+        if (installing.connector.oauth_scopes) connPayload.oauth_scopes = installing.connector.oauth_scopes
+
+        const connResult = await createConnectorAction(connPayload as Parameters<typeof createConnectorAction>[0])
         if (!connResult.ok) { toast.error(connResult.error); return }
         const freshConnectors = await getConnectorsAction()
         const created = (freshConnectors as Connector[]).find(c => c.slug === installing.connector!.slug)
         if (created) connectorId = created.id
       }
 
-      // Also create the skill linked to the connector
       const skillResult = await createSkillAction({
         name: installing.name, slug: installing.slug, content: installing.content,
         connector_ids: connectorId ? [connectorId] : [],
@@ -152,7 +193,6 @@ export default function ConnectorsPage() {
 
   // ── Derived state ────────────────────────────────────
 
-  // Map connector slug → template for icon lookup
   const templateByConnectorSlug = Object.fromEntries(
     SKILL_TEMPLATES.flatMap(t => t.connector?.slug ? [[t.connector.slug, t]] : [])
   )
@@ -178,6 +218,8 @@ export default function ConnectorsPage() {
         : 'text-neutral-500 hover:text-neutral-300 pb-3'
     }`
   }
+
+  const authType = form.auth_type as AuthType
 
   return (
     <div className="space-y-5 max-w-7xl">
@@ -256,9 +298,16 @@ export default function ConnectorsPage() {
                     <span className="truncate">{c.base_url || '—'}</span>
                   </div>
                   <div className="flex items-center gap-2 text-neutral-400">
-                    <span className="text-neutral-600 w-14 shrink-0">Key</span>
-                    <span>{c.has_key ? '••••••' : '—'}</span>
+                    <span className="text-neutral-600 w-14 shrink-0">Auth</span>
+                    <span>{AUTH_TYPE_LABELS[(c.auth_type as AuthType)] ?? c.auth_type}</span>
+                    {c.has_key && <span className="text-neutral-600 ml-1">••••••</span>}
                   </div>
+                  {c.oauth_scopes && (
+                    <div className="flex items-start gap-2 text-neutral-400">
+                      <span className="text-neutral-600 w-14 shrink-0">Scopes</span>
+                      <span className="truncate text-neutral-500">{c.oauth_scopes}</span>
+                    </div>
+                  )}
                 </div>
                 <div className="flex gap-2 mt-auto pt-2 border-t border-neutral-800/30">
                   <button onClick={() => startEdit(c)} className="text-xs text-neutral-400 hover:text-white transition-colors">Edit</button>
@@ -290,11 +339,66 @@ export default function ConnectorsPage() {
                     className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none transition-colors" />
                 </div>
                 <div>
-                  <label className="block text-xs text-neutral-500 mb-1.5">API Key <span className="text-neutral-600">{editingId ? '(leave empty to keep current)' : '(optional)'}</span></label>
-                  <input value={form.api_key} onChange={(e) => updateForm('api_key', e.target.value)} placeholder="sk-..." type="password"
-                    className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors" />
+                  <label className="block text-xs text-neutral-500 mb-1.5">Auth Type</label>
+                  <select value={form.auth_type} onChange={(e) => updateForm('auth_type', e.target.value)}
+                    className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none transition-colors">
+                    {(Object.entries(AUTH_TYPE_LABELS) as [AuthType, string][]).map(([v, l]) => (
+                      <option key={v} value={v}>{l}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
+
+              {/* API Key / Bearer / Basic fields */}
+              {(authType === 'api_key' || authType === 'bearer' || authType === 'basic') && (
+                <div>
+                  <label className="block text-xs text-neutral-500 mb-1.5">
+                    {authType === 'bearer' ? 'Bearer Token' : authType === 'basic' ? 'Credentials (user:password)' : 'API Key'}
+                    {' '}<span className="text-neutral-600">{editingId ? '(leave empty to keep current)' : '(optional)'}</span>
+                  </label>
+                  <input value={form.api_key} onChange={(e) => updateForm('api_key', e.target.value)}
+                    placeholder={authType === 'bearer' ? 'eyJ...' : authType === 'basic' ? 'username:password' : 'sk-...'}
+                    type="password"
+                    className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors" />
+                </div>
+              )}
+
+              {/* OAuth2 fields */}
+              {authType === 'oauth2' && (
+                <div className="space-y-4 border border-neutral-800/50 rounded-lg p-4">
+                  <p className="text-xs text-neutral-500 font-medium">OAuth2 credentials</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs text-neutral-500 mb-1.5">Client ID</label>
+                      <input value={form.oauth_client_id} onChange={(e) => updateForm('oauth_client_id', e.target.value)} placeholder="xxxxxx.apps.googleusercontent.com"
+                        className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors" />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-neutral-500 mb-1.5">Client Secret <span className="text-neutral-600">{editingId ? '(leave empty to keep)' : ''}</span></label>
+                      <input value={form.oauth_client_secret} onChange={(e) => updateForm('oauth_client_secret', e.target.value)} placeholder="GOCSPX-..."
+                        type="password"
+                        className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors" />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs text-neutral-500 mb-1.5">Refresh Token <span className="text-neutral-600">{editingId ? '(leave empty to keep)' : ''}</span></label>
+                      <input value={form.oauth_refresh_token} onChange={(e) => updateForm('oauth_refresh_token', e.target.value)} placeholder="1//..."
+                        type="password"
+                        className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors" />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-neutral-500 mb-1.5">Token URL</label>
+                      <input value={form.oauth_token_url} onChange={(e) => updateForm('oauth_token_url', e.target.value)} placeholder="https://oauth2.googleapis.com/token"
+                        className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none transition-colors" />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-neutral-500 mb-1.5">Scopes <span className="text-neutral-600">(space-separated)</span></label>
+                      <input value={form.oauth_scopes} onChange={(e) => updateForm('oauth_scopes', e.target.value)} placeholder="https://www.googleapis.com/auth/gmail.modify"
+                        className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none transition-colors" />
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="flex gap-2 pt-1">
                 <button onClick={handleSave} className="px-4 py-2 text-xs font-semibold bg-white text-black rounded-lg hover:bg-neutral-200 transition-colors">
                   {editingId ? 'Save changes' : 'Create connector'}
@@ -346,7 +450,12 @@ export default function ConnectorsPage() {
                       </div>
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-white leading-tight">{template.name}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-semibold text-white leading-tight">{template.name}</p>
+                        {template.connector?.auth_type === 'oauth2' && (
+                          <span className="text-xs text-blue-400 bg-blue-900/30 border border-blue-900/40 px-1.5 py-0.5 rounded font-medium">OAuth2</span>
+                        )}
+                      </div>
                       <p className="text-xs text-neutral-400 mt-1 leading-relaxed line-clamp-3">{template.description}</p>
                     </div>
                   </div>
@@ -386,7 +495,12 @@ export default function ConnectorsPage() {
                   : <svg viewBox="0 0 24 24" className="w-7 h-7" fill={installing.color}><path d={installing.icon} /></svg>}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-white">{installing.name}</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-semibold text-white">{installing.name}</p>
+                  {installing.connector?.auth_type === 'oauth2' && (
+                    <span className="text-xs text-blue-400 bg-blue-900/30 border border-blue-900/40 px-1.5 py-0.5 rounded font-medium">OAuth2</span>
+                  )}
+                </div>
                 <p className="text-xs text-neutral-400 truncate">{installing.description}</p>
               </div>
               <button onClick={closeInstallModal} className="text-neutral-500 hover:text-white transition-colors ml-2 shrink-0">
