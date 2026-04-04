@@ -127,3 +127,35 @@ describe('CreateScheduleSchema', () => {
     expect(result.success).toBe(false)
   })
 })
+
+describe('Agent role field', () => {
+  const base = {
+    name: 'Ender',
+    slug: 'ender',
+    personality: 'Orchestrates sub-agents.',
+    model: 'claude-sonnet-4-6',
+  }
+
+  it('accepts role: orchestrator', () => {
+    const result = CreateAgentSchema.safeParse({ ...base, role: 'orchestrator' })
+    expect(result.success).toBe(true)
+  })
+
+  it('accepts role: agent', () => {
+    const result = CreateAgentSchema.safeParse({ ...base, role: 'agent' })
+    expect(result.success).toBe(true)
+  })
+
+  it('rejects invalid role', () => {
+    const result = CreateAgentSchema.safeParse({ ...base, role: 'admin' })
+    expect(result.success).toBe(false)
+  })
+
+  it('defaults to agent when role is omitted', () => {
+    const result = CreateAgentSchema.safeParse(base)
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.role).toBe('agent')
+    }
+  })
+})
