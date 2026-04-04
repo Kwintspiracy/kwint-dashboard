@@ -576,38 +576,51 @@ export default function AgentsPage() {
           <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800/50 bg-neutral-900/80">
             <h2 className="text-sm font-semibold text-white">{editingId ? 'Edit Agent' : 'New Agent'}</h2>
             <div className="flex items-center gap-2">
-              {editingId && form.telegram_bot_token && (
-                <div className="flex items-center gap-2 pr-3 border-r border-neutral-800">
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      setTelegramStatus('Registering...')
-                      try {
-                        const res = await activateTelegramAction(form.slug)
-                        setTelegramStatus(res.ok ? 'Webhook active!' : `Error: ${res.error}`)
-                      } catch { setTelegramStatus('Failed to connect') }
-                    }}
-                    className="px-3 py-1.5 text-xs font-medium border border-emerald-800 text-emerald-400 rounded-lg hover:bg-emerald-950 transition-colors"
-                  >
-                    Activate Telegram
-                  </button>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      setTelegramStatus('Removing...')
-                      try {
-                        const res = await deactivateTelegramAction(form.slug)
-                        setTelegramStatus(res.ok ? 'Webhook removed' : `Error: ${res.error}`)
-                      } catch { setTelegramStatus('Failed') }
-                    }}
-                    className="px-3 py-1.5 text-xs font-medium border border-neutral-700 text-neutral-400 rounded-lg hover:border-red-800 hover:text-red-400 transition-colors"
-                    aria-label="Deactivate Telegram webhook"
-                  >
-                    Deactivate
-                  </button>
-                  {telegramStatus && <span className="text-xs text-neutral-500">{telegramStatus}</span>}
-                </div>
-              )}
+              {editingId && form.telegram_bot_token && (() => {
+                const isActive = !!agents.find(a => a.id === editingId)?.telegram_webhook_url
+                return (
+                  <div className="flex items-center gap-2 pr-3 border-r border-neutral-800">
+                    {isActive && !telegramStatus && (
+                      <span className="flex items-center gap-1 text-[11px] text-emerald-500">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+                        Webhook active
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setTelegramStatus('Registering...')
+                        try {
+                          const res = await activateTelegramAction(form.slug)
+                          setTelegramStatus(res.ok ? 'Webhook active!' : `Error: ${res.error}`)
+                          if (res.ok) mutate()
+                        } catch { setTelegramStatus('Failed to connect') }
+                      }}
+                      className="px-3 py-1.5 text-xs font-medium border border-emerald-800 text-emerald-400 rounded-lg hover:bg-emerald-950 transition-colors"
+                    >
+                      {isActive ? 'Re-activate' : 'Activate Telegram'}
+                    </button>
+                    {isActive && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setTelegramStatus('Removing...')
+                          try {
+                            const res = await deactivateTelegramAction(form.slug)
+                            setTelegramStatus(res.ok ? 'Webhook removed' : `Error: ${res.error}`)
+                            if (res.ok) mutate()
+                          } catch { setTelegramStatus('Failed') }
+                        }}
+                        className="px-3 py-1.5 text-xs font-medium border border-neutral-700 text-neutral-400 rounded-lg hover:border-red-800 hover:text-red-400 transition-colors"
+                        aria-label="Deactivate Telegram webhook"
+                      >
+                        Deactivate
+                      </button>
+                    )}
+                    {telegramStatus && <span className="text-xs text-neutral-500">{telegramStatus}</span>}
+                  </div>
+                )
+              })()}
               <button
                 type="button"
                 onClick={() => { setEditingId(null); setShowAdd(false) }}
