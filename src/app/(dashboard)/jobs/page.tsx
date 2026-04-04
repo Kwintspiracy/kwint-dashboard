@@ -256,6 +256,7 @@ export default function JobsPage() {
           <thead>
             <tr className="border-b border-neutral-800/50">
               <th className="text-left px-5 py-3 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Status</th>
+              <th className="text-left hidden lg:table-cell px-5 py-3 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">ID</th>
               <th className="text-left hidden md:table-cell px-5 py-3 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Agent</th>
               <th className="text-left hidden md:table-cell px-5 py-3 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Channel</th>
               <th className="text-left px-5 py-3 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Task</th>
@@ -289,6 +290,7 @@ export default function JobsPage() {
                   <td className="px-5 py-3.5 text-neutral-500 text-xs">
                     {job.agent_id ? (agentMap[job.agent_id] || job.agent_id.slice(0, 8)) : '—'}
                   </td>
+                  <td className="hidden lg:table-cell px-5 py-3.5 text-neutral-600 font-mono text-[11px]">{job.id.slice(0, 8)}</td>
                   <td className="px-5 py-3.5">
                     <Badge label={job.channel} color="neutral" />
                   </td>
@@ -361,7 +363,13 @@ export default function JobsPage() {
                   )}
 
                   <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-neutral-600">
-                    <span>id: {job.id.slice(0, 8)}</span>
+                    <button
+                      className="font-mono hover:text-neutral-400 transition-colors text-left"
+                      title="Click to copy full ID"
+                      onClick={() => { navigator.clipboard.writeText(job.id); toast.success('ID copied') }}
+                    >
+                      id: {job.id.slice(0, 8)}
+                    </button>
                     <span>chat: {job.chat_id || '—'}</span>
                     <span>chains: {job.chain_count}</span>
                     <span>turns: {job.turn}</span>
