@@ -7,24 +7,6 @@ export type OAuthProviderConfig = {
   extraAuthParams?: Record<string, string>
 }
 
-// Static map so Next.js bundler can reference all env vars at build time.
-// Dynamic process.env[key] access is not picked up by the bundler.
-export const OAUTH_ENV: Record<string, string | undefined> = {
-  GOOGLE_CLIENT_ID:       process.env.GOOGLE_CLIENT_ID,
-  GOOGLE_CLIENT_SECRET:   process.env.GOOGLE_CLIENT_SECRET,
-  SLACK_CLIENT_ID:        process.env.SLACK_CLIENT_ID,
-  SLACK_CLIENT_SECRET:    process.env.SLACK_CLIENT_SECRET,
-  GITHUB_CLIENT_ID:       process.env.GITHUB_CLIENT_ID,
-  GITHUB_CLIENT_SECRET:   process.env.GITHUB_CLIENT_SECRET,
-  NOTION_CLIENT_ID:       process.env.NOTION_CLIENT_ID,
-  NOTION_CLIENT_SECRET:   process.env.NOTION_CLIENT_SECRET,
-  LINEAR_CLIENT_ID:       process.env.LINEAR_CLIENT_ID,
-  LINEAR_CLIENT_SECRET:   process.env.LINEAR_CLIENT_SECRET,
-  HUBSPOT_CLIENT_ID:      process.env.HUBSPOT_CLIENT_ID,
-  HUBSPOT_CLIENT_SECRET:  process.env.HUBSPOT_CLIENT_SECRET,
-  MICROSOFT_CLIENT_ID:    process.env.MICROSOFT_CLIENT_ID,
-  MICROSOFT_CLIENT_SECRET: process.env.MICROSOFT_CLIENT_SECRET,
-}
 
 export const OAUTH_PROVIDERS: Record<string, OAuthProviderConfig> = {
   google: {

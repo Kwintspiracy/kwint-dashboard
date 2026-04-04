@@ -2,7 +2,25 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { NextRequest, NextResponse } from 'next/server'
 import { createHmac } from 'crypto'
 import { cookies } from 'next/headers'
-import { OAUTH_PROVIDERS, CONNECTOR_OAUTH, OAUTH_ENV } from '@/lib/oauth-providers'
+import { OAUTH_PROVIDERS, CONNECTOR_OAUTH } from '@/lib/oauth-providers'
+
+// Must be in a server-only file — client bundle cannot access these
+const OAUTH_ENV: Record<string, string | undefined> = {
+  GOOGLE_CLIENT_ID:        process.env.GOOGLE_CLIENT_ID,
+  GOOGLE_CLIENT_SECRET:    process.env.GOOGLE_CLIENT_SECRET,
+  SLACK_CLIENT_ID:         process.env.SLACK_CLIENT_ID,
+  SLACK_CLIENT_SECRET:     process.env.SLACK_CLIENT_SECRET,
+  GITHUB_CLIENT_ID:        process.env.GITHUB_CLIENT_ID,
+  GITHUB_CLIENT_SECRET:    process.env.GITHUB_CLIENT_SECRET,
+  NOTION_CLIENT_ID:        process.env.NOTION_CLIENT_ID,
+  NOTION_CLIENT_SECRET:    process.env.NOTION_CLIENT_SECRET,
+  LINEAR_CLIENT_ID:        process.env.LINEAR_CLIENT_ID,
+  LINEAR_CLIENT_SECRET:    process.env.LINEAR_CLIENT_SECRET,
+  HUBSPOT_CLIENT_ID:       process.env.HUBSPOT_CLIENT_ID,
+  HUBSPOT_CLIENT_SECRET:   process.env.HUBSPOT_CLIENT_SECRET,
+  MICROSOFT_CLIENT_ID:     process.env.MICROSOFT_CLIENT_ID,
+  MICROSOFT_CLIENT_SECRET: process.env.MICROSOFT_CLIENT_SECRET,
+}
 
 export async function GET(request: NextRequest) {
   const connectorId = request.nextUrl.searchParams.get('connector_id')

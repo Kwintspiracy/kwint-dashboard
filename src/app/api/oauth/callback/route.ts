@@ -1,7 +1,24 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { createHmac, timingSafeEqual } from 'crypto'
-import { OAUTH_PROVIDERS, CONNECTOR_OAUTH, OAUTH_ENV } from '@/lib/oauth-providers'
+import { OAUTH_PROVIDERS, CONNECTOR_OAUTH } from '@/lib/oauth-providers'
+
+const OAUTH_ENV: Record<string, string | undefined> = {
+  GOOGLE_CLIENT_ID:        process.env.GOOGLE_CLIENT_ID,
+  GOOGLE_CLIENT_SECRET:    process.env.GOOGLE_CLIENT_SECRET,
+  SLACK_CLIENT_ID:         process.env.SLACK_CLIENT_ID,
+  SLACK_CLIENT_SECRET:     process.env.SLACK_CLIENT_SECRET,
+  GITHUB_CLIENT_ID:        process.env.GITHUB_CLIENT_ID,
+  GITHUB_CLIENT_SECRET:    process.env.GITHUB_CLIENT_SECRET,
+  NOTION_CLIENT_ID:        process.env.NOTION_CLIENT_ID,
+  NOTION_CLIENT_SECRET:    process.env.NOTION_CLIENT_SECRET,
+  LINEAR_CLIENT_ID:        process.env.LINEAR_CLIENT_ID,
+  LINEAR_CLIENT_SECRET:    process.env.LINEAR_CLIENT_SECRET,
+  HUBSPOT_CLIENT_ID:       process.env.HUBSPOT_CLIENT_ID,
+  HUBSPOT_CLIENT_SECRET:   process.env.HUBSPOT_CLIENT_SECRET,
+  MICROSOFT_CLIENT_ID:     process.env.MICROSOFT_CLIENT_ID,
+  MICROSOFT_CLIENT_SECRET: process.env.MICROSOFT_CLIENT_SECRET,
+}
 
 // Service role client — callback arrives from provider with no user session
 const supabase = createClient(
