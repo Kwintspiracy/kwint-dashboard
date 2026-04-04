@@ -1150,6 +1150,7 @@ export async function activateTelegramAction(
     const apiKey = process.env.WORKER_SECRET || process.env.API_SECRET_KEY
 
     if (!agentUrl) return fail('NEXT_PUBLIC_AGENT_API_URL is not configured')
+    if (!apiKey) return fail('WORKER_SECRET not set on dashboard')
 
     const res = await fetch(`${agentUrl}/api/telegram_setup`, {
       method: 'POST',
