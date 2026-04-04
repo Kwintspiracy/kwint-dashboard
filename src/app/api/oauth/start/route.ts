@@ -67,8 +67,9 @@ export async function GET(request: NextRequest) {
 
     const clientId = OAUTH_ENV[provider.clientIdEnv]
     if (!clientId) {
+      const available = Object.keys(process.env).filter(k => k.includes('GOOGLE') || k.includes('CLIENT') || k.includes('OAUTH')).join(', ')
       return NextResponse.json(
-        { error: `${provider.clientIdEnv} is not configured on this server` },
+        { error: `${provider.clientIdEnv} not found. Keys matching GOOGLE/CLIENT/OAUTH: [${available}]` },
         { status: 500 }
       )
     }
