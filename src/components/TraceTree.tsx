@@ -86,7 +86,7 @@ export default function TraceTree({ jobId }: { jobId: string }) {
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-medium text-neutral-200">{call.tool_name}</span>
                       {call.duration_ms != null && (
-                        <span className="text-[10px] text-neutral-600">{call.duration_ms}ms</span>
+                        <span className="text-xs text-neutral-600">{call.duration_ms}ms</span>
                       )}
                       {isDelegation && childJob && (
                         <Badge label={childJob.agents?.name || '?'} color="purple" />
@@ -110,14 +110,14 @@ export default function TraceTree({ jobId }: { jobId: string }) {
                 {isExpanded && (
                   <div className="ml-10 mb-2 space-y-2">
                     <div>
-                      <p className="text-[10px] text-neutral-500 uppercase tracking-wider mb-1">Input</p>
-                      <pre className="text-[11px] text-neutral-300 font-mono whitespace-pre-wrap bg-neutral-800/50 rounded-lg p-2.5 max-h-32 overflow-y-auto">
+                      <p className="text-xs text-neutral-500 uppercase tracking-wider mb-1">Input</p>
+                      <pre className="text-xs text-neutral-300 font-mono whitespace-pre-wrap bg-neutral-800/50 rounded-lg p-2.5 max-h-32 overflow-y-auto">
                         {call.tool_input ? JSON.stringify(call.tool_input, null, 2) : '—'}
                       </pre>
                     </div>
                     <div>
-                      <p className="text-[10px] text-neutral-500 uppercase tracking-wider mb-1">Output</p>
-                      <pre className="text-[11px] text-neutral-300 font-mono whitespace-pre-wrap bg-neutral-800/50 rounded-lg p-2.5 max-h-32 overflow-y-auto">
+                      <p className="text-xs text-neutral-500 uppercase tracking-wider mb-1">Output</p>
+                      <pre className="text-xs text-neutral-300 font-mono whitespace-pre-wrap bg-neutral-800/50 rounded-lg p-2.5 max-h-32 overflow-y-auto">
                         {call.tool_output?.slice(0, 1000) || '—'}
                       </pre>
                     </div>
@@ -132,7 +132,7 @@ export default function TraceTree({ jobId }: { jobId: string }) {
       {/* Child delegations */}
       {children.length > 0 && (
         <div className="border-t border-neutral-800/50 pt-3 mt-3">
-          <p className="text-[10px] text-neutral-500 uppercase tracking-wider mb-2">Delegated Jobs</p>
+          <p className="text-xs text-neutral-500 uppercase tracking-wider mb-2">Delegated Jobs</p>
           <div className="space-y-2">
             {children.map(child => (
               <div key={child.id} className="bg-neutral-800/30 border border-neutral-800/50 rounded-lg p-3 space-y-1">
@@ -140,10 +140,10 @@ export default function TraceTree({ jobId }: { jobId: string }) {
                   <Badge label={child.agents?.name || 'Unknown'} color="purple" />
                   <Badge label={child.status} color={child.status === 'completed' ? 'emerald' : child.status === 'failed' ? 'red' : 'amber'} />
                   {child.total_duration_ms != null && child.total_duration_ms > 0 && (
-                    <span className="text-[10px] text-neutral-600">{child.total_duration_ms}ms</span>
+                    <span className="text-xs text-neutral-600">{child.total_duration_ms}ms</span>
                   )}
                   {child.chain_count > 0 && (
-                    <span className="text-[10px] text-neutral-600">{child.chain_count + 1} chains</span>
+                    <span className="text-xs text-neutral-600">{child.chain_count + 1} chains</span>
                   )}
                 </div>
                 <p className="text-xs text-neutral-400 truncate">{child.task.slice(0, 150)}</p>

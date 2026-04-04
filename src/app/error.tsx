@@ -26,7 +26,7 @@ export default function Error({ error, reset }: ErrorProps) {
         <div className="flex items-center justify-center gap-4">
           <button
             onClick={reset}
-            className="px-4 py-2 bg-white text-black text-sm font-medium rounded-lg hover:bg-neutral-200 transition-colors"
+            className="px-4 py-2 bg-white text-black text-sm font-medium rounded-lg hover:bg-neutral-200 active:bg-neutral-300 active:scale-[0.97] transition-all duration-150"
           >
             Try again
           </button>

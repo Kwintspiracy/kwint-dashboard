@@ -61,7 +61,7 @@ export default function BillingPage() {
   const operatorTokens = operatorRuns.reduce((s, r) => s + (r.input_tokens ?? 0) + (r.output_tokens ?? 0), 0)
 
   return (
-    <div className="p-6 lg:p-8 max-w-5xl">
+    <div className="space-y-5 max-w-7xl">
       <PageHeader
         title="Billing"
         subtitle={`${runs.length} runs · ${fmtTokens(totalTokens)} tokens used`}
@@ -98,7 +98,7 @@ export default function BillingPage() {
           </div>
           <p className="text-xl font-bold text-white">{fmtCost(entityCost)}</p>
           <p className="text-xs text-neutral-500 mt-1">{fmtTokens(entityTokens)} tokens · paid to your provider</p>
-          <p className="text-[11px] text-neutral-600 mt-3">
+          <p className="text-xs text-neutral-600 mt-3">
             These runs used an API key you configured in Settings. KwintAgents does not charge for these.
           </p>
         </div>
@@ -112,7 +112,7 @@ export default function BillingPage() {
           </div>
           <p className="text-xl font-bold text-white">{fmtCost(operatorCost)}</p>
           <p className="text-xs text-neutral-500 mt-1">{fmtTokens(operatorTokens)} tokens · billed by KwintAgents</p>
-          <p className="text-[11px] text-neutral-600 mt-3">
+          <p className="text-xs text-neutral-600 mt-3">
             These runs used KwintAgents' shared API key. Add your own key in{' '}
             <a href="/settings" className="text-emerald-500 hover:underline">Settings</a>{' '}
             to reduce your bill.
@@ -164,15 +164,15 @@ export default function BillingPage() {
                       </td>
                       <td className="px-4 py-2.5 text-center">
                         {run.key_source === 'entity' ? (
-                          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400">
+                          <span className="text-xs font-medium px-2 py-1 rounded-full bg-emerald-500/10 text-emerald-400">
                             own key
                           </span>
                         ) : run.key_source === 'operator' ? (
-                          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400">
+                          <span className="text-xs font-medium px-2 py-1 rounded-full bg-amber-500/10 text-amber-400">
                             operator
                           </span>
                         ) : (
-                          <span className="text-[10px] text-neutral-700">—</span>
+                          <span className="text-xs text-neutral-700">—</span>
                         )}
                       </td>
                     </tr>

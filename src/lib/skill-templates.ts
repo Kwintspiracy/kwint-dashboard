@@ -1,7 +1,7 @@
 export type SkillCategory =
   | 'design' | 'marketing' | 'finance' | 'planning' | 'communication'
   | 'analytics' | 'storage' | 'ai' | 'ecommerce' | 'dev' | 'crm' | 'hr'
-  | 'search' | 'google'
+  | 'search' | 'google' | 'media'
 
 export type SkillTemplate = {
   id: string
@@ -162,6 +162,18 @@ export const SKILL_CAPABILITIES: Record<string, string[]> = {
   // CMS / Content
   'contentful':       ['cms', 'content-management'],
   'webflow':          ['cms', 'web'],
+  // Video generation
+  'runway':        ['video-generation', 'ai'],
+  'luma':          ['video-generation', 'ai'],
+  'kling':         ['video-generation', 'ai'],
+  'fal':           ['image-generation', 'video-generation', 'ai'],
+  // Image generation
+  'leonardo':      ['image-generation', 'ai'],
+  'ideogram':      ['image-generation', 'ai'],
+  // AI / LLM
+  'gemini':        ['ai', 'text-generation', 'web-search'],
+  'perplexity':    ['web-search', 'research', 'ai'],
+  'together-ai':   ['ai', 'text-generation'],
 }
 
 export const SKILL_CATEGORIES: Record<string, { label: string; color: string }> = {
@@ -179,6 +191,7 @@ export const SKILL_CATEGORIES: Record<string, { label: string; color: string }> 
   hr: { label: 'HR', color: 'text-teal-400' },
   search: { label: 'Search', color: 'text-red-400' },
   google: { label: 'Google', color: 'text-blue-400' },
+  media: { label: 'Media & Video', color: 'text-rose-400' },
 }
 
 export const SKILL_TEMPLATES: SkillTemplate[] = [
@@ -199,7 +212,7 @@ export const SKILL_TEMPLATES: SkillTemplate[] = [
   },
   {
     id: 'gmail', name: 'Gmail', slug: 'gmail',
-    description: 'Send and read emails via Gmail API',
+    description: 'Send, reply, draft, label and search emails via Gmail API',
     category: 'google', color: '#EA4335',
     icon: 'M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z',
     brandIcon: '/app-icons/gmail.svg',
@@ -214,7 +227,7 @@ export const SKILL_TEMPLATES: SkillTemplate[] = [
       { key: 'oauth_client_secret', label: 'Client Secret', type: 'password', placeholder: 'GOCSPX-...', required: true, help: 'Google Cloud Console → Credentials → OAuth 2.0 Client IDs' },
       { key: 'oauth_refresh_token', label: 'Refresh Token', type: 'password', placeholder: '1//...', required: true, help: 'Generate at developers.google.com/oauthplayground — enable "offline access", use scope gmail.modify' },
     ],
-    content: `# Gmail API\n\nOAuth2 — the runner auto-refreshes the access token using the stored refresh token.\n\n## List messages\nGET /gmail/v1/users/me/messages?maxResults=10\n\n## Read unread\nGET /gmail/v1/users/me/messages?q=is:unread&maxResults=10\n\n## Get message\nGET /gmail/v1/users/me/messages/{id}?format=full\n\n## Send email\nPOST /gmail/v1/users/me/messages/send\n\`\`\`json\n{"raw": "<base64url-encoded RFC 2822 message>"}\n\`\`\`\n\nUse connector_slug="gmail" for auth.`,
+    content: `# Gmail API\n\nOAuth2 — the runner auto-refreshes the access token using the stored refresh token.\nBase URL: https://gmail.googleapis.com\n\n## Search / list messages\nGET /gmail/v1/users/me/messages?q=QUERY&maxResults=20\n\nUseful query strings:\n- \`is:unread\` — unread only\n- \`from:user@example.com\` — from sender\n- \`subject:invoice\` — subject contains word\n- \`after:2024/01/01\` — received after date\n- \`has:attachment\` — has attachment\n- \`label:INBOX is:unread\` — unread inbox\n\nReturns a list of \`{id, threadId}\`. Use the id to fetch full content.\n\n## Get message (full content)\nGET /gmail/v1/users/me/messages/{id}?format=full\n\nKey fields in response:\n- \`payload.headers\` — array of {name, value}; look for Subject, From, To, Date, Message-ID\n- \`payload.body.data\` — base64url-encoded body (single-part message)\n- \`payload.parts[]\` — for multipart; find part with mimeType "text/plain" or "text/html", body.data is base64url\n- \`threadId\` — use this to reply in-thread\n\nDecoding body: base64url → replace \`-\`→\`+\` and \`_\`→\`/\`, then standard base64 decode.\n\n## Get thread (full conversation)\nGET /gmail/v1/users/me/threads/{threadId}?format=full\n\nReturns \`messages[]\` array in chronological order.\n\n## Send new email\nPOST /gmail/v1/users/me/messages/send\n\nBuild an RFC 2822 message string, then base64url-encode it:\n\`\`\`\nFrom: sender@example.com\nTo: recipient@example.com\nSubject: Hello\nContent-Type: text/plain; charset=utf-8\n\nMessage body here.\n\`\`\`\n\`\`\`json\n{"raw": "<base64url-encoded RFC 2822 string>"}\n\`\`\`\n\n## Reply to an email\nPOST /gmail/v1/users/me/messages/send\n\nInclude \`In-Reply-To\` and \`References\` headers (use original Message-ID), set same \`threadId\`:\n\`\`\`\nFrom: me@example.com\nTo: original-sender@example.com\nSubject: Re: Original Subject\nIn-Reply-To: <original-message-id>\nReferences: <original-message-id>\nContent-Type: text/plain; charset=utf-8\n\nReply body here.\n\`\`\`\n\`\`\`json\n{"raw": "<base64url RFC 2822>", "threadId": "THREAD_ID"}\n\`\`\`\n\n## Create a draft\nPOST /gmail/v1/users/me/drafts\n\`\`\`json\n{"message": {"raw": "<base64url RFC 2822>"}}\n\`\`\`\n\n## Mark as read\nPOST /gmail/v1/users/me/messages/{id}/modify\n\`\`\`json\n{"removeLabelIds": ["UNREAD"]}\n\`\`\`\n\n## Mark as unread\nPOST /gmail/v1/users/me/messages/{id}/modify\n\`\`\`json\n{"addLabelIds": ["UNREAD"]}\n\`\`\`\n\n## Move to trash\nPOST /gmail/v1/users/me/messages/{id}/trash\n\n## Add or remove labels\nPOST /gmail/v1/users/me/messages/{id}/modify\n\`\`\`json\n{"addLabelIds": ["LABEL_ID"], "removeLabelIds": ["LABEL_ID"]}\n\`\`\`\n\n## List labels\nGET /gmail/v1/users/me/labels\n\nSystem label IDs: INBOX, SENT, DRAFT, TRASH, SPAM, UNREAD, STARRED, IMPORTANT\n\nUse connector_slug="gmail" for auth.`,
   },
   {
     id: 'google-drive', name: 'Google Drive', slug: 'google-drive',
@@ -1597,6 +1610,89 @@ export const SKILL_TEMPLATES: SkillTemplate[] = [
       { key: 'base_url', label: 'Project ID', type: 'text', placeholder: 'my-project-id', required: true },
     ],
     content: `# Firebase / Firestore REST API\n\n## List documents\nGET /projects/{project_id}/databases/(default)/documents/{collection}\n\n## Get document\nGET /projects/{project_id}/databases/(default)/documents/{collection}/{document_id}\n\n## Create document\nPOST /projects/{project_id}/databases/(default)/documents/{collection}\n\`\`\`json\n{"fields": {"name": {"stringValue": "John"}, "age": {"integerValue": "30"}}}\n\`\`\`\n\n## Delete document\nDELETE /projects/{project_id}/databases/(default)/documents/{collection}/{document_id}\n\nUse connector_slug="firebase" for auth.`,
+  },
+
+  // ═══ MEDIA & VIDEO GENERATION ═══
+
+  {
+    id: 'runway', name: 'Runway ML', slug: 'runway',
+    description: 'Generate videos from text prompts or images using Runway Gen-3',
+    category: 'media', color: '#FF0000',
+    icon: 'M15 10l4.553-2.276A1 1 0 0121 8.723v6.554a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z',
+    brandIcon: '/app-icons/runway.svg',
+    connector: { slug: 'runway', base_url: 'https://api.dev.runwayml.com' },
+    fields: [{ key: 'api_key', label: 'API Key', type: 'password', placeholder: 'key_...', required: true, help: 'app.runwayml.com > Account > API Keys' }],
+    content: `# Runway ML API\n\nAuth: Authorization: Bearer {api_key}\n\n## Text/image to video (Gen-3 Alpha)\nPOST /v1/image_to_video\n\`\`\`json\n{"promptImage": "https://example.com/image.jpg", "promptText": "The camera slowly zooms in", "model": "gen3a_turbo", "duration": 5, "ratio": "1280:768"}\n\`\`\`\n\nRequired: promptImage (URL or base64 data URI). Optional: promptText (motion description), model (gen3a_turbo or gen3a), duration (5 or 10 seconds), ratio ("1280:768" | "768:1280" | "1104:832" | "832:1104" | "960:960").\n\n## Poll task status\nGET /v1/tasks/{id}\n\nResponse: { id, status, progress, output: [videoUrl], error }\nStatus values: PENDING → RUNNING → SUCCEEDED | FAILED\nPoll every 2–5 seconds until status is SUCCEEDED, then read output[0] for the video URL.\n\n## List available models\nGET /v1/models\n\nUse connector_slug="runway" for auth.`,
+  },
+  {
+    id: 'luma', name: 'Luma AI', slug: 'luma',
+    description: 'Generate high-quality videos from text or images with Luma Dream Machine',
+    category: 'media', color: '#000000',
+    icon: 'M15 10l4.553-2.276A1 1 0 0121 8.723v6.554a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z',
+    brandIcon: '/app-icons/luma.svg',
+    connector: { slug: 'luma', base_url: 'https://api.lumalabs.ai' },
+    fields: [{ key: 'api_key', label: 'API Key', type: 'password', placeholder: 'luma-...', required: true, help: 'lumalabs.ai > API > Keys' }],
+    content: `# Luma AI Dream Machine API\n\nAuth: Authorization: Bearer {api_key}\n\n## Create a generation\nPOST /dream-machine/v1/generations\n\`\`\`json\n{"prompt": "A serene lake at sunset with rippling water", "aspect_ratio": "16:9", "loop": false}\n\`\`\`\n\nFor image-to-video add a keyframes object:\n\`\`\`json\n{"prompt": "Camera drifts forward", "keyframes": {"frame0": {"type": "image", "url": "https://example.com/start.jpg"}}}\n\`\`\`\n\n## Get generation\nGET /dream-machine/v1/generations/{id}\n\nGeneration object shape:\n- id, state (pending | processing | completed | failed)\n- assets.video — URL to the finished video (only present when state=completed)\n- failure_reason — message when state=failed\n\n## List generations\nGET /dream-machine/v1/generations?limit=10&offset=0\n\nPoll GET until state=completed, then read assets.video.\n\nUse connector_slug="luma" for auth.`,
+  },
+  {
+    id: 'fal', name: 'fal.ai', slug: 'fal',
+    description: 'Fast inference for 100+ open-source models — FLUX, Stable Video Diffusion, LoRA fine-tuning',
+    category: 'media', color: '#7C3AED',
+    icon: 'M13 10V3L4 14h7v7l9-11h-7z',
+    brandIcon: '/app-icons/fal.svg',
+    connector: { slug: 'fal', base_url: 'https://queue.fal.run' },
+    fields: [{ key: 'api_key', label: 'API Key', type: 'password', placeholder: 'xxxxxxx:yyyyyyy', required: true, help: 'fal.ai > Dashboard > API Keys' }],
+    content: `# fal.ai Queue API\n\nAuth: Authorization: Key {api_key}\n\n## Queue a model run\nPOST /fal-ai/flux/schnell\n\`\`\`json\n{"prompt": "A photorealistic cat on a rooftop at dusk", "image_size": "landscape_4_3", "num_images": 1}\n\`\`\`\n\nReturns: { request_id, status_url, response_url }\n\n## Check request status\nGET /fal-ai/flux/schnell/requests/{request_id}/status\n\nResponse: { status: "IN_QUEUE" | "IN_PROGRESS" | "COMPLETED" | "FAILED", queue_position }\n\n## Get result\nGET /fal-ai/flux/schnell/requests/{request_id}\n\nResponse: { images: [{url, width, height}], timings, seed }\n\n## Popular models\n- fal-ai/flux/schnell — fastest FLUX image generation\n- fal-ai/flux/dev — higher quality FLUX images\n- fal-ai/flux-lora — FLUX with custom LoRA weights\n- fal-ai/stable-video — Stable Video Diffusion (image-to-video)\n- fal-ai/kling-video/v1.6/standard/text-to-video — Kling text-to-video via fal\n\nReplace model slug in URL path for any model. Use connector_slug="fal" for auth.`,
+  },
+  {
+    id: 'kling', name: 'Kling AI', slug: 'kling',
+    description: 'Text-to-video and image-to-video generation with Kling AI',
+    category: 'media', color: '#1A1A2E',
+    icon: 'M15 10l4.553-2.276A1 1 0 0121 8.723v6.554a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z',
+    brandIcon: '/app-icons/kling.svg',
+    connector: { slug: 'kling', base_url: 'https://api.klingai.com' },
+    fields: [{ key: 'api_key', label: 'API Key', type: 'password', placeholder: 'xxxxxxx', required: true, help: 'klingai.com > Developer > API Keys' }],
+    content: `# Kling AI API\n\nAuth: Authorization: Bearer {api_key}\n\n## Create text-to-video task\nPOST /v1/videos/text2video\n\`\`\`json\n{"model_name": "kling-v1", "prompt": "A dragon flying over a snowy mountain", "negative_prompt": "blurry, low quality", "cfg_scale": 0.5, "mode": "std", "duration": "5"}\n\`\`\`\n\nParameters:\n- model_name: "kling-v1" | "kling-v1-5" | "kling-v2"\n- mode: "std" (standard) | "pro" (higher quality, slower)\n- duration: "5" | "10" (seconds)\n- cfg_scale: 0–1, higher = closer to prompt\n\n## Query task status\nGET /v1/videos/text2video/{task_id}\n\nTask status values: submitted → processing → succeed | failed\nWhen succeed, response contains task_result.videos[].url\n\n## Image-to-video\nPOST /v1/videos/image2video\n\`\`\`json\n{"model_name": "kling-v1", "image": "https://example.com/frame.jpg", "prompt": "The figure walks forward", "duration": "5"}\n\`\`\`\n\nPoll GET /v1/videos/image2video/{task_id} the same way.\n\nUse connector_slug="kling" for auth.`,
+  },
+  {
+    id: 'leonardo', name: 'Leonardo AI', slug: 'leonardo',
+    description: 'AI image generation with fine-tuned models, ControlNet, and real-time canvas',
+    category: 'media', color: '#FF7C00',
+    icon: 'M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z',
+    brandIcon: '/app-icons/leonardo.svg',
+    connector: { slug: 'leonardo', base_url: 'https://cloud.leonardo.ai/api/rest/v1' },
+    fields: [{ key: 'api_key', label: 'API Key', type: 'password', placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx', required: true, help: 'app.leonardo.ai > User Settings > API' }],
+    content: `# Leonardo AI API\n\nAuth: Authorization: Bearer {api_key}\n\n## Generate images\nPOST /generations\n\`\`\`json\n{"modelId": "b24e16ff-265f-4959-bb68-5b19f1e45f2e", "prompt": "A futuristic city at night, neon lights, cinematic", "negative_prompt": "blurry, watermark", "width": 1024, "height": 768, "num_images": 1, "alchemy": true, "photoReal": false, "presetStyle": "CINEMATIC"}\n\`\`\`\n\nReturns: { sdGenerationJob: { generationId } } — poll for results.\n\n## Get generation\nGET /generations/{id}\n\nResponse: { generations_by_pk: { status, generated_images: [{url, id, nsfw}] } }\nStatus: PENDING → COMPLETE | FAILED\n\n## List platform models\nGET /platformModels\n\nPopular model IDs:\n- b24e16ff-265f-4959-bb68-5b19f1e45f2e — SDXL Lightning\n- e29c1166-62fa-44ac-b84b-2d3f0b85ca3e — Leonardo Phoenix\n- d69c8273-6b17-4a30-a13e-d6637ae1c644 — Leonardo Diffusion XL\n\npresetStyle options: CINEMATIC | CREATIVE | DYNAMIC | ENVIRONMENT | GENERAL | ILLUSTRATION | PHOTOGRAPHY | RAYTRACED | RENDER_3D | SKETCH_BW | SKETCH_COLOR | VIBRANT\n\nUse connector_slug="leonardo" for auth.`,
+  },
+  {
+    id: 'ideogram', name: 'Ideogram', slug: 'ideogram',
+    description: 'Photorealistic and stylized image generation with excellent text rendering',
+    category: 'media', color: '#0066FF',
+    icon: 'M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z',
+    brandIcon: '/app-icons/ideogram.svg',
+    connector: { slug: 'ideogram', base_url: 'https://api.ideogram.ai' },
+    fields: [{ key: 'api_key', label: 'API Key', type: 'password', placeholder: 'xxxxxxx', required: true, help: 'ideogram.ai > Settings > API' }],
+    content: `# Ideogram API\n\nAuth: Api-Key: {api_key}\n\n## Generate images\nPOST /generate\n\`\`\`json\n{"image_request": {"prompt": "A vintage travel poster of Paris with bold typography", "model": "V_2", "magic_prompt_option": "AUTO", "style_type": "ILLUSTRATION", "aspect_ratio": "ASPECT_16_9"}}\n\`\`\`\n\nmodel options: "V_2" | "V_2_TURBO" | "V_1" | "V_1_TURBO"\nstyle_type: "GENERAL" | "REALISTIC" | "DESIGN" | "ILLUSTRATION" | "RENDER_3D"\naspect_ratio: "ASPECT_1_1" | "ASPECT_16_9" | "ASPECT_9_16" | "ASPECT_4_3" | "ASPECT_3_4"\nmagic_prompt_option: "AUTO" | "ON" | "OFF"\n\nResponse: { data: [{url, prompt, resolution, seed, is_image_safe}] }\n\n## Remix (image + prompt)\nPOST /remix\n\`\`\`json\n{"image_request": {"prompt": "Same scene but in winter", "image_url": "https://example.com/original.jpg", "model": "V_2", "image_weight": 50}}\n\`\`\`\n\n## Describe (analyze an image)\nPOST /describe\n\`\`\`json\n{"image_url": "https://example.com/photo.jpg"}\n\`\`\`\n\nReturns descriptions suitable for use as generation prompts.\n\nUse connector_slug="ideogram" for auth.`,
+  },
+  {
+    id: 'perplexity', name: 'Perplexity AI', slug: 'perplexity',
+    description: 'AI-powered search that returns cited, up-to-date answers via chat API',
+    category: 'ai', color: '#20B2AA',
+    icon: 'M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z',
+    brandIcon: '/app-icons/perplexity.svg',
+    connector: { slug: 'perplexity', base_url: 'https://api.perplexity.ai' },
+    fields: [{ key: 'api_key', label: 'API Key', type: 'password', placeholder: 'pplx-...', required: true, help: 'perplexity.ai > Settings > API' }],
+    content: `# Perplexity AI API\n\nAuth: Authorization: Bearer {api_key}\n\n## Chat completions (with live web search)\nPOST /chat/completions\n\`\`\`json\n{"model": "sonar", "messages": [{"role": "user", "content": "What are the latest AI funding rounds in 2025?"}], "max_tokens": 1024, "temperature": 0.2}\n\`\`\`\n\nSame request/response format as OpenAI chat completions.\n\n## Models\n- sonar — fast, grounded answers with citations\n- sonar-pro — deeper research, higher accuracy\n- sonar-reasoning — step-by-step reasoning with search\n- sonar-reasoning-pro — most powerful, multi-step research\n\n## Citations\nThe response includes a citations array with source URLs:\n\`\`\`json\n{"choices": [{"message": {"content": "..."}}], "citations": ["https://source1.com", "https://source2.com"]}\n\`\`\`\n\nAlways surface citations to users for transparency.\n\n## Streaming\nAdd "stream": true to get SSE chunks in the same format as OpenAI streaming.\n\nUse connector_slug="perplexity" for auth.`,
+  },
+  {
+    id: 'gemini', name: 'Google Gemini', slug: 'gemini',
+    description: 'Google Gemini models for text, vision, code, and long-context tasks up to 1M tokens',
+    category: 'ai', color: '#4285F4',
+    icon: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z',
+    brandIcon: '/app-icons/gemini.svg',
+    connector: { slug: 'gemini', base_url: 'https://generativelanguage.googleapis.com/v1beta' },
+    fields: [{ key: 'api_key', label: 'API Key', type: 'password', placeholder: 'AIza...', required: true, help: 'aistudio.google.com > Get API key' }],
+    content: `# Google Gemini API\n\nAuth: Pass API key as query param — append ?key={api_key} to every request URL.\nNo Authorization header is used.\n\n## Generate content\nPOST /models/gemini-2.0-flash-exp:generateContent?key={api_key}\n\`\`\`json\n{"contents": [{"parts": [{"text": "Summarize the key trends in renewable energy for 2025."}]}]}\n\`\`\`\n\nResponse path: candidates[0].content.parts[0].text\n\n## Vision (image + text)\nPOST /models/gemini-2.0-flash-exp:generateContent?key={api_key}\n\`\`\`json\n{"contents": [{"parts": [{"text": "Describe this image"}, {"inlineData": {"mimeType": "image/jpeg", "data": "<base64-encoded-image>"}}]}]}\n\`\`\`\n\n## Streaming\nPOST /models/gemini-2.0-flash-exp:streamGenerateContent?key={api_key}\n\nReturns a stream of JSON objects; each has candidates[0].content.parts[0].text.\n\n## List available models\nGET /models?key={api_key}\n\nNotable models: gemini-2.0-flash-exp (fast, 1M context), gemini-1.5-pro (complex tasks), gemini-1.5-flash (balanced).\n\nUse connector_slug="gemini" for auth (key is injected as query param by the runner).`,
   },
 
 ]

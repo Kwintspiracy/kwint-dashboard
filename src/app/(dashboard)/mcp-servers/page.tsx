@@ -166,7 +166,7 @@ export default function McpServersPage() {
       <PageHeader title="MCP Servers" count={servers.length}>
         <button
           onClick={startAdd}
-          className="px-4 py-2 text-xs font-semibold bg-white text-black rounded-lg hover:bg-neutral-200 transition-colors"
+          className="px-4 py-2 text-xs font-semibold bg-white text-black rounded-lg hover:bg-neutral-200 active:bg-neutral-300 active:scale-[0.97] transition-all duration-150"
         >
           Add MCP server
         </button>
@@ -355,7 +355,7 @@ export default function McpServersPage() {
             <button
               onClick={handleSave}
               disabled={saving}
-              className="px-4 py-2 text-xs font-semibold bg-white text-black rounded-lg hover:bg-neutral-200 transition-colors disabled:opacity-50"
+              className="px-4 py-2 text-xs font-semibold bg-white text-black rounded-lg hover:bg-neutral-200 active:bg-neutral-300 active:scale-[0.97] transition-all duration-150 disabled:opacity-50"
             >
               {saving ? 'Saving...' : editingId ? 'Save changes' : 'Add MCP server'}
             </button>

@@ -165,7 +165,7 @@ export default function LoginPage() {
 
               <div className="flex items-center gap-3">
                 <div className="flex-1 h-px bg-neutral-800" />
-                <span className="text-[10px] text-neutral-600 uppercase tracking-wider">or</span>
+                <span className="text-xs text-neutral-600 uppercase tracking-wider">or</span>
                 <div className="flex-1 h-px bg-neutral-800" />
               </div>
             </>

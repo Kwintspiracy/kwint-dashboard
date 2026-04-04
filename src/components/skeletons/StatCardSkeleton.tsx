@@ -1,9 +1,12 @@
 export default function StatCardSkeleton() {
   return (
-    <div className="rounded-xl border border-neutral-800/30 bg-neutral-900/50 p-5">
-      <div className="h-3 w-16 bg-neutral-800 rounded animate-pulse" />
-      <div className="h-8 w-24 bg-neutral-800 rounded animate-pulse mt-2" />
-      <div className="h-3 w-32 bg-neutral-800/60 rounded animate-pulse mt-2" />
+    <div className="rounded-xl border border-neutral-800/60 bg-neutral-900 p-5">
+      {/* Label */}
+      <div className="h-2.5 w-20 bg-neutral-800/50 rounded animate-pulse" />
+      {/* Value */}
+      <div className="h-9 w-28 bg-neutral-800/50 rounded animate-pulse mt-3" style={{ animationDelay: '50ms' }} />
+      {/* Subtext / delta */}
+      <div className="h-2.5 w-36 bg-neutral-800/30 rounded animate-pulse mt-2.5" style={{ animationDelay: '100ms' }} />
     </div>
-  );
+  )
 }

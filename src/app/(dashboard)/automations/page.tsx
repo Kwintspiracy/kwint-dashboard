@@ -121,14 +121,12 @@ function CopyButton({ value, label = 'Copy' }: { value: string; label?: string }
   return (
     <button
       onClick={handleCopy}
-      className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors ml-1 shrink-0"
+      className={`text-xs transition-colors duration-150 ml-1 shrink-0 font-medium ${copied ? 'text-emerald-400' : 'text-neutral-500 hover:text-neutral-300'}`}
     >
       {copied ? 'Copied!' : label}
     </button>
   )
 }
-
-// ─── Tab toggle ───────────────────────────────────────────────────────────────
 
 type Plugin = {
   id: string
@@ -152,8 +150,6 @@ const EMPTY_PLUGIN_FORM = {
   webhook_url: '',
   config_json: '{}',
 }
-
-// ─── Plugin templates ─────────────────────────────────────────────────────────
 
 type PluginTemplate = {
   name: string
@@ -202,25 +198,37 @@ const PLUGIN_TEMPLATES: PluginTemplate[] = [
 
 type TabId = 'schedules' | 'triggers' | 'plugins'
 
+// ── Active status pill ────────────────────────────────────────────────────────
+
+function ActivePill({ active }: { active: boolean }) {
+  return (
+    <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-semibold border ${
+      active
+        ? 'bg-emerald-950/50 text-emerald-400 border-emerald-900/40'
+        : 'bg-neutral-800/60 text-neutral-500 border-neutral-700/50'
+    }`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${active ? 'bg-emerald-500' : 'bg-neutral-600'}`} />
+      {active ? 'Active' : 'Paused'}
+    </span>
+  )
+}
+
 export default function AutomationsPage() {
   const { activeEntity } = useAuth()
   const eid = activeEntity?.id
 
   const [activeTab, setActiveTab] = useState<TabId>('schedules')
 
-  // Schedule state
   const [editingId, setEditingId] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
   const [error, setError] = useState('')
 
-  // Trigger state
   const [editingTriggerId, setEditingTriggerId] = useState<string | null>(null)
   const [showAddTrigger, setShowAddTrigger] = useState(false)
   const [triggerForm, setTriggerForm] = useState(EMPTY_TRIGGER_FORM)
   const [triggerError, setTriggerError] = useState('')
 
-  // Plugin state
   const [editingPluginId, setEditingPluginId] = useState<string | null>(null)
   const [showAddPlugin, setShowAddPlugin] = useState(false)
   const [pluginForm, setPluginForm] = useState(EMPTY_PLUGIN_FORM)
@@ -238,7 +246,7 @@ export default function AutomationsPage() {
   const { data: pluginsRaw = [], isLoading: pluginsLoading, mutate: mutatePlugins } = useData(['plugins', eid], getPluginsAction)
   const plugins = pluginsRaw as Plugin[]
 
-  // ─── Schedule handlers ────────────────────────────────────────────────────
+  // ─── Schedule handlers ───────────────────────────────────────────────────────
 
   function startAdd() {
     setEditingId(null)
@@ -323,7 +331,7 @@ export default function AutomationsPage() {
     }
   }
 
-  // ─── Trigger handlers ─────────────────────────────────────────────────────
+  // ─── Trigger handlers ────────────────────────────────────────────────────────
 
   function startAddTrigger() {
     setEditingTriggerId(null)
@@ -353,7 +361,6 @@ export default function AutomationsPage() {
   function updateTriggerForm(field: string, value: string) {
     setTriggerForm(prev => {
       const next = { ...prev, [field]: value }
-      // Auto-generate slug from name (only when creating new)
       if (field === 'name' && !editingTriggerId) {
         next.slug = slugify(value)
       }
@@ -410,7 +417,7 @@ export default function AutomationsPage() {
     }
   }
 
-  // ─── Plugin handlers ──────────────────────────────────────────────────────
+  // ─── Plugin handlers ─────────────────────────────────────────────────────────
 
   function startAddPlugin() {
     setEditingPluginId(null)
@@ -531,121 +538,96 @@ export default function AutomationsPage() {
   if (triggersLoading && activeTab === 'triggers') return <TableSkeleton rows={3} cols={5} />
   if (pluginsLoading && activeTab === 'plugins') return <TableSkeleton rows={3} cols={5} />
 
+  function tabClass(t: TabId) {
+    return `px-4 py-2.5 text-xs font-medium transition-colors duration-150 border-b-2 -mb-px ${
+      activeTab === t
+        ? 'border-violet-500 text-white'
+        : 'border-transparent text-neutral-500 hover:text-neutral-300'
+    }`
+  }
+
   return (
     <div className="space-y-5 max-w-7xl">
-      {/* Header */}
       <PageHeader
         title="Automations"
         count={activeTab === 'schedules' ? schedules.length : activeTab === 'triggers' ? triggers.length : plugins.length}
       >
         {activeTab === 'schedules' ? (
-          <button
-            onClick={startAdd}
-            className="px-4 py-2 text-xs font-semibold bg-white text-black rounded-lg hover:bg-neutral-200 transition-colors"
-          >
+          <button onClick={startAdd} className="px-4 py-2 text-xs font-semibold bg-white text-black rounded-lg hover:bg-neutral-200 active:bg-neutral-300 active:scale-[0.97] transition-all duration-150">
             Create automation
           </button>
         ) : activeTab === 'triggers' ? (
-          <button
-            onClick={startAddTrigger}
-            className="px-4 py-2 text-xs font-semibold bg-white text-black rounded-lg hover:bg-neutral-200 transition-colors"
-          >
+          <button onClick={startAddTrigger} className="px-4 py-2 text-xs font-semibold bg-white text-black rounded-lg hover:bg-neutral-200 active:bg-neutral-300 active:scale-[0.97] transition-all duration-150">
             Create trigger
           </button>
         ) : (
-          <button
-            onClick={startAddPlugin}
-            className="px-4 py-2 text-xs font-semibold bg-white text-black rounded-lg hover:bg-neutral-200 transition-colors"
-          >
+          <button onClick={startAddPlugin} className="px-4 py-2 text-xs font-semibold bg-white text-black rounded-lg hover:bg-neutral-200 active:bg-neutral-300 active:scale-[0.97] transition-all duration-150">
             Add plugin
           </button>
         )}
       </PageHeader>
 
       {/* Tab bar */}
-      <div className="flex gap-1 border-b border-neutral-800/50">
-        <button
-          onClick={() => setActiveTab('schedules')}
-          className={`px-4 py-2 text-xs font-medium transition-colors border-b-2 -mb-px ${
-            activeTab === 'schedules'
-              ? 'border-white text-white'
-              : 'border-transparent text-neutral-500 hover:text-neutral-300'
-          }`}
-        >
+      <div className="flex gap-1 border-b border-neutral-800/60">
+        <button onClick={() => setActiveTab('schedules')} className={tabClass('schedules')}>
           Schedules
+          {schedules.length > 0 && <span className="ml-1.5 text-xs text-neutral-600">({schedules.length})</span>}
         </button>
-        <button
-          onClick={() => setActiveTab('triggers')}
-          className={`px-4 py-2 text-xs font-medium transition-colors border-b-2 -mb-px ${
-            activeTab === 'triggers'
-              ? 'border-white text-white'
-              : 'border-transparent text-neutral-500 hover:text-neutral-300'
-          }`}
-        >
+        <button onClick={() => setActiveTab('triggers')} className={tabClass('triggers')}>
           Webhook Triggers
-          {triggers.length > 0 && (
-            <span className="ml-1.5 text-[10px] text-neutral-600">({triggers.length})</span>
-          )}
+          {triggers.length > 0 && <span className="ml-1.5 text-xs text-neutral-600">({triggers.length})</span>}
         </button>
-        <button
-          onClick={() => setActiveTab('plugins')}
-          className={`px-4 py-2 text-xs font-medium transition-colors border-b-2 -mb-px ${
-            activeTab === 'plugins'
-              ? 'border-white text-white'
-              : 'border-transparent text-neutral-500 hover:text-neutral-300'
-          }`}
-        >
+        <button onClick={() => setActiveTab('plugins')} className={tabClass('plugins')}>
           Plugins
-          {plugins.length > 0 && (
-            <span className="ml-1.5 text-[10px] text-neutral-600">({plugins.length})</span>
-          )}
+          {plugins.length > 0 && <span className="ml-1.5 text-xs text-neutral-600">({plugins.length})</span>}
         </button>
       </div>
 
-      {/* ─── Schedules tab ──────────────────────────────────────────────────── */}
+      {/* ─── Schedules tab ─────────────────────────────────────────────────────── */}
       {activeTab === 'schedules' && (
         <>
-          <div className="bg-neutral-900/50 border border-neutral-800/50 rounded-xl overflow-x-auto">
+          <div className="bg-neutral-900 border border-neutral-800/60 rounded-xl overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-neutral-800/50">
-                  <th className="text-left px-5 py-3.5 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider w-10"></th>
-                  <th className="text-left px-5 py-3.5 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Name</th>
-                  <th className="text-left px-5 py-3.5 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Agent</th>
-                  <th className="text-left px-5 py-3.5 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Schedule</th>
-                  <th className="text-left px-5 py-3.5 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Last run</th>
-                  <th className="text-left px-5 py-3.5 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Next run</th>
-                  <th className="text-right px-5 py-3.5 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Actions</th>
+                <tr className="border-b border-neutral-800/60">
+                  <th className="text-left px-5 py-3 text-xs text-neutral-500 font-semibold uppercase tracking-wider">Status</th>
+                  <th className="text-left px-5 py-3 text-xs text-neutral-500 font-semibold uppercase tracking-wider">Name</th>
+                  <th className="text-left px-5 py-3 text-xs text-neutral-500 font-semibold uppercase tracking-wider">Agent</th>
+                  <th className="text-left px-5 py-3 text-xs text-neutral-500 font-semibold uppercase tracking-wider">Schedule</th>
+                  <th className="text-left px-5 py-3 text-xs text-neutral-500 font-semibold uppercase tracking-wider">Last run</th>
+                  <th className="text-left px-5 py-3 text-xs text-neutral-500 font-semibold uppercase tracking-wider">Next run</th>
+                  <th className="text-right px-5 py-3 text-xs text-neutral-500 font-semibold uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {schedules.map((s) => (
-                  <tr key={s.id} className="border-b border-neutral-800/50 hover:bg-neutral-800/30 transition-colors">
+                  <tr key={s.id} className="border-b border-neutral-800/40 hover:bg-neutral-800/20 transition-colors duration-150">
                     <td className="px-5 py-4">
-                      <Badge
-                        label={s.active ? 'Active' : 'Paused'}
-                        color={s.active ? 'emerald' : 'neutral'}
-                        dot
-                      />
+                      <ActivePill active={s.active} />
+                    </td>
+
+                    <td className="px-5 py-4">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-neutral-200 font-medium">{s.name}</span>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold border ${
+                          s.type === 'heartbeat'
+                            ? 'bg-blue-950/40 text-blue-400 border-blue-900/40'
+                            : 'bg-emerald-950/40 text-emerald-400 border-emerald-900/40'
+                        }`}>
+                          {s.type === 'heartbeat' ? 'Heartbeat' : 'Cron'}
+                        </span>
+                      </div>
+                    </td>
+
+                    <td className="px-5 py-4">
+                      <span className="text-neutral-500 text-xs">{s.agents?.name || s.agent_id}</span>
                     </td>
 
                     <td className="px-5 py-4">
                       <div className="flex items-center gap-2">
-                        <span className="text-neutral-200 font-medium">{s.name}</span>
-                        <Badge
-                          label={s.type === 'heartbeat' ? 'Heartbeat' : 'Cron'}
-                          color={s.type === 'heartbeat' ? 'blue' : 'emerald'}
-                        />
+                        <span className="text-neutral-300 text-xs font-mono bg-neutral-800/60 px-2 py-0.5 rounded-md">{s.cron_expr}</span>
+                        <span className="text-xs text-neutral-600">{describeCron(s.cron_expr)}</span>
                       </div>
-                    </td>
-
-                    <td className="px-5 py-4 text-neutral-400 text-xs">
-                      {s.agents?.name || s.agent_id}
-                    </td>
-
-                    <td className="px-5 py-4">
-                      <span className="text-neutral-300 text-xs font-mono">{s.cron_expr}</span>
-                      <span className="text-xs text-neutral-500 ml-2">{describeCron(s.cron_expr)}</span>
                     </td>
 
                     <td className="px-5 py-4">
@@ -653,7 +635,7 @@ export default function AutomationsPage() {
                         <div className="flex items-center gap-1.5">
                           <span className="text-neutral-500 text-xs">{timeAgo(s.last_run_at)}</span>
                           {s.last_run_status && (
-                            <span className={`text-xs ${
+                            <span className={`text-xs font-medium ${
                               s.last_run_status === 'success' ? 'text-emerald-500' :
                               s.last_run_status === 'failed' ? 'text-red-400' :
                               'text-neutral-500'
@@ -667,22 +649,28 @@ export default function AutomationsPage() {
                       )}
                     </td>
 
-                    <td className="px-5 py-4 text-neutral-500 text-xs">
-                      {s.next_run_at ? timeAgo(s.next_run_at).replace(' ago', '') : '—'}
+                    <td className="px-5 py-4">
+                      {s.next_run_at ? (
+                        <span className="text-neutral-400 text-xs font-mono">{timeAgo(s.next_run_at).replace(' ago', '')}</span>
+                      ) : (
+                        <span className="text-neutral-700 text-xs">—</span>
+                      )}
                     </td>
 
-                    <td className="px-5 py-4 text-right space-x-3">
-                      <button onClick={() => startEdit(s)} className="text-xs text-neutral-400 hover:text-white transition-colors">Edit</button>
-                      <button
-                        role="switch"
-                        aria-checked={s.active}
-                        aria-label={`Toggle ${s.name} active`}
-                        onClick={() => handleToggle(s)}
-                        className={`text-xs transition-colors ${s.active ? 'text-neutral-400 hover:text-amber-400' : 'text-neutral-400 hover:text-emerald-400'}`}
-                      >
-                        {s.active ? 'Pause' : 'Resume'}
-                      </button>
-                      <button onClick={() => handleDelete(s.id)} className="text-xs text-neutral-400 hover:text-red-400 transition-colors">Delete</button>
+                    <td className="px-5 py-4 text-right">
+                      <div className="flex items-center justify-end gap-3">
+                        <button onClick={() => startEdit(s)} className="text-xs text-neutral-500 hover:text-white transition-colors duration-150">Edit</button>
+                        <button
+                          role="switch"
+                          aria-checked={s.active}
+                          aria-label={`Toggle ${s.name} active`}
+                          onClick={() => handleToggle(s)}
+                          className={`text-xs transition-colors duration-150 ${s.active ? 'text-neutral-500 hover:text-amber-400' : 'text-neutral-500 hover:text-emerald-400'}`}
+                        >
+                          {s.active ? 'Pause' : 'Resume'}
+                        </button>
+                        <button onClick={() => handleDelete(s.id)} className="text-xs text-neutral-500 hover:text-red-400 transition-colors duration-150">Delete</button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -693,56 +681,61 @@ export default function AutomationsPage() {
 
           {/* Create / Edit schedule form */}
           {isFormOpen && (
-            <div className="bg-neutral-900/50 border border-neutral-800/50 rounded-xl p-6 space-y-5">
-              <p className="text-sm font-semibold text-white">{editingId ? 'Edit Automation' : 'New Automation'}</p>
+            <div className="bg-neutral-900 border border-neutral-800/60 rounded-xl p-6 space-y-5">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold text-white">{editingId ? 'Edit Automation' : 'New Automation'}</p>
+                <button onClick={cancelForm} className="text-neutral-600 hover:text-neutral-300 transition-colors duration-150 p-1">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M12 4L4 12M4 4l8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                </button>
+              </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs text-neutral-500 mb-1.5">Name</label>
+                  <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">Name</label>
                   <input
                     value={form.name}
                     onChange={(e) => updateForm('name', e.target.value)}
                     placeholder="e.g. Daily morning digest"
-                    className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none"
+                    className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none transition-colors duration-150"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs text-neutral-500 mb-1.5">Type</label>
+                  <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">Type</label>
                   <div className="flex gap-2">
                     <button
                       type="button"
                       onClick={() => updateForm('type', 'cron')}
-                      className={`flex-1 px-3 py-2.5 text-xs rounded-lg border transition-colors text-left ${
+                      className={`flex-1 px-3 py-2.5 text-xs rounded-lg border transition-colors duration-150 text-left ${
                         form.type === 'cron'
-                          ? 'border-emerald-600 bg-emerald-950/30 text-emerald-400'
-                          : 'border-neutral-800 bg-neutral-800/50 text-neutral-400 hover:border-neutral-700 hover:text-neutral-300'
+                          ? 'border-emerald-700/60 bg-emerald-950/30 text-emerald-400'
+                          : 'border-neutral-800 bg-neutral-800/40 text-neutral-400 hover:border-neutral-700 hover:text-neutral-300'
                       }`}
                     >
                       <span className="font-semibold block">Cron</span>
-                      <span className="text-[10px] opacity-70">Run a task on schedule</span>
+                      <span className="text-xs opacity-70">Run a task on schedule</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => updateForm('type', 'heartbeat')}
-                      className={`flex-1 px-3 py-2.5 text-xs rounded-lg border transition-colors text-left ${
+                      className={`flex-1 px-3 py-2.5 text-xs rounded-lg border transition-colors duration-150 text-left ${
                         form.type === 'heartbeat'
-                          ? 'border-blue-600 bg-blue-950/30 text-blue-400'
-                          : 'border-neutral-800 bg-neutral-800/50 text-neutral-400 hover:border-neutral-700 hover:text-neutral-300'
+                          ? 'border-blue-700/60 bg-blue-950/30 text-blue-400'
+                          : 'border-neutral-800 bg-neutral-800/40 text-neutral-400 hover:border-neutral-700 hover:text-neutral-300'
                       }`}
                     >
                       <span className="font-semibold block">Heartbeat</span>
-                      <span className="text-[10px] opacity-70">Check objectives periodically</span>
+                      <span className="text-xs opacity-70">Check objectives periodically</span>
                     </button>
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-xs text-neutral-500 mb-1.5">Agent</label>
+                  <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">Agent</label>
                   <select
                     value={form.agent_id}
                     onChange={(e) => updateForm('agent_id', e.target.value)}
-                    className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none"
+                    className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none transition-colors duration-150"
                   >
                     <option value="">Select agent...</option>
                     {agents.map((a) => (
@@ -752,12 +745,12 @@ export default function AutomationsPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs text-neutral-500 mb-1.5">Cron expression</label>
+                  <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">Cron expression</label>
                   <input
                     value={form.cron_expr}
                     onChange={(e) => updateForm('cron_expr', e.target.value)}
                     placeholder="0 9 * * *"
-                    className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none"
+                    className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors duration-150"
                   />
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {CRON_EXAMPLES.map((ex) => (
@@ -765,9 +758,9 @@ export default function AutomationsPage() {
                         key={ex.expr}
                         type="button"
                         onClick={() => updateForm('cron_expr', ex.expr)}
-                        className="border border-neutral-800 text-neutral-400 rounded-full px-3 py-1 text-xs hover:text-white hover:border-neutral-700 transition-colors font-mono"
+                        className="border border-neutral-800/60 text-neutral-500 rounded-lg px-2.5 py-1 text-xs hover:text-neutral-300 hover:border-neutral-700 transition-colors duration-150 font-mono"
                       >
-                        {ex.expr} <span className="text-neutral-600 font-sans">— {ex.label}</span>
+                        {ex.expr} <span className="text-neutral-700 font-sans">— {ex.label}</span>
                       </button>
                     ))}
                   </div>
@@ -779,37 +772,37 @@ export default function AutomationsPage() {
 
               {form.type === 'cron' ? (
                 <div>
-                  <label className="block text-xs text-neutral-500 mb-1.5">Task</label>
+                  <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">Task</label>
                   <textarea
                     value={form.task}
                     onChange={(e) => updateForm('task', e.target.value)}
                     placeholder="Describe exactly what the agent should do when this runs..."
                     rows={5}
-                    className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-3 text-sm text-white leading-relaxed focus:border-neutral-600 focus:outline-none resize-y"
+                    className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-3 text-sm text-white leading-relaxed focus:border-neutral-600 focus:outline-none transition-colors duration-150 resize-y"
                   />
                 </div>
               ) : (
                 <div>
-                  <label className="block text-xs text-neutral-500 mb-1.5">Objectives</label>
+                  <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">Objectives</label>
                   <textarea
                     value={form.objectives}
                     onChange={(e) => updateForm('objectives', e.target.value)}
                     placeholder="What should the agent monitor or check each time it runs..."
                     rows={5}
-                    className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-3 text-sm text-white leading-relaxed focus:border-neutral-600 focus:outline-none resize-y"
+                    className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-3 text-sm text-white leading-relaxed focus:border-neutral-600 focus:outline-none transition-colors duration-150 resize-y"
                   />
                 </div>
               )}
 
               <div className="max-w-sm">
-                <label className="block text-xs text-neutral-500 mb-1.5">
-                  Telegram Chat ID <span className="text-neutral-600">(optional — for delivery)</span>
+                <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">
+                  Telegram Chat ID <span className="normal-case text-neutral-700 font-normal">(optional — for delivery)</span>
                 </label>
                 <input
                   value={form.chat_id}
                   onChange={(e) => updateForm('chat_id', e.target.value)}
                   placeholder="-100123456789"
-                  className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none"
+                  className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors duration-150"
                 />
               </div>
 
@@ -818,16 +811,10 @@ export default function AutomationsPage() {
               )}
 
               <div className="flex gap-2 pt-1">
-                <button
-                  onClick={handleSave}
-                  className="px-4 py-2 text-xs font-semibold bg-white text-black rounded-lg hover:bg-neutral-200 transition-colors"
-                >
+                <button onClick={handleSave} className="px-4 py-2 text-xs font-semibold bg-white text-black rounded-lg hover:bg-neutral-200 active:bg-neutral-300 active:scale-[0.97] transition-all duration-150">
                   {editingId ? 'Save changes' : 'Create automation'}
                 </button>
-                <button
-                  onClick={cancelForm}
-                  className="px-4 py-2 text-xs font-medium border border-neutral-700 text-neutral-400 rounded-lg hover:text-white hover:border-neutral-600 transition-colors"
-                >
+                <button onClick={cancelForm} className="px-4 py-2 text-xs font-medium border border-neutral-800 text-neutral-500 rounded-lg hover:text-white hover:border-neutral-700 transition-colors duration-150">
                   Cancel
                 </button>
               </div>
@@ -836,15 +823,13 @@ export default function AutomationsPage() {
         </>
       )}
 
-      {/* ─── Triggers tab ───────────────────────────────────────────────────── */}
+      {/* ─── Triggers tab ────────────────────────────────────────────────────────── */}
       {activeTab === 'triggers' && (
         <>
-          {/* Trigger cards */}
           <div className="space-y-3">
             {triggers.map((t) => (
-              <div key={t.id} className="bg-neutral-900/50 border border-neutral-800/50 rounded-xl p-5">
+              <div key={t.id} className="bg-neutral-900 border border-neutral-800/60 rounded-xl p-5 hover:border-neutral-700/60 transition-colors duration-150">
                 {editingTriggerId === t.id ? (
-                  /* Inline edit form */
                   <TriggerForm
                     form={triggerForm}
                     agents={agents}
@@ -856,44 +841,32 @@ export default function AutomationsPage() {
                   />
                 ) : (
                   <div className="space-y-3">
-                    {/* Top row: name + badge + actions */}
                     <div className="flex items-start justify-between gap-4">
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <span className="text-neutral-200 font-medium text-sm truncate">{t.name}</span>
-                        <Badge
-                          label={t.active ? 'Active' : 'Paused'}
-                          color={t.active ? 'emerald' : 'neutral'}
-                          dot
-                        />
+                      <div className="flex items-center gap-2.5 min-w-0 flex-wrap">
+                        <span className="text-neutral-200 font-medium text-sm">{t.name}</span>
+                        <ActivePill active={t.active} />
                         {t.agents && (
-                          <span className="text-xs text-neutral-500 shrink-0">{t.agents.name}</span>
+                          <span className="inline-flex items-center gap-1.5 text-xs text-neutral-500">
+                            <span className="w-1.5 h-1.5 rounded-full bg-violet-500/60 shrink-0" />
+                            {t.agents.name}
+                          </span>
                         )}
                       </div>
                       <div className="flex items-center gap-3 shrink-0">
-                        <button
-                          onClick={() => startEditTrigger(t)}
-                          className="text-xs text-neutral-400 hover:text-white transition-colors"
-                        >
-                          Edit
-                        </button>
+                        <button onClick={() => startEditTrigger(t)} className="text-xs text-neutral-500 hover:text-white transition-colors duration-150">Edit</button>
                         <button
                           onClick={() => handleToggleTrigger(t)}
-                          className={`text-xs transition-colors ${t.active ? 'text-neutral-400 hover:text-amber-400' : 'text-neutral-400 hover:text-emerald-400'}`}
+                          className={`text-xs transition-colors duration-150 ${t.active ? 'text-neutral-500 hover:text-amber-400' : 'text-neutral-500 hover:text-emerald-400'}`}
                         >
                           {t.active ? 'Pause' : 'Resume'}
                         </button>
-                        <button
-                          onClick={() => handleDeleteTrigger(t.id)}
-                          className="text-xs text-neutral-400 hover:text-red-400 transition-colors"
-                        >
-                          Delete
-                        </button>
+                        <button onClick={() => handleDeleteTrigger(t.id)} className="text-xs text-neutral-500 hover:text-red-400 transition-colors duration-150">Delete</button>
                       </div>
                     </div>
 
                     {/* Webhook URL */}
-                    <div className="flex items-center gap-2 bg-neutral-800/40 rounded-lg px-3 py-2">
-                      <span className="text-[10px] text-neutral-600 uppercase tracking-wider shrink-0 font-semibold">URL</span>
+                    <div className="flex items-center gap-2 bg-neutral-800/40 border border-neutral-800/50 rounded-lg px-3 py-2">
+                      <span className="text-xs text-neutral-600 uppercase tracking-wider shrink-0 font-semibold w-12">URL</span>
                       <code className="text-xs text-neutral-300 font-mono truncate flex-1">
                         {WEBHOOK_BASE_URL}/api/webhook/{t.slug}
                       </code>
@@ -901,43 +874,44 @@ export default function AutomationsPage() {
                     </div>
 
                     {/* Secret */}
-                    <div className="flex items-center gap-2 bg-neutral-800/40 rounded-lg px-3 py-2">
-                      <span className="text-[10px] text-neutral-600 uppercase tracking-wider shrink-0 font-semibold">Secret</span>
-                      <code className="text-xs text-neutral-500 font-mono tracking-widest flex-1">
+                    <div className="flex items-center gap-2 bg-neutral-800/40 border border-neutral-800/50 rounded-lg px-3 py-2">
+                      <span className="text-xs text-neutral-600 uppercase tracking-wider shrink-0 font-semibold w-12">Secret</span>
+                      <code className="text-xs text-neutral-600 font-mono tracking-wide flex-1">
                         {'•'.repeat(Math.min(t.secret?.length ?? 16, 20))}
                       </code>
                       <CopyButton value={t.secret || ''} label="Reveal & Copy" />
                     </div>
 
-                    {/* Stats footer */}
                     <div className="flex items-center gap-4 pt-0.5">
-                      <span className="text-[11px] text-neutral-600">
-                        Fired <span className="text-neutral-400">{t.trigger_count}</span> times
+                      <span className="text-xs text-neutral-600">
+                        Fired <span className="text-neutral-400 font-semibold">{t.trigger_count}</span> times
                       </span>
                       {t.last_triggered_at && (
-                        <span className="text-[11px] text-neutral-600">
+                        <span className="text-xs text-neutral-600">
                           Last: <span className="text-neutral-400">{timeAgo(t.last_triggered_at)}</span>
                         </span>
                       )}
-                      <span className="text-[11px] text-neutral-700 font-mono truncate">
-                        /{t.slug}
-                      </span>
+                      <span className="text-xs text-neutral-700 font-mono truncate">/{t.slug}</span>
                     </div>
                   </div>
                 )}
               </div>
             ))}
             {triggers.length === 0 && !showAddTrigger && (
-              <div className="bg-neutral-900/50 border border-neutral-800/50 rounded-xl">
+              <div className="bg-neutral-900 border border-neutral-800/60 rounded-xl">
                 <EmptyState message="No webhook triggers yet" />
               </div>
             )}
           </div>
 
-          {/* Create trigger form */}
           {showAddTrigger && (
-            <div className="bg-neutral-900/50 border border-neutral-800/50 rounded-xl p-6">
-              <p className="text-sm font-semibold text-white mb-5">New Webhook Trigger</p>
+            <div className="bg-neutral-900 border border-neutral-800/60 rounded-xl p-6">
+              <div className="flex items-center justify-between mb-5">
+                <p className="text-sm font-semibold text-white">New Webhook Trigger</p>
+                <button onClick={cancelTriggerForm} className="text-neutral-600 hover:text-neutral-300 transition-colors duration-150 p-1">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M12 4L4 12M4 4l8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                </button>
+              </div>
               <TriggerForm
                 form={triggerForm}
                 agents={agents}
@@ -952,27 +926,31 @@ export default function AutomationsPage() {
         </>
       )}
 
-      {/* ─── Plugins tab ────────────────────────────────────────────────────── */}
+      {/* ─── Plugins tab ──────────────────────────────────────────────────────────── */}
       {activeTab === 'plugins' && (
         <>
-          {/* Template cards */}
+          {/* Template cards shown when no plugins yet */}
           {plugins.length === 0 && !isPluginFormOpen && (
             <div className="space-y-3">
               <p className="text-xs text-neutral-500 font-semibold uppercase tracking-wider px-1">Quick install templates</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {PLUGIN_TEMPLATES.map((tpl) => (
-                  <div key={tpl.slug} className="bg-neutral-900/50 border border-neutral-800/50 rounded-xl p-4 flex items-start justify-between gap-3">
+                  <div key={tpl.slug} className="bg-neutral-900 border border-neutral-800/60 rounded-xl p-4 flex items-start justify-between gap-3 hover:border-neutral-700/60 transition-colors duration-150">
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <span className="text-sm font-medium text-neutral-200">{tpl.name}</span>
-                        <Badge label={tpl.plugin_type} color={tpl.plugin_type === 'webhook' ? 'blue' : 'purple'} />
-                        <Badge label={tpl.hook.replace('_', ' ')} color="neutral" />
+                        <span className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-semibold border ${
+                          tpl.plugin_type === 'webhook' ? 'bg-blue-950/40 text-blue-400 border-blue-900/40' : 'bg-violet-950/40 text-violet-400 border-violet-900/40'
+                        }`}>{tpl.plugin_type}</span>
+                        <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-semibold bg-neutral-800/60 text-neutral-500 border border-neutral-700/50">
+                          {tpl.hook.replace('_', ' ')}
+                        </span>
                       </div>
                       <p className="text-xs text-neutral-500">{tpl.description}</p>
                     </div>
                     <button
                       onClick={() => handleInstallTemplate(tpl)}
-                      className="shrink-0 px-3 py-1.5 text-xs font-semibold bg-neutral-800 text-neutral-200 rounded-lg hover:bg-neutral-700 transition-colors"
+                      className="shrink-0 px-3 py-1.5 text-xs font-semibold bg-neutral-800 text-neutral-300 rounded-lg hover:bg-neutral-700 hover:text-white transition-colors duration-150 border border-neutral-700/60"
                     >
                       Install
                     </button>
@@ -982,11 +960,11 @@ export default function AutomationsPage() {
             </div>
           )}
 
-          {/* Installed plugins list */}
+          {/* Installed plugins */}
           {plugins.length > 0 && (
             <div className="space-y-3">
               {plugins.map((p) => (
-                <div key={p.id} className="bg-neutral-900/50 border border-neutral-800/50 rounded-xl p-5">
+                <div key={p.id} className="bg-neutral-900 border border-neutral-800/60 rounded-xl p-5 hover:border-neutral-700/60 transition-colors duration-150">
                   {editingPluginId === p.id ? (
                     <PluginForm
                       form={pluginForm}
@@ -997,45 +975,47 @@ export default function AutomationsPage() {
                       onCancel={cancelPluginForm}
                     />
                   ) : (
-                    <div className="space-y-2">
+                    <div className="space-y-2.5">
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex items-center gap-2.5 min-w-0 flex-wrap">
                           <span className="text-neutral-200 font-medium text-sm">{p.name}</span>
-                          <Badge
-                            label={p.active ? 'Active' : 'Paused'}
-                            color={p.active ? 'emerald' : 'neutral'}
-                            dot
-                          />
-                          <Badge label={p.plugin_type} color={p.plugin_type === 'webhook' ? 'blue' : p.plugin_type === 'transform' ? 'purple' : 'emerald'} />
-                          <Badge label={p.hook.replace(/_/g, ' ')} color="neutral" />
+                          <ActivePill active={p.active} />
+                          <span className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-semibold border ${
+                            p.plugin_type === 'webhook' ? 'bg-blue-950/40 text-blue-400 border-blue-900/40' :
+                            p.plugin_type === 'transform' ? 'bg-violet-950/40 text-violet-400 border-violet-900/40' :
+                            'bg-emerald-950/40 text-emerald-400 border-emerald-900/40'
+                          }`}>{p.plugin_type}</span>
+                          <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-semibold bg-neutral-800/60 text-neutral-500 border border-neutral-700/50">
+                            {p.hook.replace(/_/g, ' ')}
+                          </span>
                         </div>
                         <div className="flex items-center gap-3 shrink-0">
-                          <button onClick={() => startEditPlugin(p)} className="text-xs text-neutral-400 hover:text-white transition-colors">Edit</button>
+                          <button onClick={() => startEditPlugin(p)} className="text-xs text-neutral-500 hover:text-white transition-colors duration-150">Edit</button>
                           <button
                             onClick={() => handleTogglePlugin(p)}
-                            className={`text-xs transition-colors ${p.active ? 'text-neutral-400 hover:text-amber-400' : 'text-neutral-400 hover:text-emerald-400'}`}
+                            className={`text-xs transition-colors duration-150 ${p.active ? 'text-neutral-500 hover:text-amber-400' : 'text-neutral-500 hover:text-emerald-400'}`}
                           >
                             {p.active ? 'Pause' : 'Resume'}
                           </button>
-                          <button onClick={() => handleDeletePlugin(p.id)} className="text-xs text-neutral-400 hover:text-red-400 transition-colors">Delete</button>
+                          <button onClick={() => handleDeletePlugin(p.id)} className="text-xs text-neutral-500 hover:text-red-400 transition-colors duration-150">Delete</button>
                         </div>
                       </div>
                       {p.description && (
                         <p className="text-xs text-neutral-500">{p.description}</p>
                       )}
                       {p.webhook_url && (
-                        <div className="flex items-center gap-2 bg-neutral-800/40 rounded-lg px-3 py-2">
-                          <span className="text-[10px] text-neutral-600 uppercase tracking-wider shrink-0 font-semibold">URL</span>
+                        <div className="flex items-center gap-2 bg-neutral-800/40 border border-neutral-800/50 rounded-lg px-3 py-2">
+                          <span className="text-xs text-neutral-600 uppercase tracking-wider shrink-0 font-semibold w-12">URL</span>
                           <code className="text-xs text-neutral-400 font-mono truncate flex-1">{p.webhook_url}</code>
                         </div>
                       )}
                       {p.config && Object.keys(p.config).length > 0 && (
-                        <div className="flex items-center gap-2 bg-neutral-800/40 rounded-lg px-3 py-2">
-                          <span className="text-[10px] text-neutral-600 uppercase tracking-wider shrink-0 font-semibold">Config</span>
+                        <div className="flex items-center gap-2 bg-neutral-800/40 border border-neutral-800/50 rounded-lg px-3 py-2">
+                          <span className="text-xs text-neutral-600 uppercase tracking-wider shrink-0 font-semibold w-12">Config</span>
                           <code className="text-xs text-neutral-400 font-mono truncate flex-1">{JSON.stringify(p.config)}</code>
                         </div>
                       )}
-                      <p className="text-[11px] text-neutral-700">Added {timeAgo(p.created_at)}</p>
+                      <p className="text-xs text-neutral-700">Added {timeAgo(p.created_at)}</p>
                     </div>
                   )}
                 </div>
@@ -1045,8 +1025,13 @@ export default function AutomationsPage() {
 
           {/* Create plugin form */}
           {showAddPlugin && (
-            <div className="bg-neutral-900/50 border border-neutral-800/50 rounded-xl p-6">
-              <p className="text-sm font-semibold text-white mb-5">New Plugin</p>
+            <div className="bg-neutral-900 border border-neutral-800/60 rounded-xl p-6">
+              <div className="flex items-center justify-between mb-5">
+                <p className="text-sm font-semibold text-white">New Plugin</p>
+                <button onClick={cancelPluginForm} className="text-neutral-600 hover:text-neutral-300 transition-colors duration-150 p-1">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M12 4L4 12M4 4l8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                </button>
+              </div>
               <PluginForm
                 form={pluginForm}
                 error={pluginError}
@@ -1058,25 +1043,27 @@ export default function AutomationsPage() {
             </div>
           )}
 
-          {/* Show templates when plugins exist (collapsed) */}
+          {/* Browse templates when plugins exist */}
           {plugins.length > 0 && !isPluginFormOpen && (
             <details className="mt-2">
-              <summary className="text-xs text-neutral-500 cursor-pointer hover:text-neutral-300 transition-colors select-none">
+              <summary className="text-xs text-neutral-600 cursor-pointer hover:text-neutral-400 transition-colors duration-150 select-none">
                 Browse templates
               </summary>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
                 {PLUGIN_TEMPLATES.map((tpl) => (
-                  <div key={tpl.slug} className="bg-neutral-900/50 border border-neutral-800/50 rounded-xl p-4 flex items-start justify-between gap-3">
+                  <div key={tpl.slug} className="bg-neutral-900 border border-neutral-800/60 rounded-xl p-4 flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <span className="text-sm font-medium text-neutral-200">{tpl.name}</span>
-                        <Badge label={tpl.plugin_type} color={tpl.plugin_type === 'webhook' ? 'blue' : 'purple'} />
+                        <span className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-semibold border ${
+                          tpl.plugin_type === 'webhook' ? 'bg-blue-950/40 text-blue-400 border-blue-900/40' : 'bg-violet-950/40 text-violet-400 border-violet-900/40'
+                        }`}>{tpl.plugin_type}</span>
                       </div>
                       <p className="text-xs text-neutral-500">{tpl.description}</p>
                     </div>
                     <button
                       onClick={() => handleInstallTemplate(tpl)}
-                      className="shrink-0 px-3 py-1.5 text-xs font-semibold bg-neutral-800 text-neutral-200 rounded-lg hover:bg-neutral-700 transition-colors"
+                      className="shrink-0 px-3 py-1.5 text-xs font-semibold bg-neutral-800 text-neutral-300 rounded-lg hover:bg-neutral-700 hover:text-white transition-colors duration-150 border border-neutral-700/60"
                     >
                       Install
                     </button>
@@ -1087,7 +1074,7 @@ export default function AutomationsPage() {
           )}
 
           {plugins.length === 0 && !isPluginFormOpen && (
-            <div className="bg-neutral-900/50 border border-neutral-800/50 rounded-xl mt-3">
+            <div className="bg-neutral-900 border border-neutral-800/60 rounded-xl mt-3">
               <EmptyState message="No plugins installed yet — use a template above or click Add plugin" />
             </div>
           )}
@@ -1097,7 +1084,7 @@ export default function AutomationsPage() {
   )
 }
 
-// ─── Trigger form component ───────────────────────────────────────────────────
+// ─── TriggerForm component ────────────────────────────────────────────────────
 
 type TriggerFormProps = {
   form: typeof EMPTY_TRIGGER_FORM
@@ -1113,37 +1100,34 @@ function TriggerForm({ form, agents, error, isEdit, onChange, onSave, onCancel }
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {/* Name */}
         <div>
-          <label className="block text-xs text-neutral-500 mb-1.5">Name</label>
+          <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">Name</label>
           <input
             value={form.name}
             onChange={(e) => onChange('name', e.target.value)}
             placeholder="e.g. GitHub push event"
-            className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none"
+            className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none transition-colors duration-150"
           />
         </div>
 
-        {/* Slug */}
         <div>
-          <label className="block text-xs text-neutral-500 mb-1.5">
-            Slug <span className="text-neutral-600">(URL-safe, auto-generated from name)</span>
+          <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">
+            Slug <span className="normal-case text-neutral-700 font-normal">(auto-generated from name)</span>
           </label>
           <input
             value={form.slug}
             onChange={(e) => onChange('slug', e.target.value)}
             placeholder="github-push-event"
-            className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none"
+            className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors duration-150"
           />
         </div>
 
-        {/* Agent */}
         <div className="sm:col-span-2">
-          <label className="block text-xs text-neutral-500 mb-1.5">Agent</label>
+          <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">Agent</label>
           <select
             value={form.agent_id}
             onChange={(e) => onChange('agent_id', e.target.value)}
-            className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none"
+            className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none transition-colors duration-150"
           >
             <option value="">Select agent...</option>
             {agents.map((a) => (
@@ -1153,19 +1137,17 @@ function TriggerForm({ form, agents, error, isEdit, onChange, onSave, onCancel }
         </div>
       </div>
 
-      {/* Task template */}
       <div>
-        <label className="block text-xs text-neutral-500 mb-1.5">Task template</label>
+        <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">Task template</label>
         <textarea
           value={form.task_template}
           onChange={(e) => onChange('task_template', e.target.value)}
           placeholder={'Process this webhook data: {{payload}}'}
           rows={4}
-          className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-3 text-sm text-white leading-relaxed font-mono focus:border-neutral-600 focus:outline-none resize-y"
+          className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-3 text-sm text-white leading-relaxed font-mono focus:border-neutral-600 focus:outline-none transition-colors duration-150 resize-y"
         />
-        <p className="mt-1.5 text-[11px] text-neutral-600">
-          Use <code className="text-neutral-500 bg-neutral-800 px-1 py-0.5 rounded">{'{{payload}}'}</code> to include the raw POST body in the task. Example:{' '}
-          <span className="text-neutral-500 font-mono">{'Process this data: {{payload}}'}</span>
+        <p className="mt-1.5 text-xs text-neutral-600">
+          Use <code className="text-neutral-500 bg-neutral-800/80 px-1 py-0.5 rounded">{'{{payload}}'}</code> to include the raw POST body.
         </p>
       </div>
 
@@ -1174,16 +1156,10 @@ function TriggerForm({ form, agents, error, isEdit, onChange, onSave, onCancel }
       )}
 
       <div className="flex gap-2 pt-1">
-        <button
-          onClick={onSave}
-          className="px-4 py-2 text-xs font-semibold bg-white text-black rounded-lg hover:bg-neutral-200 transition-colors"
-        >
+        <button onClick={onSave} className="px-4 py-2 text-xs font-semibold bg-white text-black rounded-lg hover:bg-neutral-200 active:bg-neutral-300 active:scale-[0.97] transition-all duration-150">
           {isEdit ? 'Save changes' : 'Create trigger'}
         </button>
-        <button
-          onClick={onCancel}
-          className="px-4 py-2 text-xs font-medium border border-neutral-700 text-neutral-400 rounded-lg hover:text-white hover:border-neutral-600 transition-colors"
-        >
+        <button onClick={onCancel} className="px-4 py-2 text-xs font-medium border border-neutral-800 text-neutral-500 rounded-lg hover:text-white hover:border-neutral-700 transition-colors duration-150">
           Cancel
         </button>
       </div>
@@ -1191,7 +1167,7 @@ function TriggerForm({ form, agents, error, isEdit, onChange, onSave, onCancel }
   )
 }
 
-// ─── Plugin form component ────────────────────────────────────────────────────
+// ─── PluginForm component ─────────────────────────────────────────────────────
 
 type PluginFormProps = {
   form: typeof EMPTY_PLUGIN_FORM
@@ -1203,90 +1179,85 @@ type PluginFormProps = {
 }
 
 const HOOK_OPTIONS: { value: Plugin['hook']; label: string; desc: string }[] = [
-  { value: 'pre_task',       label: 'Pre-task',       desc: 'Runs before the agent starts (can modify task)' },
-  { value: 'post_task',      label: 'Post-task',      desc: 'Runs after the agent completes (can modify result)' },
-  { value: 'pre_tool',       label: 'Pre-tool',       desc: 'Runs before each tool is executed' },
-  { value: 'post_tool',      label: 'Post-tool',      desc: 'Runs after each tool returns' },
-  { value: 'on_memory_save', label: 'Memory save',    desc: 'Runs when a memory is persisted' },
+  { value: 'pre_task',       label: 'Pre-task',    desc: 'Runs before the agent starts (can modify task)' },
+  { value: 'post_task',      label: 'Post-task',   desc: 'Runs after the agent completes (can modify result)' },
+  { value: 'pre_tool',       label: 'Pre-tool',    desc: 'Runs before each tool is executed' },
+  { value: 'post_tool',      label: 'Post-tool',   desc: 'Runs after each tool returns' },
+  { value: 'on_memory_save', label: 'Memory save', desc: 'Runs when a memory is persisted' },
 ]
 
-const TYPE_OPTIONS: { value: Plugin['plugin_type']; label: string; desc: string; color: string }[] = [
-  { value: 'webhook',   label: 'Webhook',   desc: 'POST context to an external URL',              color: 'blue' },
-  { value: 'transform', label: 'Transform', desc: 'Apply a built-in text transform to task/result', color: 'purple' },
-  { value: 'schedule',  label: 'Schedule',  desc: 'Schedule-based hook (via automations)',          color: 'emerald' },
+const TYPE_OPTIONS: { value: Plugin['plugin_type']; label: string; desc: string; cls: string }[] = [
+  { value: 'webhook',   label: 'Webhook',   desc: 'POST context to an external URL',               cls: 'border-blue-700/60 bg-blue-950/30 text-blue-400' },
+  { value: 'transform', label: 'Transform', desc: 'Apply a built-in text transform to task/result', cls: 'border-violet-700/60 bg-violet-950/30 text-violet-400' },
+  { value: 'schedule',  label: 'Schedule',  desc: 'Schedule-based hook (via automations)',           cls: 'border-emerald-700/60 bg-emerald-950/30 text-emerald-400' },
 ]
 
 function PluginForm({ form, error, isEdit, onChange, onSave, onCancel }: PluginFormProps) {
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {/* Name */}
         <div>
-          <label className="block text-xs text-neutral-500 mb-1.5">Name</label>
+          <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">Name</label>
           <input
             value={form.name}
             onChange={(e) => onChange('name', e.target.value)}
             placeholder="e.g. Slack Notification"
-            className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none"
+            className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none transition-colors duration-150"
           />
         </div>
 
-        {/* Slug */}
         <div>
-          <label className="block text-xs text-neutral-500 mb-1.5">
-            Slug <span className="text-neutral-600">(auto-generated)</span>
+          <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">
+            Slug <span className="normal-case text-neutral-700 font-normal">(auto-generated)</span>
           </label>
           <input
             value={form.slug}
             onChange={(e) => onChange('slug', e.target.value)}
             placeholder="slack-notification"
-            className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none"
+            className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors duration-150"
           />
         </div>
 
-        {/* Description */}
         <div className="sm:col-span-2">
-          <label className="block text-xs text-neutral-500 mb-1.5">Description <span className="text-neutral-600">(optional)</span></label>
+          <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">
+            Description <span className="normal-case text-neutral-700 font-normal">(optional)</span>
+          </label>
           <input
             value={form.description}
             onChange={(e) => onChange('description', e.target.value)}
             placeholder="What does this plugin do?"
-            className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none"
+            className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none transition-colors duration-150"
           />
         </div>
       </div>
 
-      {/* Type selector */}
       <div>
-        <label className="block text-xs text-neutral-500 mb-2">Plugin type</label>
+        <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-2">Plugin type</label>
         <div className="flex gap-2 flex-wrap">
           {TYPE_OPTIONS.map((opt) => (
             <button
               key={opt.value}
               type="button"
               onClick={() => onChange('plugin_type', opt.value)}
-              className={`flex-1 min-w-[130px] px-3 py-2.5 text-xs rounded-lg border transition-colors text-left ${
+              className={`flex-1 min-w-[130px] px-3 py-2.5 text-xs rounded-lg border transition-colors duration-150 text-left ${
                 form.plugin_type === opt.value
-                  ? opt.color === 'blue'    ? 'border-blue-600 bg-blue-950/30 text-blue-400'
-                  : opt.color === 'purple'  ? 'border-purple-600 bg-purple-950/30 text-purple-400'
-                  : 'border-emerald-600 bg-emerald-950/30 text-emerald-400'
-                  : 'border-neutral-800 bg-neutral-800/50 text-neutral-400 hover:border-neutral-700 hover:text-neutral-300'
+                  ? opt.cls
+                  : 'border-neutral-800 bg-neutral-800/40 text-neutral-400 hover:border-neutral-700 hover:text-neutral-300'
               }`}
             >
               <span className="font-semibold block">{opt.label}</span>
-              <span className="text-[10px] opacity-70">{opt.desc}</span>
+              <span className="text-xs opacity-70">{opt.desc}</span>
             </button>
           ))}
         </div>
       </div>
 
-      {/* Hook selector */}
       <div>
-        <label className="block text-xs text-neutral-500 mb-1.5">Hook</label>
+        <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">Hook</label>
         <select
           value={form.hook}
           onChange={(e) => onChange('hook', e.target.value)}
-          className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none"
+          className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none transition-colors duration-150"
         >
           {HOOK_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>{opt.label} — {opt.desc}</option>
@@ -1294,29 +1265,25 @@ function PluginForm({ form, error, isEdit, onChange, onSave, onCancel }: PluginF
         </select>
       </div>
 
-      {/* Webhook URL (only for webhook type) */}
       {form.plugin_type === 'webhook' && (
         <div>
-          <label className="block text-xs text-neutral-500 mb-1.5">Webhook URL</label>
+          <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">Webhook URL</label>
           <input
             value={form.webhook_url}
             onChange={(e) => onChange('webhook_url', e.target.value)}
             placeholder="https://hooks.slack.com/services/..."
-            className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none"
+            className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors duration-150"
           />
-          <p className="mt-1.5 text-[11px] text-neutral-600">
-            The agent will POST a JSON payload to this URL. Must be https://.
-          </p>
+          <p className="mt-1.5 text-xs text-neutral-600">The agent will POST a JSON payload to this URL. Must be https://.</p>
         </div>
       )}
 
-      {/* Config JSON (always shown, required for transforms) */}
       <div>
-        <label className="block text-xs text-neutral-500 mb-1.5">
-          Config <span className="text-neutral-600">(JSON)</span>
+        <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">
+          Config <span className="normal-case text-neutral-700 font-normal">(JSON)</span>
           {form.plugin_type === 'transform' && (
-            <span className="ml-2 text-neutral-600">
-              — use <code className="text-neutral-500 bg-neutral-800 px-1 rounded">{'{"transform":"prefix","prefix":"[Agent] "}'}</code>
+            <span className="ml-2 normal-case text-neutral-700 font-normal">
+              — use <code className="text-neutral-600 bg-neutral-800/80 px-1 rounded text-xs">{'{"transform":"prefix","prefix":"[Agent] "}'}</code>
             </span>
           )}
         </label>
@@ -1324,7 +1291,7 @@ function PluginForm({ form, error, isEdit, onChange, onSave, onCancel }: PluginF
           value={form.config_json}
           onChange={(e) => onChange('config_json', e.target.value)}
           rows={3}
-          className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-3 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none resize-y"
+          className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-3 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors duration-150 resize-y"
         />
       </div>
 
@@ -1333,16 +1300,10 @@ function PluginForm({ form, error, isEdit, onChange, onSave, onCancel }: PluginF
       )}
 
       <div className="flex gap-2 pt-1">
-        <button
-          onClick={onSave}
-          className="px-4 py-2 text-xs font-semibold bg-white text-black rounded-lg hover:bg-neutral-200 transition-colors"
-        >
+        <button onClick={onSave} className="px-4 py-2 text-xs font-semibold bg-white text-black rounded-lg hover:bg-neutral-200 active:bg-neutral-300 active:scale-[0.97] transition-all duration-150">
           {isEdit ? 'Save changes' : 'Create plugin'}
         </button>
-        <button
-          onClick={onCancel}
-          className="px-4 py-2 text-xs font-medium border border-neutral-700 text-neutral-400 rounded-lg hover:text-white hover:border-neutral-600 transition-colors"
-        >
+        <button onClick={onCancel} className="px-4 py-2 text-xs font-medium border border-neutral-800 text-neutral-500 rounded-lg hover:text-white hover:border-neutral-700 transition-colors duration-150">
           Cancel
         </button>
       </div>

@@ -21,7 +21,6 @@ export const CreateAgentSchema = z.object({
   telegram_bot_token: z.string().nullable().optional(),
   telegram_bot_username: z.string().nullable().optional(),
   requires_approval: z.array(z.string()).nullable().optional(),
-  capabilities: z.array(z.string()).optional(),
 })
 
 export const UpdateAgentSchema = CreateAgentSchema.partial().extend({
@@ -254,3 +253,23 @@ export const UpdateMcpServerSchema = CreateMcpServerSchema.partial()
 
 export type CreateMcpServerInput = z.infer<typeof CreateMcpServerSchema>
 export type UpdateMcpServerInput = z.infer<typeof UpdateMcpServerSchema>
+
+// ─── Task Board ───────────────────────────────────────────────────────────────
+
+export const CreateTaskSchema = z.object({
+  orchestrator_id: UuidSchema,
+  title: z.string().min(1, 'Title is required').max(200),
+  description: z.string().max(2000).nullable().optional(),
+  priority: z.enum(['low', 'medium', 'high']).default('medium'),
+})
+
+export const UpdateTaskSchema = z.object({
+  title: z.string().min(1).max(200).optional(),
+  description: z.string().max(2000).nullable().optional(),
+  priority: z.enum(['low', 'medium', 'high']).optional(),
+  status: z.enum(['todo', 'in_progress', 'done', 'cancelled']).optional(),
+  job_id: z.string().uuid().nullable().optional(),
+})
+
+export type CreateTaskInput = z.infer<typeof CreateTaskSchema>
+export type UpdateTaskInput = z.infer<typeof UpdateTaskSchema>

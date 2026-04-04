@@ -49,7 +49,7 @@ export default function LandingPage() {
       {/* ── Hero ────────────────────────────────────────────── */}
       <section className="pt-24 sm:pt-36 pb-16 sm:pb-24 px-4 sm:px-6">
         <div className="max-w-5xl mx-auto">
-          <div className="font-mono text-[10px] sm:text-xs text-neutral-500 mb-6 sm:mb-8">
+          <div className="font-mono text-xs sm:text-xs text-neutral-500 mb-6 sm:mb-8">
             <span className="text-emerald-500">~</span> v1.0 &middot; open source &middot; MIT license
           </div>
           <h1 className="text-[3.5rem] sm:text-8xl md:text-[9.5rem] font-bold text-white leading-[0.9] tracking-tighter">
@@ -76,9 +76,9 @@ export default function LandingPage() {
               <span className="w-2.5 h-2.5 rounded-full bg-[#ff5f57]" />
               <span className="w-2.5 h-2.5 rounded-full bg-[#febc2e]" />
               <span className="w-2.5 h-2.5 rounded-full bg-[#28c840]" />
-              <span className="ml-2 text-[10px] font-mono text-neutral-500">kwint-agents — bash</span>
+              <span className="ml-2 text-xs font-mono text-neutral-500">kwint-agents — bash</span>
             </div>
-            <div className="p-4 sm:p-5 font-mono text-[10px] sm:text-xs leading-relaxed">
+            <div className="p-4 sm:p-5 font-mono text-xs sm:text-xs leading-relaxed">
               <Line prompt>kwint agent create --template researcher</Line>
               <Line ok>Agent &quot;researcher&quot; created · capabilities: [web-search, data-analysis]</Line>
               <Line prompt>kwint connect google-sheets stripe github slack</Line>
@@ -109,7 +109,7 @@ export default function LandingPage() {
                 <span className="text-2xl sm:text-3xl font-bold text-white font-mono">{s.value}</span>
                 <span className="text-xs text-neutral-400 font-mono">{s.unit}</span>
               </div>
-              <p className="text-[10px] text-neutral-500 font-mono mt-1">{s.detail}</p>
+              <p className="text-xs text-neutral-500 font-mono mt-1">{s.detail}</p>
             </div>
           ))}
         </div>
@@ -139,7 +139,7 @@ export default function LandingPage() {
                   <h3 className="text-xs sm:text-sm font-mono font-bold text-white">{f.title}</h3>
                   <span className="text-[9px] font-mono text-neutral-600 group-hover:text-neutral-500 uppercase">{f.k}</span>
                 </div>
-                <p className="text-[11px] sm:text-xs text-neutral-400 leading-relaxed font-mono">{f.desc}</p>
+                <p className="text-xs sm:text-xs text-neutral-400 leading-relaxed font-mono">{f.desc}</p>
               </div>
             ))}
           </div>
@@ -168,7 +168,7 @@ export default function LandingPage() {
                   <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded-full ${t.role === 'orchestrator' ? 'bg-blue-950/60 text-blue-400 border border-blue-900/40' : 'bg-neutral-800 text-neutral-500 border border-neutral-700'}`}>{t.role}</span>
                 </div>
                 <p className="text-xs font-mono font-bold text-white mt-2">{t.name}</p>
-                <p className="text-[10px] font-mono text-neutral-500 mt-1 leading-relaxed">{t.desc}</p>
+                <p className="text-xs font-mono text-neutral-500 mt-1 leading-relaxed">{t.desc}</p>
               </div>
             ))}
           </div>
@@ -231,9 +231,9 @@ export default function LandingPage() {
               <span className="w-2.5 h-2.5 rounded-full bg-[#ff5f57]" />
               <span className="w-2.5 h-2.5 rounded-full bg-[#febc2e]" />
               <span className="w-2.5 h-2.5 rounded-full bg-[#28c840]" />
-              <span className="ml-2 text-[10px] font-mono text-neutral-500">data-flow.txt</span>
+              <span className="ml-2 text-xs font-mono text-neutral-500">data-flow.txt</span>
             </div>
-            <pre className="p-4 sm:p-5 text-[10px] sm:text-xs font-mono text-neutral-400 leading-relaxed overflow-x-auto whitespace-pre-wrap sm:whitespace-pre">{`user ──→ backend ──→ llm (anthropic / openai / gemini…)
+            <pre className="p-4 sm:p-5 text-xs sm:text-xs font-mono text-neutral-400 leading-relaxed overflow-x-auto whitespace-pre-wrap sm:whitespace-pre">{`user ──→ backend ──→ llm (anthropic / openai / gemini…)
                       ├──→ tools (search · http · memory · delegate…)
                       ├──→ skills (113 api connectors, loaded on demand)
                       └──→ supabase (jobs · memories · runs · traces)
@@ -252,7 +252,7 @@ export default function LandingPage() {
 
           <div className="mt-8 sm:mt-12 border border-neutral-800 rounded-lg p-4 sm:p-5 bg-[#0d0d0d]">
             <p className="text-xs font-mono text-neutral-400 mb-3">prerequisites</p>
-            <div className="font-mono text-[11px] sm:text-xs text-neutral-400 space-y-1">
+            <div className="font-mono text-xs sm:text-xs text-neutral-400 space-y-1">
               <p>node 20+ &middot; python 3.12+ &middot; <a href="https://supabase.com" className="text-emerald-500 hover:text-emerald-400 underline underline-offset-2" target="_blank" rel="noopener">supabase</a> project &middot; an LLM API key (Anthropic, OpenAI, or any supported provider)</p>
             </div>
           </div>
@@ -260,7 +260,7 @@ export default function LandingPage() {
           <div className="mt-6 flex gap-px bg-neutral-900 rounded-t-lg overflow-hidden border border-b-0 border-neutral-800">
             {(['vercel', 'docker', 'local'] as const).map(t => (
               <button key={t} onClick={() => setActiveTab(t)}
-                className={`flex-1 px-3 py-2.5 text-[10px] sm:text-xs font-mono transition-colors ${activeTab === t ? 'bg-[#131313] text-emerald-500' : 'bg-[#0a0a0a] text-neutral-500 hover:text-neutral-300'}`}>
+                className={`flex-1 px-3 py-2.5 text-xs sm:text-xs font-mono transition-colors ${activeTab === t ? 'bg-[#131313] text-emerald-500' : 'bg-[#0a0a0a] text-neutral-500 hover:text-neutral-300'}`}>
                 {t}
               </button>
             ))}
@@ -272,7 +272,7 @@ export default function LandingPage() {
 git clone https://github.com/your-org/kwint-agent-one.git`}</CodeBlock>
               <CodeBlock title="deploy dashboard">{`cd kwint-dashboard && npm i && npx vercel --prod`}</CodeBlock>
               <CodeBlock title="deploy backend">{`cd kwint-agent-one && npx vercel --prod`}</CodeBlock>
-              <div className="font-mono text-[10px] sm:text-[11px] text-neutral-500 space-y-1 mt-3">
+              <div className="font-mono text-xs sm:text-xs text-neutral-500 space-y-1 mt-3">
                 <p className="text-neutral-400 mb-1">env vars (set in vercel dashboard):</p>
                 <p>NEXT_PUBLIC_SUPABASE_URL &middot; NEXT_PUBLIC_SUPABASE_ANON_KEY</p>
                 <p>NEXT_PUBLIC_AGENT_API_URL &middot; ANTHROPIC_API_KEY</p>
@@ -321,8 +321,8 @@ docker run -p 3001:3001 \\
       {/* ── Footer ─────────────────────────────────────────── */}
       <footer className="border-t border-neutral-900 py-6 sm:py-8 px-4 sm:px-6">
         <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
-          <span className="text-[10px] font-mono text-neutral-500">kwint-agents &middot; MIT &middot; 2026</span>
-          <div className="flex items-center gap-6 text-[10px] font-mono text-neutral-500">
+          <span className="text-xs font-mono text-neutral-500">kwint-agents &middot; MIT &middot; 2026</span>
+          <div className="flex items-center gap-6 text-xs font-mono text-neutral-500">
             <a href="#docs" className="hover:text-emerald-400 transition-colors">docs</a>
             <a href="#features" className="hover:text-emerald-400 transition-colors">features</a>
             <Link href="/login" className="hover:text-emerald-400 transition-colors">sign in</Link>
@@ -338,7 +338,7 @@ docker run -p 3001:3001 \\
 function SectionHead({ tag, title }: { tag: string; title: string }) {
   return (
     <div className="flex items-center gap-3">
-      <span className="text-[10px] font-mono text-emerald-500 border border-emerald-800 rounded px-1.5 py-0.5">{tag}</span>
+      <span className="text-xs font-mono text-emerald-500 border border-emerald-800 rounded px-2 py-1">{tag}</span>
       <h2 className="text-xl sm:text-2xl font-bold text-white">{title}</h2>
     </div>
   )
@@ -362,11 +362,11 @@ function StackTable({ title, rows }: { title: string; rows: string[][] }) {
         <span className="w-2.5 h-2.5 rounded-full bg-[#ff5f57]" />
         <span className="w-2.5 h-2.5 rounded-full bg-[#febc2e]" />
         <span className="w-2.5 h-2.5 rounded-full bg-[#28c840]" />
-        <span className="ml-2 text-[10px] font-mono text-neutral-500">{title}</span>
+        <span className="ml-2 text-xs font-mono text-neutral-500">{title}</span>
       </div>
       <div className="divide-y divide-neutral-900/50">
         {rows.map(([k, v]) => (
-          <div key={k} className="flex justify-between px-4 py-2 text-[11px] sm:text-xs font-mono bg-[#0a0a0a] hover:bg-[#0d0d0d] transition-colors">
+          <div key={k} className="flex justify-between px-4 py-2 text-xs sm:text-xs font-mono bg-[#0a0a0a] hover:bg-[#0d0d0d] transition-colors">
             <span className="text-neutral-500">{k}</span>
             <span className="text-neutral-300">{v}</span>
           </div>
@@ -379,8 +379,8 @@ function StackTable({ title, rows }: { title: string; rows: string[][] }) {
 function CodeBlock({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <p className="text-[10px] font-mono text-neutral-500 mb-1"># {title}</p>
-      <pre className="bg-[#0a0a0a] border border-neutral-800/50 rounded px-3 py-2 text-[10px] sm:text-[11px] font-mono text-emerald-500 overflow-x-auto leading-relaxed whitespace-pre-wrap sm:whitespace-pre">
+      <p className="text-xs font-mono text-neutral-500 mb-1"># {title}</p>
+      <pre className="bg-[#0a0a0a] border border-neutral-800/50 rounded px-3 py-2 text-xs sm:text-xs font-mono text-emerald-500 overflow-x-auto leading-relaxed whitespace-pre-wrap sm:whitespace-pre">
         {children}
       </pre>
     </div>

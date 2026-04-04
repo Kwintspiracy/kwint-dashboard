@@ -127,12 +127,21 @@ export default function SettingsPage() {
     // On success Supabase redirects to Google — no need to reset state
   }
 
+  const PROVIDER_ICON: Record<string, string> = {
+    anthropic: '/app-icons/anthropic.svg',
+    google:    '/app-icons/google-gemini.svg',
+  }
+  const PROVIDER_ABBR: Record<string, string> = {
+    openai: 'AI', mistral: 'M', groq: 'G',
+    cohere: 'C', deepseek: 'DS', together: 'T', mammoth: 'M', openrouter: 'OR', ollama: '∞',
+  }
+
   const loading = loadingKeys || loadingAgents
   const configuredCount = LLM_PROVIDERS.filter((p) => keys.some((k) => k.provider === p.id)).length
   const inUseCount = LLM_PROVIDERS.filter((p) => agentsByProvider[p.id]?.length > 0).length
 
   return (
-    <div className="p-6 lg:p-8 max-w-5xl">
+    <div className="space-y-5 max-w-7xl">
       <PageHeader
         title="Settings"
         subtitle={`${configuredCount} provider${configuredCount !== 1 ? 's' : ''} configured · ${inUseCount} in use by agents`}
@@ -198,15 +207,15 @@ export default function SettingsPage() {
               const inUse = usedByAgents.length > 0
               const needsKey = inUse && !configured
 
-              // Border color: configured > needsKey (warning) > inUse > default
+              // Border color: configured → emerald, warning → amber, default → neutral
               const borderColor = configured
-                ? provider.color + '40'
+                ? '#10b98133'
                 : needsKey
-                  ? '#F59E0B40'
+                  ? '#F59E0B33'
                   : 'rgb(38 38 38)'
 
               const dotColor = configured
-                ? provider.color
+                ? '#10b981'
                 : needsKey
                   ? '#F59E0B'
                   : inUse
@@ -222,13 +231,21 @@ export default function SettingsPage() {
                   {/* Header */}
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-center gap-2.5">
-                      <div
-                        className="w-2.5 h-2.5 rounded-full shrink-0 mt-0.5"
-                        style={{ backgroundColor: dotColor }}
-                      />
+                      <div className="w-9 h-9 rounded-lg bg-neutral-800 border border-neutral-700/50 flex items-center justify-center shrink-0 overflow-hidden">
+                        {PROVIDER_ICON[provider.id] ? (
+                          <img src={PROVIDER_ICON[provider.id]} alt={provider.name} className="w-6 h-6 object-contain" />
+                        ) : (
+                          <span className="text-xs font-bold text-neutral-300 leading-none">
+                            {PROVIDER_ABBR[provider.id] ?? provider.name[0]}
+                          </span>
+                        )}
+                      </div>
                       <div>
-                        <p className="text-sm font-semibold text-neutral-100">{provider.name}</p>
-                        <p className="text-[11px] text-neutral-500 mt-0.5 leading-tight">{provider.description}</p>
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-sm font-semibold text-neutral-100">{provider.name}</p>
+                          <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: dotColor }} />
+                        </div>
+                        <p className="text-xs text-neutral-500 mt-0.5 leading-tight">{provider.description}</p>
                       </div>
                     </div>
                     {configured && (
@@ -245,26 +262,26 @@ export default function SettingsPage() {
 
                   {/* Key preview or warning */}
                   {configured && existing ? (
-                    <div className="text-[11px] text-neutral-500 font-mono bg-neutral-900 rounded-lg px-3 py-2 leading-tight">
+                    <div className="text-xs text-neutral-500 font-mono bg-neutral-900 rounded-lg px-3 py-2 leading-tight">
                       {maskKey(existing.api_key)}
                       {existing.base_url && (
                         <div className="mt-1 text-neutral-600 truncate">{existing.base_url}</div>
                       )}
                     </div>
                   ) : needsKey ? (
-                    <div className="flex items-center gap-1.5 text-[11px] text-amber-500/80 bg-amber-500/5 border border-amber-500/20 rounded-lg px-3 py-2">
+                    <div className="flex items-center gap-1.5 text-xs text-amber-500/80 bg-amber-500/5 border border-amber-500/20 rounded-lg px-3 py-2">
                       <Warning size={12} weight="fill" />
                       No key — {usedByAgents.length} agent{usedByAgents.length > 1 ? 's' : ''} use this provider
                     </div>
                   ) : (
-                    <div className="text-[11px] text-neutral-700 italic">Not configured</div>
+                    <div className="text-xs text-neutral-700 italic">Not configured</div>
                   )}
 
                   {/* Agents using this provider */}
                   {inUse && (
                     <div className="flex flex-wrap gap-1">
                       {usedByAgents.map((a) => (
-                        <span key={a.id} className="text-[10px] px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-400">
+                        <span key={a.id} className="text-xs px-2 py-1 rounded bg-neutral-800 text-neutral-400">
                           {a.name}
                         </span>
                       ))}
@@ -273,7 +290,7 @@ export default function SettingsPage() {
 
                   {/* Models count */}
                   {!inUse && (
-                    <p className="text-[10px] text-neutral-600">
+                    <p className="text-xs text-neutral-600">
                       {provider.models.length} model{provider.models.length > 1 ? 's' : ''} available
                     </p>
                   )}
@@ -281,13 +298,13 @@ export default function SettingsPage() {
                   {/* Action */}
                   <button
                     onClick={() => openModal(provider)}
-                    className="mt-auto text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
-                    style={configured
-                      ? { color: provider.color, backgroundColor: provider.color + '15' }
-                      : needsKey
-                        ? { color: '#F59E0B', backgroundColor: '#F59E0B15' }
-                        : { color: '#a3a3a3', backgroundColor: 'rgb(23 23 23)' }
-                    }
+                    className={`mt-auto text-xs font-medium px-3 py-1.5 rounded-lg transition-colors ${
+                      configured
+                        ? 'text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20'
+                        : needsKey
+                          ? 'text-amber-400 bg-amber-500/10 hover:bg-amber-500/20'
+                          : 'text-neutral-400 bg-neutral-800 hover:bg-neutral-700'
+                    }`}
                   >
                     {configured ? 'Update key' : needsKey ? 'Add key' : 'Configure'}
                   </button>
@@ -361,7 +378,7 @@ export default function SettingsPage() {
                     {showKey ? <EyeSlash size={15} /> : <Eye size={15} />}
                   </button>
                 </div>
-                <p className="text-[11px] text-neutral-600 mt-1.5">{modal.keyHelp}</p>
+                <p className="text-xs text-neutral-600 mt-1.5">{modal.keyHelp}</p>
               </div>
 
               <div>
@@ -370,7 +387,7 @@ export default function SettingsPage() {
                   {modal.models.map((m) => (
                     <span
                       key={m.value}
-                      className="text-[11px] px-2 py-0.5 rounded-full bg-neutral-900 text-neutral-400 border border-neutral-800"
+                      className="text-xs px-2 py-0.5 rounded-full bg-neutral-900 text-neutral-400 border border-neutral-800"
                     >
                       {m.label}
                     </span>

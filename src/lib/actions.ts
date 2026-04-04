@@ -28,9 +28,12 @@ import {
   SaveLlmKeySchema,
   JobsPageSchema,
   ToolCallsPageSchema,
+  CreateTaskSchema,
+  UpdateTaskSchema,
   type JobsPageInput,
   type ToolCallsPageInput,
 } from '@/lib/schemas'
+import { SKILL_CAPABILITIES } from '@/lib/skill-templates'
 
 async function getActiveEntityId(): Promise<string | null> {
   const cookieStore = await cookies()
@@ -608,8 +611,15 @@ export async function updateAgentAction(
 export async function deleteAgentAction(id: string): Promise<ActionResult> {
   try {
     const { supabase, entityId } = await requireAuthWithEntity()
-    const { error } = await supabase.from('agents').delete().eq('id', id).eq('entity_id', entityId)
 
+    const [{ count: jobCount }, { count: memCount }] = await Promise.all([
+      supabase.from('agent_jobs').select('id', { count: 'exact', head: true }).eq('agent_id', id).eq('entity_id', entityId),
+      supabase.from('agent_memory').select('id', { count: 'exact', head: true }).eq('agent_id', id).eq('entity_id', entityId),
+    ])
+    if ((jobCount ?? 0) > 0) return fail(`Cannot delete agent — it has ${jobCount} job(s). Delete them first.`)
+    if ((memCount ?? 0) > 0) return fail(`Cannot delete agent — it has ${memCount} memor${memCount === 1 ? 'y' : 'ies'}. Clear them first.`)
+
+    const { error } = await supabase.from('agents').delete().eq('id', id).eq('entity_id', entityId)
     if (error) return dbFail(error)
     return ok(undefined)
   } catch (e) {
@@ -744,6 +754,7 @@ export async function createSkillAction(
       const junctions = connector_ids.map((connector_id) => ({
         skill_id: (data as { id: string }).id,
         connector_id,
+        entity_id: entityId,
       }))
 
       const { error: junctionError } = await supabase
@@ -871,6 +882,7 @@ export async function updateSkillConnectorsAction(
       const junctions = connectorIds.map((connector_id) => ({
         skill_id: skillId,
         connector_id,
+        entity_id: entityId,
       }))
 
       const { error: insertError } = await supabase
@@ -1991,6 +2003,19 @@ export async function setAgentSkillAssignmentsAction(agentId: string, skillIds: 
       const { error } = await supabase.from('agent_skill_assignments').insert(rows)
       if (error) return dbFail(error)
     }
+    // Derive capabilities from skill slugs and persist — this is the single source of truth
+    const capabilities: string[] = []
+    if (skillIds.length > 0) {
+      const { data: skillRows } = await supabase
+        .from('agent_skills')
+        .select('slug')
+        .in('id', skillIds)
+        .eq('entity_id', entityId)
+      const slugs = (skillRows ?? []).map((r: { slug: string }) => r.slug)
+      const caps = [...new Set(slugs.flatMap(slug => SKILL_CAPABILITIES[slug] ?? []))]
+      capabilities.push(...caps)
+    }
+    await supabase.from('agents').update({ capabilities }).eq('id', agentId).eq('entity_id', entityId)
     return ok(null)
   } catch (e) {
     return dbError(e)
@@ -2050,6 +2075,8 @@ export async function setAgentOrchestratorAction(agentId: string, orchestratorId
         orchestrator_id: orchestratorId, sub_agent_id: agentId, entity_id: entityId,
       })
       if (error) return dbFail(error)
+      // Keep role in sync: mark orchestrator as role='orchestrator'
+      await supabase.from('agents').update({ role: 'orchestrator' }).eq('id', orchestratorId).eq('entity_id', entityId)
     }
     return ok(null)
   } catch (e) { return dbError(e) }
@@ -2071,6 +2098,8 @@ export async function setOrchestratorAssignmentsAction(
       }))
       const { error } = await supabase.from('agent_assignments').insert(rows)
       if (error) return dbFail(error)
+      // Keep role in sync: mark orchestrator as role='orchestrator'
+      await supabase.from('agents').update({ role: 'orchestrator' }).eq('id', orchestratorId).eq('entity_id', entityId)
     }
     return ok(null)
   } catch (e) { return dbError(e) }
@@ -2100,6 +2129,121 @@ export async function getAllSkillAssignmentsAction(): Promise<ActionResult<{ age
     if (error) return dbFail(error)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return ok((data ?? []).map((r: any) => ({ agent_id: r.agent_id, slug: r.agent_skills?.slug ?? '' })).filter((r: { agent_id: string; slug: string }) => r.slug))
+  } catch (e) { return dbError(e) }
+}
+
+// ─── Task Board Actions ───────────────────────────────────────────────────────
+
+export async function getTasksAction(orchestratorId: string): Promise<unknown[]> {
+  const { supabase, entityId } = await requireAuthWithEntity()
+  const { data, error } = await supabase
+    .from('agent_tasks')
+    .select('*, agents!agent_tasks_orchestrator_id_fkey(name, slug)')
+    .eq('entity_id', entityId)
+    .eq('orchestrator_id', orchestratorId)
+    .order('created_at', { ascending: false })
+  if (error) throw new Error(error.message)
+  return data ?? []
+}
+
+export async function createTaskAction(raw: unknown): Promise<ActionResult<unknown>> {
+  const parsed = CreateTaskSchema.safeParse(raw)
+  if (!parsed.success) return fail(parsed.error.message)
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+    const { data, error } = await supabase
+      .from('agent_tasks')
+      .insert({ ...parsed.data, entity_id: entityId })
+      .select()
+      .single()
+    if (error) return dbFail(error)
+    return ok(data)
+  } catch (e) { return dbError(e) }
+}
+
+export async function updateTaskAction(id: string, raw: unknown): Promise<ActionResult<unknown>> {
+  const parsed = UpdateTaskSchema.safeParse(raw)
+  if (!parsed.success) return fail(parsed.error.message)
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+    const { data, error } = await supabase
+      .from('agent_tasks')
+      .update(parsed.data)
+      .eq('id', id)
+      .eq('entity_id', entityId)
+      .select()
+      .single()
+    if (error) return dbFail(error)
+    return ok(data)
+  } catch (e) { return dbError(e) }
+}
+
+export async function deleteTaskAction(id: string): Promise<ActionResult> {
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+    const { error } = await supabase
+      .from('agent_tasks')
+      .delete()
+      .eq('id', id)
+      .eq('entity_id', entityId)
+    if (error) return dbFail(error)
+    return ok(undefined)
+  } catch (e) { return dbError(e) }
+}
+
+export async function startTaskAction(id: string): Promise<ActionResult<{ job_id: string | null }>> {
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+
+    // Load task + orchestrator slug
+    const { data: task, error: taskErr } = await supabase
+      .from('agent_tasks')
+      .select('*, agents!agent_tasks_orchestrator_id_fkey(slug)')
+      .eq('id', id)
+      .eq('entity_id', entityId)
+      .single()
+    if (taskErr || !task) return fail('Task not found')
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const orchestratorSlug = (task as any).agents?.slug as string | undefined
+    if (!orchestratorSlug) return fail('Orchestrator not found')
+
+    const taskText = [task.title, task.description].filter(Boolean).join('\n\n')
+
+    // Kick off a job via the agent API
+    const agentUrl = process.env.NEXT_PUBLIC_AGENT_API_URL
+    const apiKey = process.env.API_SECRET_KEY
+    let jobId: string | null = null
+
+    if (agentUrl) {
+      try {
+        const res = await fetch(`${agentUrl}/api/agent`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+          },
+          body: JSON.stringify({ task: taskText, async: true, agent_slug: orchestratorSlug, entity_id: entityId }),
+        })
+        if (!res.ok) return fail(`Agent API error ${res.status}: ${await res.text().catch(() => '')}`)
+        const result = await res.json().catch(() => ({}))
+        jobId = (result as { job_id?: string }).job_id ?? null
+      } catch (e) {
+        return fail(`Agent API unreachable: ${e instanceof Error ? e.message : String(e)}`)
+      }
+    } else {
+      return fail('Agent API URL not configured (NEXT_PUBLIC_AGENT_API_URL)')
+    }
+
+    // Update task to in_progress and store job_id
+    const { error: updateErr } = await supabase
+      .from('agent_tasks')
+      .update({ status: 'in_progress', ...(jobId ? { job_id: jobId } : {}) })
+      .eq('id', id)
+      .eq('entity_id', entityId)
+    if (updateErr) return dbFail(updateErr)
+
+    return ok({ job_id: jobId })
   } catch (e) { return dbError(e) }
 }
 

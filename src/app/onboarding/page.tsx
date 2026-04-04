@@ -141,7 +141,7 @@ function OnboardingContent() {
               </p>
               <button
                 onClick={() => setStep(1)}
-                className="mt-4 w-full rounded-lg bg-white text-black py-2.5 text-sm font-medium hover:bg-neutral-200 transition-colors"
+                className="mt-4 w-full rounded-lg bg-white text-black py-2.5 text-sm font-medium hover:bg-neutral-200 active:bg-neutral-300 active:scale-[0.97] transition-all duration-150"
               >
                 Get started
               </button>
@@ -266,7 +266,7 @@ function OnboardingContent() {
               <button
                 onClick={next}
                 disabled={submitting}
-                className="flex-1 rounded-lg bg-white text-black py-2.5 text-sm font-medium hover:bg-neutral-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                className="flex-1 rounded-lg bg-white text-black py-2.5 text-sm font-medium hover:bg-neutral-200 active:bg-neutral-300 active:scale-[0.97] transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {step === 3 ? 'Create workspace' : 'Next'}
               </button>

@@ -74,11 +74,11 @@ export default function LogsPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-neutral-800/50">
-              <th className="text-left px-5 py-3.5 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Tool</th>
-              <th className="text-left hidden md:table-cell px-5 py-3.5 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Input</th>
-              <th className="text-left px-5 py-3.5 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Duration</th>
-              <th className="text-left hidden md:table-cell px-5 py-3.5 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Channel</th>
-              <th className="text-left px-5 py-3.5 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Time</th>
+              <th className="text-left px-5 py-3.5 text-xs text-neutral-500 font-semibold uppercase tracking-wider">Tool</th>
+              <th className="text-left hidden md:table-cell px-5 py-3.5 text-xs text-neutral-500 font-semibold uppercase tracking-wider">Input</th>
+              <th className="text-left px-5 py-3.5 text-xs text-neutral-500 font-semibold uppercase tracking-wider">Duration</th>
+              <th className="text-left hidden md:table-cell px-5 py-3.5 text-xs text-neutral-500 font-semibold uppercase tracking-wider">Channel</th>
+              <th className="text-left px-5 py-3.5 text-xs text-neutral-500 font-semibold uppercase tracking-wider">Time</th>
             </tr>
           </thead>
           <tbody>
@@ -123,20 +123,20 @@ export default function LogsPage() {
                     <tr key={`${call.id}-detail`} className="border-b border-neutral-800/50 bg-neutral-900/80">
                       <td colSpan={5} className="px-5 py-4 space-y-3">
                         <div>
-                          <p className="text-[10px] text-neutral-500 uppercase tracking-wider mb-1">Input</p>
+                          <p className="text-xs text-neutral-500 uppercase tracking-wider mb-1">Input</p>
                           <pre className="text-xs text-neutral-300 font-mono whitespace-pre-wrap bg-neutral-800/50 rounded-lg p-3 max-h-48 overflow-y-auto">
                             {call.tool_input ? JSON.stringify(call.tool_input, null, 2) : '—'}
                           </pre>
                         </div>
                         <div>
-                          <p className="text-[10px] text-neutral-500 uppercase tracking-wider mb-1">Output</p>
+                          <p className="text-xs text-neutral-500 uppercase tracking-wider mb-1">Output</p>
                           <pre className="text-xs text-neutral-300 font-mono whitespace-pre-wrap bg-neutral-800/50 rounded-lg p-3 max-h-48 overflow-y-auto">
                             {call.tool_output || '—'}
                           </pre>
                         </div>
                         {call.agent_jobs && (
                           <div>
-                            <p className="text-[10px] text-neutral-500 uppercase tracking-wider mb-1">Task</p>
+                            <p className="text-xs text-neutral-500 uppercase tracking-wider mb-1">Task</p>
                             <p className="text-xs text-neutral-400">{call.agent_jobs.task.slice(0, 200)}</p>
                           </div>
                         )}

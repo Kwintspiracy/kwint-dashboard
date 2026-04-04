@@ -161,7 +161,7 @@ export default function ApprovalsPage() {
         <button onClick={() => setTab('pending')} className={tabClass('pending')}>
           Pending
           {pending.length > 0 && (
-            <span className="ml-1.5 px-1.5 py-0.5 text-[10px] font-bold bg-amber-500/20 text-amber-400 rounded-full">
+            <span className="ml-1.5 px-2 py-1 text-xs font-bold bg-amber-500/20 text-amber-400 rounded-full">
               {pending.length}
             </span>
           )}
@@ -172,7 +172,7 @@ export default function ApprovalsPage() {
         <button onClick={() => setTab('rules')} className={tabClass('rules')}>
           Rules
           {rules.length > 0 && (
-            <span className="ml-1.5 px-1.5 py-0.5 text-[10px] font-bold bg-neutral-700 text-neutral-300 rounded-full">
+            <span className="ml-1.5 px-2 py-1 text-xs font-bold bg-neutral-700 text-neutral-300 rounded-full">
               {rules.length}
             </span>
           )}
@@ -199,13 +199,13 @@ export default function ApprovalsPage() {
 
               {a.agent_jobs && (
                 <div>
-                  <p className="text-[10px] text-neutral-500 uppercase tracking-wider mb-1">Task</p>
+                  <p className="text-xs text-neutral-500 uppercase tracking-wider mb-1">Task</p>
                   <p className="text-xs text-neutral-300">{a.agent_jobs.task.slice(0, 300)}</p>
                 </div>
               )}
 
               <div>
-                <p className="text-[10px] text-neutral-500 uppercase tracking-wider mb-1">Tool Input</p>
+                <p className="text-xs text-neutral-500 uppercase tracking-wider mb-1">Tool Input</p>
                 <pre className="text-xs text-neutral-300 font-mono whitespace-pre-wrap bg-neutral-800/50 rounded-lg p-3 max-h-40 overflow-y-auto">
                   {JSON.stringify(a.tool_input, null, 2)}
                 </pre>
@@ -246,11 +246,11 @@ export default function ApprovalsPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-neutral-800/50">
-                <th className="text-left px-5 py-3.5 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Tool</th>
-                <th className="text-left px-5 py-3.5 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Agent</th>
-                <th className="text-left px-5 py-3.5 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Status</th>
-                <th className="text-left px-5 py-3.5 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Resolved</th>
-                <th className="text-left px-5 py-3.5 text-[11px] text-neutral-500 font-semibold uppercase tracking-wider">Notes</th>
+                <th className="text-left px-5 py-3.5 text-xs text-neutral-500 font-semibold uppercase tracking-wider">Tool</th>
+                <th className="text-left px-5 py-3.5 text-xs text-neutral-500 font-semibold uppercase tracking-wider">Agent</th>
+                <th className="text-left px-5 py-3.5 text-xs text-neutral-500 font-semibold uppercase tracking-wider">Status</th>
+                <th className="text-left px-5 py-3.5 text-xs text-neutral-500 font-semibold uppercase tracking-wider">Resolved</th>
+                <th className="text-left px-5 py-3.5 text-xs text-neutral-500 font-semibold uppercase tracking-wider">Notes</th>
               </tr>
             </thead>
             <tbody>
@@ -285,7 +285,7 @@ export default function ApprovalsPage() {
             <h3 className="text-sm font-semibold text-white mb-4">Add Rule</h3>
             <form onSubmit={handleCreateRule} className="flex flex-wrap gap-3 items-end">
               <div className="flex flex-col gap-1.5 min-w-[160px]">
-                <label className="text-[10px] text-neutral-500 uppercase tracking-wider font-semibold">Agent</label>
+                <label className="text-xs text-neutral-500 uppercase tracking-wider font-semibold">Agent</label>
                 <select
                   value={newRule.agent_id}
                   onChange={e => setNewRule(prev => ({ ...prev, agent_id: e.target.value }))}
@@ -299,7 +299,7 @@ export default function ApprovalsPage() {
               </div>
 
               <div className="flex flex-col gap-1.5 min-w-[180px]">
-                <label className="text-[10px] text-neutral-500 uppercase tracking-wider font-semibold">Tool name</label>
+                <label className="text-xs text-neutral-500 uppercase tracking-wider font-semibold">Tool name</label>
                 <select
                   value={newRule.tool_name}
                   onChange={e => setNewRule(prev => ({ ...prev, tool_name: e.target.value }))}
@@ -319,7 +319,7 @@ export default function ApprovalsPage() {
               </div>
 
               <div className="flex flex-col gap-1.5 min-w-[160px]">
-                <label className="text-[10px] text-neutral-500 uppercase tracking-wider font-semibold">Action</label>
+                <label className="text-xs text-neutral-500 uppercase tracking-wider font-semibold">Action</label>
                 <select
                   value={newRule.action}
                   onChange={e => setNewRule(prev => ({ ...prev, action: e.target.value }))}
