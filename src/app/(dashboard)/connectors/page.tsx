@@ -11,6 +11,7 @@ import Badge from '@/components/Badge'
 import EmptyState from '@/components/EmptyState'
 import CardSkeleton from '@/components/skeletons/CardSkeleton'
 import { toast } from 'sonner'
+import Toggle from '@/components/Toggle'
 
 type Connector = {
   id: string; name: string; slug: string
@@ -299,14 +300,11 @@ export default function ConnectorsPage() {
                       <p className="text-xs text-neutral-500 font-mono">{c.slug}</p>
                     </div>
                   </div>
-                  <button
-                    role="switch"
-                    aria-checked={c.active}
+                  <Toggle
+                    checked={c.active}
                     aria-label={`Toggle ${c.name} active`}
-                    onClick={() => handleToggle(c.id, c.active)}
-                    className={`w-9 h-5 rounded-full relative transition-colors shrink-0 ${c.active ? 'bg-emerald-600' : 'bg-neutral-700'}`}>
-                    <span className={`absolute top-1 w-3.5 h-3.5 bg-white rounded-full transition-all shadow-sm ${c.active ? 'left-[18px]' : 'left-0.5'}`} />
-                  </button>
+                    onChange={() => handleToggle(c.id, c.active)}
+                  />
                 </div>
                 <div className="space-y-1.5 text-xs">
                   <div className="flex items-center gap-2 text-neutral-400">

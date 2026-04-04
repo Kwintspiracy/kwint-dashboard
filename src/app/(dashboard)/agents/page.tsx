@@ -13,6 +13,7 @@ import TableSkeleton from '@/components/skeletons/TableSkeleton'
 import { AGENT_TEMPLATES, type AgentTemplate } from '@/lib/agent-templates'
 import { LLM_PROVIDERS, getProviderForModel } from '@/lib/llm-providers'
 import { SKILL_CAPABILITIES } from '@/lib/skill-templates'
+import Toggle from '@/components/Toggle'
 
 type Agent = {
   id: string; name: string; slug: string; personality: string
@@ -369,20 +370,14 @@ export default function AgentsPage() {
             {agents.map((a) => (
               <tr key={a.id} className="border-b border-neutral-800/50 hover:bg-neutral-800/30 transition-colors">
                 <td className="px-5 py-3.5">
-                  <button
-                    role="switch"
-                    aria-checked={a.active}
+                  <Toggle
+                    checked={a.active}
                     aria-label={`Toggle ${a.name} active`}
-                    onClick={async () => {
+                    onChange={async () => {
                       const result = await updateAgentAction(a.id, { active: !a.active })
                       if (!result.ok) { toast.error(result.error) } else { mutate() }
                     }}
-                    className={`w-9 h-5 rounded-full relative transition-colors ${a.active ? 'bg-emerald-600' : 'bg-neutral-700'}`}
-                  >
-                    <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${a.active ? 'left-4.5' : 'left-0.5'}`}
-                      style={{ left: a.active ? '18px' : '2px' }}
-                    />
-                  </button>
+                  />
                 </td>
                 <td className="px-5 py-3.5">
                   <div>

@@ -15,6 +15,7 @@ import PageHeader from '@/components/PageHeader'
 import EmptyState from '@/components/EmptyState'
 import CardSkeleton from '@/components/skeletons/CardSkeleton'
 import { toast } from 'sonner'
+import Toggle from '@/components/Toggle'
 
 type McpServer = {
   id: string
@@ -206,15 +207,12 @@ export default function McpServersPage() {
                   </div>
                 </div>
                 {/* Active toggle */}
-                <button
-                  role="switch"
-                  aria-checked={s.active}
+                <Toggle
+                  checked={s.active}
                   aria-label={`Toggle ${s.name} active`}
-                  onClick={() => handleToggle(s.id, s.active)}
-                  className={`w-9 h-5 rounded-full relative transition-colors shrink-0 ${s.active ? 'bg-violet-600' : 'bg-neutral-700'}`}
-                >
-                  <span className={`absolute top-1 w-3.5 h-3.5 bg-white rounded-full transition-all shadow-sm ${s.active ? 'left-[18px]' : 'left-0.5'}`} />
-                </button>
+                  color="violet"
+                  onChange={() => handleToggle(s.id, s.active)}
+                />
               </div>
 
               {/* Details */}
@@ -345,14 +343,11 @@ export default function McpServersPage() {
 
           {/* Active toggle row */}
           <div className="flex items-center gap-3">
-            <button
-              role="switch"
-              aria-checked={form.active}
-              onClick={() => updateForm('active', !form.active)}
-              className={`w-9 h-5 rounded-full relative transition-colors ${form.active ? 'bg-violet-600' : 'bg-neutral-700'}`}
-            >
-              <span className={`absolute top-1 w-3.5 h-3.5 bg-white rounded-full transition-all shadow-sm ${form.active ? 'left-[18px]' : 'left-0.5'}`} />
-            </button>
+            <Toggle
+              checked={form.active}
+              color="violet"
+              onChange={() => updateForm('active', !form.active)}
+            />
             <span className="text-xs text-neutral-400">Active</span>
           </div>
 

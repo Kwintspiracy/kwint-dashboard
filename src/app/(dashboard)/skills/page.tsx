@@ -19,6 +19,7 @@ import PageHeader from '@/components/PageHeader'
 import EmptyState from '@/components/EmptyState'
 import TableSkeleton from '@/components/skeletons/TableSkeleton'
 import { toast } from 'sonner'
+import Toggle from '@/components/Toggle'
 
 type ConnectorRef = { id: string; name: string; slug: string }
 type Connector = ConnectorRef & { base_url: string | null; has_key: boolean; active: boolean }
@@ -245,16 +246,13 @@ export default function SkillsPage() {
 
   if (loading) return <TableSkeleton rows={5} cols={5} />
 
-  function Toggle({ id, active, name }: { id: string; active: boolean; name: string }) {
+  function SkillToggle({ id, active, name }: { id: string; active: boolean; name: string }) {
     return (
-      <button
-        role="switch"
-        aria-checked={active}
+      <Toggle
+        checked={active}
         aria-label={`Toggle ${name} active`}
-        onClick={() => handleToggle(id, active)}
-        className={`w-9 h-5 rounded-full relative transition-colors ${active ? 'bg-emerald-600' : 'bg-neutral-700'}`}>
-        <span className={`absolute top-1 w-3.5 h-3.5 bg-white rounded-full transition-all shadow-sm ${active ? 'left-[18px]' : 'left-0.5'}`} />
-      </button>
+        onChange={() => handleToggle(id, active)}
+      />
     )
   }
 
@@ -283,7 +281,7 @@ export default function SkillsPage() {
               const vCount = versionCounts[s.id] ?? 0
               return (
                 <tr key={s.id} className="border-b border-neutral-800/50 hover:bg-neutral-800/30 transition-colors">
-                  <td className="px-5 py-3.5"><Toggle id={s.id} active={s.active} name={s.name} /></td>
+                  <td className="px-5 py-3.5"><SkillToggle id={s.id} active={s.active} name={s.name} /></td>
                   <td className="px-5 py-3.5">
                     <div className="flex items-center gap-2">
                       <span className="text-neutral-200 font-medium">{s.name}</span>
