@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { getAgentsAction, createAgentAction, updateAgentAction, deleteAgentAction, setDefaultAgentAction, activateTelegramAction, deactivateTelegramAction, getLlmKeysAction, getOperatorProvidersAction, getSkillsAction, getAgentSkillAssignmentsAction, setAgentSkillAssignmentsAction, getOrchestratorAssignmentsAction, getOrchestratorAssignmentDetailsAction, setOrchestratorAssignmentsAction, getAllAgentAssignmentsAction, getAllSkillAssignmentsAction } from '@/lib/actions'
+import { getAgentsAction, createAgentAction, updateAgentAction, deleteAgentAction, setDefaultAgentAction, activateTelegramAction, deactivateTelegramAction, getLlmKeysAction, getOperatorProvidersAction, getSkillsAction, getAgentSkillAssignmentsAction, setAgentSkillAssignmentsAction, getOrchestratorAssignmentsAction, getOrchestratorAssignmentDetailsAction, setOrchestratorAssignmentsAction, getAgentOrchestratorAction, setAgentOrchestratorAction, getAllAgentAssignmentsAction, getAllSkillAssignmentsAction } from '@/lib/actions'
 import { timeAgo } from '@/lib/utils'
 import { toast } from 'sonner'
 import { useData } from '@/hooks/useData'
@@ -12,6 +12,7 @@ import EmptyState from '@/components/EmptyState'
 import TableSkeleton from '@/components/skeletons/TableSkeleton'
 import { AGENT_TEMPLATES, type AgentTemplate } from '@/lib/agent-templates'
 import { LLM_PROVIDERS, getProviderForModel } from '@/lib/llm-providers'
+import { SKILL_CAPABILITIES } from '@/lib/skill-templates'
 
 type Agent = {
   id: string; name: string; slug: string; personality: string
@@ -200,6 +201,7 @@ export default function AgentsPage() {
   const [assignedSkillIds, setAssignedSkillIds] = useState<string[]>([])
   const [assignedAgentIds, setAssignedAgentIds] = useState<string[]>([])
   const [agentInstructions, setAgentInstructions] = useState<Record<string, string>>({})
+  const [selectedOrchestratorId, setSelectedOrchestratorId] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<'list' | 'hierarchy'>('list')
   const [showAdd, setShowAdd] = useState(false)
   const [showTemplates, setShowTemplates] = useState(false)
@@ -209,11 +211,10 @@ export default function AgentsPage() {
     requires_approval: '' as string,
     capabilities: [] as string[],
   })
-  const [capInput, setCapInput] = useState('')
   const [telegramStatus, setTelegramStatus] = useState('')
 
   useEffect(() => {
-    if (!editingId) { setAssignedSkillIds([]); setAssignedAgentIds([]); setAgentInstructions({}); return }
+    if (!editingId) { setAssignedSkillIds([]); setAssignedAgentIds([]); setAgentInstructions({}); setSelectedOrchestratorId(null); return }
     getAgentSkillAssignmentsAction(editingId).then(r => { if (r.ok) setAssignedSkillIds(r.data) })
     getOrchestratorAssignmentDetailsAction(editingId).then(r => {
       if (r.ok) {
@@ -223,6 +224,7 @@ export default function AgentsPage() {
         setAgentInstructions(instr)
       }
     })
+    getAgentOrchestratorAction(editingId).then(r => { if (r.ok) setSelectedOrchestratorId(r.data) })
   }, [editingId])
 
   function slugify(name: string) {
@@ -233,7 +235,6 @@ export default function AgentsPage() {
     setShowTemplates(false)
     setEditingId(null)
     setTelegramStatus('')
-    setCapInput('')
     setForm({
       name: template.name,
       slug: slugify(template.name),
@@ -243,13 +244,13 @@ export default function AgentsPage() {
       telegram_bot_token: '',
       telegram_bot_username: '',
       requires_approval: template.suggestedApprovalTools.join(', '),
-      capabilities: template.capabilities,
+      capabilities: [],
     })
     setShowAdd(true)
   }
 
   function startEdit(a: Agent) {
-    setEditingId(a.id); setShowAdd(false); setTelegramStatus(''); setCapInput('')
+    setEditingId(a.id); setShowAdd(false); setTelegramStatus('')
     setForm({
       name: a.name, slug: a.slug, personality: a.personality, model: a.model,
       role: a.role || 'agent',
@@ -261,7 +262,7 @@ export default function AgentsPage() {
   }
 
   function startAdd() {
-    setEditingId(null); setShowAdd(true); setTelegramStatus(''); setCapInput('')
+    setEditingId(null); setShowAdd(true); setTelegramStatus('')
     setForm({
       name: '', slug: '', personality: DEFAULT_PERSONALITY, model: 'claude-sonnet-4-6',
       role: 'agent', telegram_bot_token: '', telegram_bot_username: '',
@@ -298,13 +299,12 @@ export default function AgentsPage() {
         telegram_bot_token: form.telegram_bot_token || null,
         telegram_bot_username: form.telegram_bot_username || null,
         requires_approval: approvalList,
-        capabilities: form.capabilities,
       })
       if (!result.ok) { toast.error(result.error); return }
       const orchAssignments = assignedAgentIds.map(id => ({ sub_agent_id: id, instructions: agentInstructions[id] || null }))
       await Promise.all([
         setAgentSkillAssignmentsAction(editingId, assignedSkillIds),
-        form.role === 'orchestrator' ? setOrchestratorAssignmentsAction(editingId, orchAssignments) : Promise.resolve(),
+        form.role === 'orchestrator' ? setOrchestratorAssignmentsAction(editingId, orchAssignments) : setAgentOrchestratorAction(editingId, selectedOrchestratorId),
       ])
       toast.success('Agent updated')
       setEditingId(null)
@@ -314,7 +314,6 @@ export default function AgentsPage() {
         role: form.role,
         telegram_bot_token: form.telegram_bot_token || null,
         telegram_bot_username: form.telegram_bot_username || null,
-        capabilities: form.capabilities,
       })
       if (!result.ok) { toast.error(result.error); return }
       const newId = (result as { ok: true; data: { id: string } }).data?.id
@@ -322,7 +321,7 @@ export default function AgentsPage() {
         const orchAssignments = assignedAgentIds.map(id => ({ sub_agent_id: id, instructions: agentInstructions[id] || null }))
         await Promise.all([
           setAgentSkillAssignmentsAction(newId, assignedSkillIds),
-          form.role === 'orchestrator' ? setOrchestratorAssignmentsAction(newId, orchAssignments) : Promise.resolve(),
+          form.role === 'orchestrator' ? setOrchestratorAssignmentsAction(newId, orchAssignments) : setAgentOrchestratorAction(newId, selectedOrchestratorId),
         ])
       }
       toast.success('Agent created')
@@ -795,6 +794,25 @@ export default function AgentsPage() {
                 )}
               </section>
 
+              {/* Orchestrator (non-orchestrator agents only) */}
+              {form.role !== 'orchestrator' && (
+                <section aria-labelledby="section-orchestrator" className="border-t border-neutral-800/50 pt-5">
+                  <h3 id="section-orchestrator" className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-1">Orchestrator</h3>
+                  <p className="text-[11px] text-neutral-600 mb-2.5">Which orchestrator manages this agent.</p>
+                  <select
+                    value={selectedOrchestratorId ?? ''}
+                    onChange={e => setSelectedOrchestratorId(e.target.value || null)}
+                    aria-label="Select orchestrator"
+                    className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-3 py-2 text-xs text-white focus:border-neutral-600 focus:outline-none transition-colors"
+                  >
+                    <option value="">None (unassigned)</option>
+                    {agents.filter(a => a.role === 'orchestrator' && a.id !== editingId).map(a => (
+                      <option key={a.id} value={a.id}>{a.name}</option>
+                    ))}
+                  </select>
+                </section>
+              )}
+
               {/* Assigned agents (orchestrators only) */}
               {form.role === 'orchestrator' && (
                 <section aria-labelledby="section-team" className="border-t border-neutral-800/50 pt-5">
@@ -845,54 +863,32 @@ export default function AgentsPage() {
                 </section>
               )}
 
-              {/* Capabilities */}
-              <section aria-labelledby="section-caps" className="border-t border-neutral-800/50 pt-5">
-                <h3 id="section-caps" className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-1">Capabilities</h3>
-                <p className="text-[11px] text-neutral-600 mb-2.5">Used for smart auto-routing.</p>
-                {form.capabilities.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mb-2">
-                    {form.capabilities.map(cap => (
-                      <span key={cap} className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium bg-violet-950/60 text-violet-300 border border-violet-800/40 rounded-full">
-                        {cap}
-                        <button
-                          type="button"
-                          aria-label={`Remove capability ${cap}`}
-                          onClick={() => setForm(prev => ({ ...prev, capabilities: prev.capabilities.filter(c => c !== cap) }))}
-                          className="text-violet-500 hover:text-violet-200 transition-colors leading-none"
-                        >×</button>
-                      </span>
-                    ))}
-                  </div>
-                )}
-                <input
-                  id="cap-input"
-                  value={capInput}
-                  onChange={e => setCapInput(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault()
-                      const val = capInput.trim().toLowerCase().replace(/\s+/g, '-')
-                      if (val && !form.capabilities.includes(val)) {
-                        setForm(prev => ({ ...prev, capabilities: [...prev.capabilities, val] }))
-                      }
-                      setCapInput('')
-                    }
-                  }}
-                  placeholder="Add capability, press Enter"
-                  aria-label="Add capability"
-                  className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-700 focus:border-neutral-600 focus:outline-none transition-colors"
-                />
-                <div className="flex flex-wrap gap-1 mt-2">
-                  {['data-analysis', 'code-review', 'web-search', 'email', 'scheduling', 'research'].map(s => (
-                    <button
-                      key={s} type="button"
-                      onClick={() => { if (!form.capabilities.includes(s)) setForm(prev => ({ ...prev, capabilities: [...prev.capabilities, s] })) }}
-                      disabled={form.capabilities.includes(s)}
-                      className="px-2 py-0.5 text-[10px] bg-neutral-800 text-neutral-500 border border-neutral-800 rounded-full hover:border-violet-800 hover:text-violet-400 transition-colors disabled:opacity-20 disabled:cursor-default"
-                    >{s}</button>
-                  ))}
-                </div>
-              </section>
+              {/* Capabilities — derived from assigned skills, read-only */}
+              {(() => {
+                const caps = [...new Set(
+                  assignedSkillIds.flatMap(skillId => {
+                    const skill = skills.find(s => s.id === skillId)
+                    return skill ? (SKILL_CAPABILITIES[skill.slug] ?? []) : []
+                  })
+                )]
+                return (
+                  <section aria-labelledby="section-caps" className="border-t border-neutral-800/50 pt-5">
+                    <h3 id="section-caps" className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-1">Capabilities</h3>
+                    <p className="text-[11px] text-neutral-600 mb-2.5">Derived from assigned skills.</p>
+                    {caps.length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {caps.map(cap => (
+                          <span key={cap} className="inline-flex items-center px-2 py-0.5 text-[11px] font-medium bg-violet-950/60 text-violet-300 border border-violet-800/40 rounded-full">
+                            {cap}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-neutral-700">Assign skills above to see capabilities.</p>
+                    )}
+                  </section>
+                )
+              })()}
 
               {/* Human-in-the-Loop */}
               <section aria-labelledby="section-approval" className="border-t border-neutral-800/50 pt-5">
