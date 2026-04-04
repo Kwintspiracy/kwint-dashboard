@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useSearchParams } from 'next/navigation'
 import { getConnectorsAction, createConnectorAction, updateConnectorAction, deleteConnectorAction, toggleConnectorActiveAction, createSkillAction, getSkillsAction } from '@/lib/actions'
 import { SKILL_TEMPLATES, SKILL_CATEGORIES, type SkillTemplate } from '@/lib/skill-templates'
 import { CONNECTOR_OAUTH } from '@/lib/oauth-providers'
@@ -44,12 +43,11 @@ const emptyForm = () => ({
 export default function ConnectorsPage() {
   const { activeEntity } = useAuth()
   const eid = activeEntity?.id
-  const searchParams = useSearchParams()
-
   // Show toast on OAuth redirect
   useEffect(() => {
-    const success = searchParams.get('oauth_success')
-    const error = searchParams.get('oauth_error')
+    const params = new URLSearchParams(window.location.search)
+    const success = params.get('oauth_success')
+    const error = params.get('oauth_error')
     if (success) toast.success(`${success} connected successfully`)
     if (error) toast.error(`OAuth error: ${error}`)
     if (success || error) {
@@ -58,7 +56,7 @@ export default function ConnectorsPage() {
       url.searchParams.delete('oauth_error')
       window.history.replaceState({}, '', url.toString())
     }
-  }, [searchParams])
+  }, [])
 
   const [tab, setTab] = useState<'connectors' | 'marketplace'>('connectors')
 
