@@ -98,6 +98,7 @@ export default function ConnectorsPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [form, setForm] = useState(emptyForm())
+  const [slugManuallyEdited, setSlugManuallyEdited] = useState(false)
   const [categoryFilter, setCategoryFilter] = useState<string>(ALL_CATEGORIES)
   const [search, setSearch] = useState('')
   const [saving, setSaving] = useState(false)
@@ -118,26 +119,33 @@ export default function ConnectorsPage() {
       oauth_client_id: '', oauth_client_secret: '', oauth_refresh_token: '',
       oauth_token_url: '', oauth_scopes: c.oauth_scopes || '',
     })
+    setSlugManuallyEdited(false)
     setShowAdd(false)
   }
 
   function startAdd() {
     setEditingId(null)
     setForm(emptyForm())
+    setSlugManuallyEdited(false)
     setShowAdd(true)
   }
 
   function updateForm(field: string, value: string) {
+    if (field === 'slug') {
+      setSlugManuallyEdited(true)
+      setForm(prev => ({ ...prev, slug: value }))
+      return
+    }
     setForm(prev => {
       const next = { ...prev, [field]: value }
-      if (field === 'name' && !editingId) {
-        next.slug = value.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
+      if (field === 'name' && !slugManuallyEdited) {
+        next.slug = value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
       }
       return next
     })
   }
 
-  function cancelForm() { setEditingId(null); setShowAdd(false) }
+  function cancelForm() { setEditingId(null); setShowAdd(false); setSlugManuallyEdited(false) }
 
   async function handleSave() {
     setSaving(true)
@@ -420,7 +428,13 @@ export default function ConnectorsPage() {
             ))}
           </div>
 
-          {connectors.length === 0 && !isFormOpen && <EmptyState message="No connectors yet — install one from the Marketplace" />}
+          {connectors.length === 0 && !isFormOpen && (
+            <EmptyState
+              message="No connectors yet"
+              description="Connect your agents to services like Gmail, Slack, Notion, and more."
+              action={{ label: 'Browse the Marketplace', onClick: () => setTab('marketplace') }}
+            />
+          )}
 
           {/* Connector form */}
           {isFormOpen && (
@@ -433,15 +447,19 @@ export default function ConnectorsPage() {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
+                <div className="sm:col-span-2">
                   <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">Name</label>
                   <input value={form.name} onChange={(e) => updateForm('name', e.target.value)} placeholder="e.g. GitHub"
                     className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none transition-colors duration-150" />
-                </div>
-                <div>
-                  <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">Slug</label>
-                  <input value={form.slug} onChange={(e) => updateForm('slug', e.target.value)} placeholder="e.g. github"
-                    className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors duration-150" />
+                  <p className="text-xs text-[--text-muted] mt-1">ID: {form.slug || '—'}</p>
+                  <details className="mt-1">
+                    <summary className="text-xs text-neutral-500 cursor-pointer select-none">Advanced</summary>
+                    <div className="mt-2">
+                      <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">Slug</label>
+                      <input value={form.slug} onChange={(e) => updateForm('slug', e.target.value)} placeholder="e.g. github"
+                        className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors duration-150" />
+                    </div>
+                  </details>
                 </div>
                 <div>
                   <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">Base URL <span className="normal-case text-neutral-700 font-normal">(optional)</span></label>

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { getJobTrace } from '@/lib/queries'
+import { getJobTraceAction } from '@/lib/actions'
 import Badge from '@/components/Badge'
 
 type ToolCall = {
@@ -23,9 +23,11 @@ export default function TraceTree({ jobId }: { jobId: string }) {
   const [expandedCall, setExpandedCall] = useState<string | null>(null)
 
   useEffect(() => {
-    getJobTrace(jobId).then(({ calls, children }) => {
-      setCalls(calls as ToolCall[])
-      setChildren(children as unknown as ChildJob[])
+    getJobTraceAction(jobId).then(result => {
+      if (result.ok) {
+        setCalls(result.data.calls as ToolCall[])
+        setChildren(result.data.children as unknown as ChildJob[])
+      }
       setLoading(false)
     })
   }, [jobId])

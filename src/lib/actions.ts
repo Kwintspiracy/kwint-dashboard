@@ -548,19 +548,35 @@ export async function getToolCallsAction(limit = 100) {
   return data || []
 }
 
-export async function getJobTraceAction(jobId: string) {
-  const { supabase, entityId } = await requireAuthWithEntity()
+export async function getJobTraceAction(jobId: string): Promise<ActionResult<{ calls: unknown[], children: unknown[] }>> {
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
 
-  const { data: calls } = await supabase
-    .from('tool_calls').select('*').eq('job_id', jobId).eq('entity_id', entityId).order('created_at')
+    // Verify job belongs to entity
+    const { data: job, error: jobErr } = await supabase
+      .from('agent_jobs')
+      .select('id')
+      .eq('id', jobId)
+      .eq('entity_id', entityId)
+      .single()
+    if (jobErr || !job) return fail('Not found')
 
-  const { data: children } = await supabase
-    .from('agent_jobs')
-    .select('id, task, result, status, total_duration_ms, chain_count, agent_id, agents(name), created_at, completed_at')
-    .eq('parent_job_id', jobId).eq('entity_id', entityId)
-    .order('created_at')
+    const { data: toolCalls } = await supabase
+      .from('tool_calls')
+      .select('*')
+      .eq('job_id', jobId)
+      .order('created_at', { ascending: true })
 
-  return { calls: calls || [], children: children || [] }
+    const { data: childJobs } = await supabase
+      .from('agent_jobs')
+      .select('id, task, result, status, total_duration_ms, chain_count, agent_id, agents(name), created_at, completed_at')
+      .eq('parent_job_id', jobId)
+      .eq('entity_id', entityId)
+
+    return ok({ calls: toolCalls ?? [], children: childJobs ?? [] })
+  } catch (e) {
+    return dbError(e)
+  }
 }
 
 // ─── Agent Mutations ──────────────────────────────────────────────────────────
@@ -897,6 +913,7 @@ export async function updateSkillAction(
 
       await supabase.from('skill_versions').insert({
         skill_id: id,
+        entity_id: entityId,
         version: nextVersion,
         content: current.content,
         name: current.name,
@@ -1175,7 +1192,7 @@ export async function cancelPendingJobsAction(): Promise<ActionResult<{ count: n
     const { supabase, entityId } = await requireAuthWithEntity()
     const { data, error } = await supabase
       .from('agent_jobs')
-      .update({ status: 'failed' })
+      .update({ status: 'cancelled' })
       .eq('entity_id', entityId)
       .in('status', ['pending', 'processing'])
       .select('id')
@@ -1475,6 +1492,7 @@ export async function rollbackSkillAction(skillId: string, versionId: string): P
     .select('content, name')
     .eq('id', versionId)
     .eq('skill_id', skillId)
+    .eq('entity_id', entityId)
     .single()
   if (vErr || !version) return fail('Version not found')
 

@@ -1,17 +1,16 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 
-// Use service role to bypass RLS — webhooks are external (no user session)
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
-
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ slug: string }> }
 ) {
   const { slug } = await params
+
+  // Use service role to bypass RLS — webhooks are external (no user session)
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!serviceRoleKey) return NextResponse.json({ error: 'Server misconfigured' }, { status: 500 })
+  const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, serviceRoleKey)
 
   // Look up trigger — return generic 403 for both not-found and wrong-secret to prevent enumeration
   const { data: trigger, error } = await supabase
@@ -70,6 +69,10 @@ export async function POST(
       entity_id: (trigger as { entity_id?: string }).entity_id ?? null,
     }),
   })
+
+  if (!res.ok) {
+    return NextResponse.json({ error: `Agent API error: ${res.status}` }, { status: 502 })
+  }
 
   const result = await res.json().catch(() => ({}))
 

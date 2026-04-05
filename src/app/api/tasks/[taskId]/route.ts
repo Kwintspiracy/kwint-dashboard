@@ -1,12 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 
-// Service-role client — external callers (runner) have no user session
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
-
 const VALID_STATUSES = ['todo', 'in_progress', 'done', 'cancelled'] as const
 
 export async function PATCH(
@@ -16,6 +10,11 @@ export async function PATCH(
   // Auth: require shared worker secret
   const apiKey = process.env.NEXT_PRIVATE_WORKER || process.env.WORKER_SECRET || process.env.API_SECRET_KEY
   if (!apiKey) return NextResponse.json({ error: 'Server misconfigured' }, { status: 500 })
+
+  // Service-role client — external callers (runner) have no user session
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!serviceRoleKey) return NextResponse.json({ error: 'Server misconfigured' }, { status: 500 })
+  const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, serviceRoleKey)
 
   const authHeader = request.headers.get('Authorization')
   if (authHeader !== `Bearer ${apiKey}`) {

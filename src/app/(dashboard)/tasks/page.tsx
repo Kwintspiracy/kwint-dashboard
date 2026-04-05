@@ -122,7 +122,7 @@ export default function TasksPage() {
     const orch = orchestrators.find(o => o.id === orchestratorId)
     setContextTemplate(orch?.task_context_template ?? '')
     setShowContextEditor(false)
-  }, [orchestratorId])
+  }, [orchestratorId, orchestrators])
 
   const tasksKey = orchestratorId ? (['tasks', orchestratorId] as unknown[]) : ('tasks:none' as string)
   const { data: tasksRaw = [], isLoading, mutate } = useData(
@@ -310,7 +310,13 @@ export default function TasksPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setContextTemplate(''); saveContextTemplate() }}
+                  onClick={async () => {
+                    if (!orchestratorId) return
+                    setContextTemplate('')
+                    const res = await updateAgentAction(orchestratorId, { task_context_template: null })
+                    if (res.ok) toast.success('Reset to default')
+                    else toast.error('Could not reset')
+                  }}
                   className="px-3 py-1.5 text-xs text-neutral-600 hover:text-neutral-400 transition-colors"
                 >
                   Reset to default

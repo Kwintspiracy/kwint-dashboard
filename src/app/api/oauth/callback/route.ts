@@ -20,12 +20,6 @@ const OAUTH_ENV: Record<string, string | undefined> = {
   MICROSOFT_CLIENT_SECRET: process.env.MICROSOFT_CLIENT_SECRET,
 }
 
-// Service role client — callback arrives from provider with no user session
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
-
 export async function GET(request: NextRequest) {
   const origin = request.nextUrl.origin
   const connectorsUrl = new URL('/connectors', origin)
@@ -45,8 +39,14 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // Service role client — callback arrives from provider with no user session
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    if (!serviceRoleKey) return NextResponse.json({ error: 'Server misconfigured' }, { status: 500 })
+    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, serviceRoleKey)
+
     // Verify HMAC to ensure state wasn't tampered with
-    const workerSecret = process.env.WORKER_SECRET || process.env.API_SECRET_KEY || ''
+    const workerSecret = process.env.WORKER_SECRET || process.env.API_SECRET_KEY
+    if (!workerSecret) return NextResponse.json({ error: 'Server misconfigured: WORKER_SECRET required' }, { status: 500 })
     const dotIdx = state.lastIndexOf('.')
     if (dotIdx === -1) {
       connectorsUrl.searchParams.set('oauth_error', 'invalid_state')

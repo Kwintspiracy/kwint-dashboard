@@ -75,7 +75,8 @@ export async function GET(request: NextRequest) {
     }
 
     // Sign state to prevent CSRF
-    const workerSecret = process.env.WORKER_SECRET || process.env.API_SECRET_KEY || ''
+    const workerSecret = process.env.WORKER_SECRET || process.env.API_SECRET_KEY
+    if (!workerSecret) return NextResponse.json({ error: 'Server misconfigured: WORKER_SECRET required' }, { status: 500 })
     const payload = Buffer.from(
       JSON.stringify({ connector_id: connectorId, entity_id: entityId, ts: Date.now() })
     ).toString('base64url')

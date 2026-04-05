@@ -310,11 +310,10 @@ export default function JobsPage() {
               <tr className="border-b border-neutral-800/60">
                 <th className="text-left px-5 py-3 text-xs text-neutral-500 font-semibold uppercase tracking-wider">Status</th>
                 <th className="text-left px-5 py-3 text-xs text-neutral-500 font-semibold uppercase tracking-wider hidden md:table-cell">Agent</th>
-                <th className="text-left hidden lg:table-cell px-5 py-3 text-xs text-neutral-500 font-semibold uppercase tracking-wider">ID</th>
                 <th className="text-left px-5 py-3 text-xs text-neutral-500 font-semibold uppercase tracking-wider hidden md:table-cell">Channel</th>
                 <th className="text-left px-5 py-3 text-xs text-neutral-500 font-semibold uppercase tracking-wider">Task</th>
-                <th className="text-right px-5 py-3 text-xs text-neutral-500 font-semibold uppercase tracking-wider">Tools</th>
-                <th className="text-right px-5 py-3 text-xs text-neutral-500 font-semibold uppercase tracking-wider">Turns</th>
+                <th className="text-left px-5 py-3 text-xs text-neutral-500 font-semibold uppercase tracking-wider hidden lg:table-cell">Result</th>
+                <th className="text-right px-5 py-3 text-xs text-neutral-500 font-semibold uppercase tracking-wider">Actions</th>
                 <th className="text-right px-5 py-3 text-xs text-neutral-500 font-semibold uppercase tracking-wider">Duration</th>
               </tr>
             </thead>
@@ -346,18 +345,19 @@ export default function JobsPage() {
                         </span>
                       ) : <span className="text-neutral-600 text-xs">—</span>}
                     </td>
-                    <td className="hidden lg:table-cell px-5 py-3 text-neutral-600 font-mono text-xs">{job.id.slice(0, 8)}</td>
                     <td className="hidden md:table-cell px-5 py-3">
-                      <Badge label={job.channel} color="neutral" />
+                      <Badge label={job.channel === 'api' ? 'Dashboard' : job.channel} color="neutral" />
                     </td>
                     <td className="px-5 py-3 max-w-[300px]">
                       <span className="text-neutral-300 text-sm truncate block" title={job.task}>{truncate(job.task, 60)}</span>
                     </td>
-                    <td className="px-5 py-3 text-right">
-                      <span className="font-mono text-xs text-neutral-500">{job.tools_used?.length || 0}</span>
+                    <td className="hidden lg:table-cell px-5 py-3 max-w-[200px]">
+                      {job.result
+                        ? <span className="text-neutral-500 text-xs truncate block" title={job.result}>{job.result.length > 60 ? job.result.slice(0, 60) + '…' : job.result}</span>
+                        : <span className="text-neutral-700 text-xs">—</span>}
                     </td>
                     <td className="px-5 py-3 text-right">
-                      <span className="font-mono text-xs text-neutral-500">{job.turn}</span>
+                      <span className="font-mono text-xs text-neutral-500">{job.tools_used?.length || 0}</span>
                     </td>
                     <td className="px-5 py-3 text-right">
                       <span className="font-mono text-xs text-neutral-500">

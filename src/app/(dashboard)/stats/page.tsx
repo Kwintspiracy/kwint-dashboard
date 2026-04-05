@@ -26,6 +26,7 @@ import {
   Plus,
   PencilSimple,
   Trash,
+  ArrowRight,
 } from '@phosphor-icons/react'
 
 // ─── Budget types ─────────────────────────────────────────────────────────────
@@ -194,11 +195,16 @@ function UsageBar({ used, limit, label }: { used: number; limit: number; label: 
   const textColor = overLimit ? 'text-red-400' : pct >= 80 ? 'text-amber-400' : 'text-neutral-500'
   const usedStr = used > 1_000_000 ? `${(used / 1_000_000).toFixed(1)}M` : used > 1000 ? `${(used / 1000).toFixed(1)}K` : String(used)
   const limitStr = limit > 1_000_000 ? `${(limit / 1_000_000).toFixed(1)}M` : limit > 1000 ? `${(limit / 1000).toFixed(1)}K` : String(limit)
+  const usedCost = `$${(used / 1_000_000 * 2.5).toFixed(2)}`
+  const limitCost = `$${(limit / 1_000_000 * 2.5).toFixed(2)}`
   return (
     <div className="space-y-1">
       <div className="flex justify-between text-xs">
         <span className="text-neutral-600">{label}</span>
-        <span className={textColor}>{usedStr} / {limitStr}</span>
+        <span className={textColor}>
+          {usedCost} / {limitCost}
+          <span className="text-neutral-700 ml-1">({usedStr}/{limitStr})</span>
+        </span>
       </div>
       <div className="h-1.5 bg-neutral-800 rounded-full overflow-hidden">
         <div className={`h-full rounded-full transition-all duration-300 ${barColor}`} style={{ width: `${pct}%` }} />
@@ -232,6 +238,106 @@ function Section({ title, action, children }: { title: string; action?: React.Re
         {action}
       </div>
       {children}
+    </div>
+  )
+}
+
+// ─── Getting Started panel ────────────────────────────────────────────────────
+
+function GettingStarted({
+  agentCount,
+  skillCount,
+  jobCount,
+}: {
+  agentCount: number
+  skillCount: number
+  jobCount: number
+}) {
+  const hasAgent = agentCount > 0
+  const hasSkill = skillCount > 0
+  const hasAssigned = hasAgent && hasSkill
+  const hasJob = jobCount > 0
+
+  if (hasAgent && hasSkill && hasAssigned && hasJob) return null
+
+  const steps: { done: boolean; title: string; subtitle: string; href: string }[] = [
+    {
+      done: hasAgent,
+      title: 'Create your first agent',
+      subtitle: 'Your AI worker that executes tasks',
+      href: '/agents',
+    },
+    {
+      done: hasSkill,
+      title: 'Install a skill from the Marketplace',
+      subtitle: 'Give your agent tools to work with',
+      href: '/connectors?tab=marketplace',
+    },
+    {
+      done: hasAssigned,
+      title: 'Assign the skill to your agent',
+      subtitle: 'Connect tools to your agent',
+      href: '/agents',
+    },
+    {
+      done: hasJob,
+      title: 'Run your first task',
+      subtitle: 'See your agent in action',
+      href: '/tasks',
+    },
+  ]
+
+  const completedCount = steps.filter(s => s.done).length
+
+  return (
+    <div className="bg-neutral-900 border border-neutral-800/60 rounded-xl overflow-hidden">
+      <div className="px-5 py-4 border-b border-neutral-800/60 flex items-center justify-between">
+        <div>
+          <p className="text-sm font-semibold text-white">Getting started</p>
+          <p className="text-xs text-neutral-500 mt-0.5">Complete these steps to set up your workspace</p>
+        </div>
+        <span className="text-xs font-semibold text-neutral-600 tabular-nums">{completedCount}/{steps.length}</span>
+      </div>
+      <ul className="divide-y divide-neutral-800/40">
+        {steps.map((step) => (
+          <li key={step.title}>
+            <a
+              href={step.href}
+              className="flex items-center gap-4 px-5 py-4 hover:bg-neutral-800/30 transition-colors duration-150 group"
+            >
+              {/* Checkmark */}
+              <div className={`shrink-0 w-5 h-5 rounded-full flex items-center justify-center transition-colors duration-150 ${
+                step.done
+                  ? 'bg-emerald-500 text-white'
+                  : 'border-2 border-neutral-700 text-transparent'
+              }`}>
+                {step.done && (
+                  <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                    <path d="M1 4l2.5 2.5L9 1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                )}
+              </div>
+
+              {/* Text */}
+              <div className="flex-1 min-w-0">
+                <p className={`text-sm font-medium leading-tight ${step.done ? 'text-neutral-500 line-through decoration-neutral-700' : 'text-neutral-200'}`}>
+                  {step.title}
+                </p>
+                <p className="text-xs text-neutral-600 mt-0.5">{step.subtitle}</p>
+              </div>
+
+              {/* Arrow */}
+              {!step.done && (
+                <ArrowRight
+                  size={14}
+                  weight="bold"
+                  className="shrink-0 text-neutral-700 group-hover:text-neutral-400 transition-colors duration-150"
+                />
+              )}
+            </a>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }
@@ -293,6 +399,13 @@ export default function StatsPage() {
     <div className="space-y-5 max-w-7xl">
       <PageHeader title="Overview" />
 
+      {/* Getting started */}
+      <GettingStarted
+        agentCount={allAgents.length}
+        skillCount={toolUsage.length}
+        jobCount={jobCounts.total}
+      />
+
       {/* Stat cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard
@@ -303,9 +416,9 @@ export default function StatsPage() {
           icon={ClipboardText}
         />
         <StatCard
-          label="Tokens used"
-          value={tokenDisplay}
-          detail={estimateCostBlended(totalTokens)}
+          label="Est. cost"
+          value={estimateCostBlended(totalTokens)}
+          detail={`${tokenDisplay} tokens`}
           color="blue"
           icon={Coins}
         />

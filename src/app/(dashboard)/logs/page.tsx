@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react'
 import { getToolCallsAction } from '@/lib/actions'
+import { displayToolName } from '@/lib/utils'
 import { useData } from '@/hooks/useData'
 import { useAuth } from '@/components/AuthProvider'
 import PageHeader from '@/components/PageHeader'
@@ -65,7 +66,7 @@ export default function LogsPage() {
               filter === name ? 'bg-white text-black' : 'border border-neutral-800 text-neutral-400 hover:text-white hover:border-neutral-700'
             }`}
           >
-            {name}
+            {displayToolName(name)}
           </button>
         ))}
       </div>
@@ -96,7 +97,7 @@ export default function LogsPage() {
                   >
                     <td className="px-5 py-3">
                       <Badge
-                        label={call.tool_name}
+                        label={displayToolName(call.tool_name)}
                         color={
                           call.tool_name === 'http_request' ? 'blue' :
                           call.tool_name === 'delegate_task' ? 'purple' :
@@ -148,7 +149,12 @@ export default function LogsPage() {
             })}
           </tbody>
         </table>
-        {filtered.length === 0 && <EmptyState message="No tool calls logged yet" />}
+        {filtered.length === 0 && (
+          <EmptyState
+            message="No activity yet"
+            description="Tool calls and agent activity will appear here once your agents start working."
+          />
+        )}
       </div>
     </div>
   )

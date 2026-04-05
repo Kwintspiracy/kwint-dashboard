@@ -249,18 +249,11 @@ export async function getJobs(filters?: { status?: string; channel?: string; age
   return data || []
 }
 
-function agentHeaders(): Record<string, string> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  const apiKey = process.env.NEXT_PUBLIC_API_SECRET_KEY
-  if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`
-  return headers
-}
-
 export async function retryJob(task: string) {
   const agentUrl = process.env.NEXT_PUBLIC_AGENT_API_URL
   const res = await fetch(`${agentUrl}/api/agent`, {
     method: 'POST',
-    headers: agentHeaders(),
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ task, async: true }),
   })
   return res.json()
@@ -392,7 +385,7 @@ export async function setDefaultAgent(id: string) {
 export async function activateTelegram(agentSlug: string) {
   const res = await fetch(`${process.env.NEXT_PUBLIC_AGENT_API_URL}/api/telegram_setup`, {
     method: 'POST',
-    headers: agentHeaders(),
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ agent_slug: agentSlug, action: 'register' }),
   })
   return res.json()
@@ -401,7 +394,7 @@ export async function activateTelegram(agentSlug: string) {
 export async function deactivateTelegram(agentSlug: string) {
   const res = await fetch(`${process.env.NEXT_PUBLIC_AGENT_API_URL}/api/telegram_setup`, {
     method: 'POST',
-    headers: agentHeaders(),
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ agent_slug: agentSlug, action: 'deregister' }),
   })
   return res.json()
@@ -546,7 +539,7 @@ export async function resolveApproval(id: string, action: 'approve' | 'reject', 
   const agentUrl = process.env.NEXT_PUBLIC_AGENT_API_URL
   const res = await fetch(`${agentUrl}/api/approve`, {
     method: 'POST',
-    headers: agentHeaders(),
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ approval_id: id, action, notes: notes || '' }),
   })
   return res.json()

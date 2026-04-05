@@ -49,6 +49,7 @@ export default function McpServersPage() {
   const [showAdd, setShowAdd] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState({ ...emptyForm })
+  const [slugManuallyEdited, setSlugManuallyEdited] = useState(false)
   const [saving, setSaving] = useState(false)
   const [testingId, setTestingId] = useState<string | null>(null)
   const [testResults, setTestResults] = useState<Record<string, TestResult | string>>({})
@@ -60,14 +61,18 @@ export default function McpServersPage() {
   const servers = serversRaw as McpServer[]
 
   function updateForm(field: string, value: string | boolean) {
+    if (field === 'slug') {
+      setSlugManuallyEdited(true)
+      setForm(prev => ({ ...prev, slug: String(value) }))
+      return
+    }
     setForm(prev => {
       const next = { ...prev, [field]: value }
-      // Auto-slug from name when creating
-      if (field === 'name' && !editingId) {
+      if (field === 'name' && !slugManuallyEdited) {
         next.slug = String(value)
           .toLowerCase()
-          .replace(/\s+/g, '-')
-          .replace(/[^a-z0-9-]/g, '')
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-|-$/g, '')
       }
       return next
     })
@@ -76,6 +81,7 @@ export default function McpServersPage() {
   function startAdd() {
     setEditingId(null)
     setForm({ ...emptyForm })
+    setSlugManuallyEdited(false)
     setShowAdd(true)
   }
 
@@ -89,12 +95,14 @@ export default function McpServersPage() {
       command: s.command || '',
       active: s.active,
     })
+    setSlugManuallyEdited(false)
     setShowAdd(false)
   }
 
   function cancelForm() {
     setShowAdd(false)
     setEditingId(null)
+    setSlugManuallyEdited(false)
   }
 
   async function handleSave() {
@@ -112,12 +120,12 @@ export default function McpServersPage() {
       if (editingId) {
         const result = await updateMcpServerAction(editingId, payload)
         if (!result.ok) { toast.error(result.error); return }
-        toast.success('MCP server updated')
+        toast.success('Tool server updated')
         setEditingId(null)
       } else {
         const result = await createMcpServerAction(payload)
         if (!result.ok) { toast.error(result.error); return }
-        toast.success('MCP server added')
+        toast.success('Tool server added')
         setShowAdd(false)
       }
       mutate()
@@ -133,10 +141,10 @@ export default function McpServersPage() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm('Delete this MCP server? Agents will lose access to its tools.')) return
+    if (!confirm('Delete this tool server? Agents will lose access to its tools.')) return
     const result = await deleteMcpServerAction(id)
     if (!result.ok) { toast.error(result.error); return }
-    toast.success('MCP server deleted')
+    toast.success('Tool server deleted')
     mutate()
   }
 
@@ -163,17 +171,17 @@ export default function McpServersPage() {
 
   return (
     <div className="space-y-5 max-w-7xl">
-      <PageHeader title="MCP Servers" count={servers.length}>
+      <PageHeader title="Tool Servers" count={servers.length}>
         <button
           onClick={startAdd}
           className="px-4 py-2 text-xs font-semibold bg-white text-black rounded-lg hover:bg-neutral-200 active:bg-neutral-300 active:scale-[0.97] transition-all duration-150"
         >
-          Add MCP server
+          Add tool server
         </button>
       </PageHeader>
 
       <p className="text-xs text-neutral-500">
-        Connect agents to external MCP servers to give them additional tools.
+        Connect your agents to external tool services via MCP.
         Only HTTP transport is supported in serverless environments.
       </p>
 
@@ -272,18 +280,22 @@ export default function McpServersPage() {
       </div>
 
       {servers.length === 0 && !isFormOpen && (
-        <EmptyState message="No MCP servers configured — add one to give agents external tools" />
+        <EmptyState
+          message="No tool servers yet"
+          description="Add external tool services to give your agents more capabilities."
+          action={{ label: 'Add tool server', onClick: startAdd }}
+        />
       )}
 
       {/* Add / Edit form */}
       {isFormOpen && (
         <div className="bg-neutral-900/50 border border-neutral-800/50 rounded-xl p-6 space-y-5">
           <p className="text-sm font-semibold text-white">
-            {editingId ? 'Edit MCP Server' : 'New MCP Server'}
+            {editingId ? 'Edit Tool Server' : 'New Tool Server'}
           </p>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
+            <div className="sm:col-span-2">
               <label className="block text-xs text-neutral-500 mb-1.5">Name</label>
               <input
                 value={form.name}
@@ -291,15 +303,19 @@ export default function McpServersPage() {
                 placeholder="e.g. GitHub Tools"
                 className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none transition-colors"
               />
-            </div>
-            <div>
-              <label className="block text-xs text-neutral-500 mb-1.5">Slug</label>
-              <input
-                value={form.slug}
-                onChange={e => updateForm('slug', e.target.value)}
-                placeholder="e.g. github-tools"
-                className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors"
-              />
+              <p className="text-xs text-[--text-muted] mt-1">ID: {form.slug || '—'}</p>
+              <details className="mt-1">
+                <summary className="text-xs text-neutral-500 cursor-pointer select-none">Advanced</summary>
+                <div className="mt-2">
+                  <label className="block text-xs text-neutral-500 mb-1.5">Slug</label>
+                  <input
+                    value={form.slug}
+                    onChange={e => updateForm('slug', e.target.value)}
+                    placeholder="e.g. github-tools"
+                    className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors"
+                  />
+                </div>
+              </details>
             </div>
             <div>
               <label className="block text-xs text-neutral-500 mb-1.5">Transport</label>
@@ -357,7 +373,7 @@ export default function McpServersPage() {
               disabled={saving}
               className="px-4 py-2 text-xs font-semibold bg-white text-black rounded-lg hover:bg-neutral-200 active:bg-neutral-300 active:scale-[0.97] transition-all duration-150 disabled:opacity-50"
             >
-              {saving ? 'Saving...' : editingId ? 'Save changes' : 'Add MCP server'}
+              {saving ? 'Saving...' : editingId ? 'Save changes' : 'Add tool server'}
             </button>
             <button
               onClick={cancelForm}

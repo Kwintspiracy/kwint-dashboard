@@ -46,6 +46,7 @@ export default function SkillsPage() {
   const [showAdd, setShowAdd] = useState(false)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({ name: '', slug: '', content: '' })
+  const [slugManuallyEdited, setSlugManuallyEdited] = useState(false)
   const [selectedConnectorIds, setSelectedConnectorIds] = useState<string[]>([])
   const [versionCounts, setVersionCounts] = useState<Record<string, number>>({})
 
@@ -98,6 +99,7 @@ export default function SkillsPage() {
   function startEdit(s: Skill) {
     setEditingId(s.id)
     setForm({ name: s.name, slug: s.slug, content: s.content })
+    setSlugManuallyEdited(false)
     setSelectedConnectorIds((s.skill_connectors || []).map(sc => sc.connector_id))
     setShowAdd(false)
     setVersionsOpen(false)
@@ -107,6 +109,7 @@ export default function SkillsPage() {
   function startAdd() {
     setEditingId(null)
     setForm({ name: '', slug: '', content: '' })
+    setSlugManuallyEdited(false)
     setSelectedConnectorIds([])
     setShowAdd(true)
     setVersionsOpen(false)
@@ -114,10 +117,15 @@ export default function SkillsPage() {
   }
 
   function updateForm(field: string, value: string) {
+    if (field === 'slug') {
+      setSlugManuallyEdited(true)
+      setForm(prev => ({ ...prev, slug: value }))
+      return
+    }
     setForm(prev => {
       const next = { ...prev, [field]: value }
-      if (field === 'name' && !editingId) {
-        next.slug = value.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
+      if (field === 'name' && !slugManuallyEdited) {
+        next.slug = value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
       }
       return next
     })
@@ -132,6 +140,7 @@ export default function SkillsPage() {
   function cancelForm() {
     setEditingId(null)
     setShowAdd(false)
+    setSlugManuallyEdited(false)
     setVersionsOpen(false)
     setVersions([])
   }
@@ -362,6 +371,7 @@ export default function SkillsPage() {
                   const tpl = SKILL_TEMPLATES.find(t => t.id === e.target.value)
                   if (!tpl) return
                   setForm({ name: tpl.name, slug: tpl.slug, content: tpl.content })
+                  setSlugManuallyEdited(true)
                   // auto-select connector if already installed
                   if (tpl.connector?.slug) {
                     const match = connectors.find(c => c.slug === tpl.connector!.slug)
@@ -378,17 +388,19 @@ export default function SkillsPage() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">Name</label>
-              <input value={form.name} onChange={(e) => updateForm('name', e.target.value)} placeholder="e.g. Google Sheets"
-                className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none transition-colors duration-150" />
-            </div>
-            <div>
-              <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">Slug</label>
-              <input value={form.slug} onChange={(e) => updateForm('slug', e.target.value)} placeholder="e.g. google-sheets"
-                className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors duration-150" />
-            </div>
+          <div>
+            <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">Name</label>
+            <input value={form.name} onChange={(e) => updateForm('name', e.target.value)} placeholder="e.g. Google Sheets"
+              className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none transition-colors duration-150" />
+            <p className="text-xs text-[--text-muted] mt-1">ID: {form.slug || '—'}</p>
+            <details className="mt-1">
+              <summary className="text-xs text-neutral-500 cursor-pointer select-none">Advanced</summary>
+              <div className="mt-2">
+                <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">Slug</label>
+                <input value={form.slug} onChange={(e) => updateForm('slug', e.target.value)} placeholder="e.g. google-sheets"
+                  className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors duration-150" />
+              </div>
+            </details>
           </div>
 
           <div>

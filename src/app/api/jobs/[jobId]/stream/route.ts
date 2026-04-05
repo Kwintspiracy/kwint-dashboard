@@ -26,10 +26,9 @@ export async function GET(
   if (!jobCheck) return new Response('Not found', { status: 404 })
 
   // Use a service-role client for polling inside the stream (runs after response boundary)
-  const dbClient = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!serviceRoleKey) return new Response('Server misconfigured', { status: 500 })
+  const dbClient = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, serviceRoleKey)
 
   const encoder = new TextEncoder()
   let lastToolCallCount = 0

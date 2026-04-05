@@ -83,6 +83,15 @@ const CRON_EXAMPLES = [
   { expr: '0 9 * * 1', label: 'Monday at 9:00' },
 ]
 
+const CRON_PRESETS: { label: string; expr: string; desc: string }[] = [
+  { label: 'Every 15 min',   expr: '*/15 * * * *', desc: 'This schedule will run every 15 minutes.' },
+  { label: 'Every 30 min',   expr: '*/30 * * * *', desc: 'This schedule will run every 30 minutes.' },
+  { label: 'Every hour',     expr: '0 * * * *',    desc: 'This schedule will run every hour.' },
+  { label: 'Daily at 9am',   expr: '0 9 * * *',    desc: 'This schedule will run daily at 9:00 AM.' },
+  { label: 'Weekly (Mon)',   expr: '0 9 * * 1',    desc: 'This schedule will run every Monday at 9:00 AM.' },
+  { label: 'Monthly (1st)',  expr: '0 9 1 * *',    desc: 'This schedule will run on the 1st of every month at 9:00 AM.' },
+]
+
 const EMPTY_FORM = {
   name: '',
   type: 'cron',
@@ -109,7 +118,7 @@ function slugify(str: string): string {
     .slice(0, 80)
 }
 
-const WEBHOOK_BASE_URL = 'https://kwint-dashboard.vercel.app'
+const WEBHOOK_BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://kwint-dashboard.vercel.app'
 
 function CopyButton({ value, label = 'Copy' }: { value: string; label?: string }) {
   const [copied, setCopied] = useState(false)
@@ -223,16 +232,20 @@ export default function AutomationsPage() {
   const [showAdd, setShowAdd] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
   const [error, setError] = useState('')
+  const [selectedPreset, setSelectedPreset] = useState<string | 'custom'>('')
+  const [showCustomCron, setShowCustomCron] = useState(false)
 
   const [editingTriggerId, setEditingTriggerId] = useState<string | null>(null)
   const [showAddTrigger, setShowAddTrigger] = useState(false)
   const [triggerForm, setTriggerForm] = useState(EMPTY_TRIGGER_FORM)
   const [triggerError, setTriggerError] = useState('')
+  const [triggerSlugManuallyEdited, setTriggerSlugManuallyEdited] = useState(false)
 
   const [editingPluginId, setEditingPluginId] = useState<string | null>(null)
   const [showAddPlugin, setShowAddPlugin] = useState(false)
   const [pluginForm, setPluginForm] = useState(EMPTY_PLUGIN_FORM)
   const [pluginError, setPluginError] = useState('')
+  const [pluginSlugManuallyEdited, setPluginSlugManuallyEdited] = useState(false)
 
   const { data: schedulesRaw = [], isLoading: loading, mutate } = useData(['schedules', eid], getSchedulesAction)
   const schedules = schedulesRaw as Schedule[]
@@ -252,6 +265,8 @@ export default function AutomationsPage() {
     setEditingId(null)
     setShowAdd(true)
     setError('')
+    setSelectedPreset('')
+    setShowCustomCron(false)
     setForm({ ...EMPTY_FORM, agent_id: agents[0]?.id || '' })
   }
 
@@ -259,6 +274,10 @@ export default function AutomationsPage() {
     setEditingId(s.id)
     setShowAdd(false)
     setError('')
+    // Detect if the cron_expr matches a preset
+    const matchedPreset = CRON_PRESETS.find(p => p.expr === s.cron_expr)
+    setSelectedPreset(matchedPreset ? matchedPreset.expr : 'custom')
+    setShowCustomCron(!matchedPreset)
     setForm({
       name: s.name,
       type: s.type,
@@ -337,6 +356,7 @@ export default function AutomationsPage() {
     setEditingTriggerId(null)
     setShowAddTrigger(true)
     setTriggerError('')
+    setTriggerSlugManuallyEdited(false)
     setTriggerForm({ ...EMPTY_TRIGGER_FORM, agent_id: agents[0]?.id || '' })
   }
 
@@ -344,6 +364,7 @@ export default function AutomationsPage() {
     setEditingTriggerId(t.id)
     setShowAddTrigger(false)
     setTriggerError('')
+    setTriggerSlugManuallyEdited(false)
     setTriggerForm({
       name: t.name,
       slug: t.slug,
@@ -356,12 +377,18 @@ export default function AutomationsPage() {
     setEditingTriggerId(null)
     setShowAddTrigger(false)
     setTriggerError('')
+    setTriggerSlugManuallyEdited(false)
   }
 
   function updateTriggerForm(field: string, value: string) {
+    if (field === 'slug') {
+      setTriggerSlugManuallyEdited(true)
+      setTriggerForm(prev => ({ ...prev, slug: value }))
+      return
+    }
     setTriggerForm(prev => {
       const next = { ...prev, [field]: value }
-      if (field === 'name' && !editingTriggerId) {
+      if (field === 'name' && !triggerSlugManuallyEdited) {
         next.slug = slugify(value)
       }
       return next
@@ -423,6 +450,7 @@ export default function AutomationsPage() {
     setEditingPluginId(null)
     setShowAddPlugin(true)
     setPluginError('')
+    setPluginSlugManuallyEdited(false)
     setPluginForm(EMPTY_PLUGIN_FORM)
   }
 
@@ -430,6 +458,7 @@ export default function AutomationsPage() {
     setEditingPluginId(p.id)
     setShowAddPlugin(false)
     setPluginError('')
+    setPluginSlugManuallyEdited(false)
     setPluginForm({
       name: p.name,
       slug: p.slug,
@@ -445,12 +474,18 @@ export default function AutomationsPage() {
     setEditingPluginId(null)
     setShowAddPlugin(false)
     setPluginError('')
+    setPluginSlugManuallyEdited(false)
   }
 
   function updatePluginForm(field: string, value: string) {
+    if (field === 'slug') {
+      setPluginSlugManuallyEdited(true)
+      setPluginForm(prev => ({ ...prev, slug: value }))
+      return
+    }
     setPluginForm(prev => {
       const next = { ...prev, [field]: value }
-      if (field === 'name' && !editingPluginId) {
+      if (field === 'name' && !pluginSlugManuallyEdited) {
         next.slug = slugify(value)
       }
       return next
@@ -744,29 +779,84 @@ export default function AutomationsPage() {
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">Cron expression</label>
-                  <input
-                    value={form.cron_expr}
-                    onChange={(e) => updateForm('cron_expr', e.target.value)}
-                    placeholder="0 9 * * *"
-                    className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors duration-150"
-                  />
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {CRON_EXAMPLES.map((ex) => (
-                      <button
-                        key={ex.expr}
-                        type="button"
-                        onClick={() => updateForm('cron_expr', ex.expr)}
-                        className="border border-neutral-800/60 text-neutral-500 rounded-lg px-2.5 py-1 text-xs hover:text-neutral-300 hover:border-neutral-700 transition-colors duration-150 font-mono"
-                      >
-                        {ex.expr} <span className="text-neutral-700 font-sans">— {ex.label}</span>
-                      </button>
-                    ))}
+                <div className="sm:col-span-2">
+                  <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-2">Schedule</label>
+                  {/* Preset grid */}
+                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+                    {CRON_PRESETS.map((preset) => {
+                      const isActive = selectedPreset === preset.expr
+                      return (
+                        <button
+                          key={preset.expr}
+                          type="button"
+                          onClick={() => {
+                            setSelectedPreset(preset.expr)
+                            updateForm('cron_expr', preset.expr)
+                          }}
+                          className={`px-2.5 py-2 rounded-lg border text-xs font-medium text-center transition-all duration-150 leading-tight ${
+                            isActive
+                              ? 'border-violet-600/70 bg-violet-950/40 text-violet-300'
+                              : 'border-neutral-800 bg-neutral-800/40 text-neutral-400 hover:border-neutral-700 hover:text-neutral-200 hover:bg-neutral-800/60'
+                          }`}
+                        >
+                          {preset.label}
+                        </button>
+                      )
+                    })}
                   </div>
-                  {form.cron_expr && (
-                    <p className="mt-1.5 text-xs text-neutral-500">{describeCron(form.cron_expr)}</p>
-                  )}
+
+                  {/* Human-readable confirmation */}
+                  {selectedPreset && selectedPreset !== 'custom' && (() => {
+                    const preset = CRON_PRESETS.find(p => p.expr === selectedPreset)
+                    return preset ? (
+                      <p className="mt-2 text-xs text-violet-400/80 flex items-center gap-1.5">
+                        <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 16 16" strokeWidth={1.8} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM8 4.5v4l2.5 2.5"/></svg>
+                        {preset.desc}
+                      </p>
+                    ) : null
+                  })()}
+
+                  {/* Custom cron disclosure */}
+                  <div className="mt-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowCustomCron(v => !v)
+                        if (!showCustomCron) {
+                          setSelectedPreset('custom')
+                        }
+                      }}
+                      className="flex items-center gap-1 text-xs text-neutral-500 hover:text-neutral-300 transition-colors duration-150"
+                    >
+                      <svg
+                        className={`w-3 h-3 transition-transform duration-150 ${showCustomCron ? 'rotate-90' : ''}`}
+                        fill="none" viewBox="0 0 12 12" stroke="currentColor" strokeWidth={2}
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 2l4 4-4 4"/>
+                      </svg>
+                      Custom schedule (advanced)
+                    </button>
+
+                    {showCustomCron && (
+                      <div className="mt-2">
+                        <input
+                          value={form.cron_expr}
+                          onChange={(e) => {
+                            updateForm('cron_expr', e.target.value)
+                            setSelectedPreset('custom')
+                          }}
+                          placeholder="*/5 * * * *"
+                          className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors duration-150"
+                        />
+                        <p className="mt-1.5 text-xs text-neutral-600">
+                          Enter a cron expression (e.g. <span className="font-mono text-neutral-500">*/5 * * * *</span> for every 5 minutes)
+                        </p>
+                        {form.cron_expr && selectedPreset === 'custom' && (
+                          <p className="mt-1 text-xs text-neutral-500">{describeCron(form.cron_expr)}</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -1100,7 +1190,7 @@ function TriggerForm({ form, agents, error, isEdit, onChange, onSave, onCancel }
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div>
+        <div className="sm:col-span-2">
           <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">Name</label>
           <input
             value={form.name}
@@ -1108,18 +1198,19 @@ function TriggerForm({ form, agents, error, isEdit, onChange, onSave, onCancel }
             placeholder="e.g. GitHub push event"
             className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none transition-colors duration-150"
           />
-        </div>
-
-        <div>
-          <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">
-            Slug <span className="normal-case text-neutral-700 font-normal">(auto-generated from name)</span>
-          </label>
-          <input
-            value={form.slug}
-            onChange={(e) => onChange('slug', e.target.value)}
-            placeholder="github-push-event"
-            className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors duration-150"
-          />
+          <p className="text-xs text-[--text-muted] mt-1">ID: {form.slug || '—'}</p>
+          <details className="mt-1">
+            <summary className="text-xs text-neutral-500 cursor-pointer select-none">Advanced</summary>
+            <div className="mt-2">
+              <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">Slug</label>
+              <input
+                value={form.slug}
+                onChange={(e) => onChange('slug', e.target.value)}
+                placeholder="github-push-event"
+                className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors duration-150"
+              />
+            </div>
+          </details>
         </div>
 
         <div className="sm:col-span-2">
@@ -1196,7 +1287,7 @@ function PluginForm({ form, error, isEdit, onChange, onSave, onCancel }: PluginF
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div>
+        <div className="sm:col-span-2">
           <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">Name</label>
           <input
             value={form.name}
@@ -1204,18 +1295,19 @@ function PluginForm({ form, error, isEdit, onChange, onSave, onCancel }: PluginF
             placeholder="e.g. Slack Notification"
             className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none transition-colors duration-150"
           />
-        </div>
-
-        <div>
-          <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">
-            Slug <span className="normal-case text-neutral-700 font-normal">(auto-generated)</span>
-          </label>
-          <input
-            value={form.slug}
-            onChange={(e) => onChange('slug', e.target.value)}
-            placeholder="slack-notification"
-            className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors duration-150"
-          />
+          <p className="text-xs text-[--text-muted] mt-1">ID: {form.slug || '—'}</p>
+          <details className="mt-1">
+            <summary className="text-xs text-neutral-500 cursor-pointer select-none">Advanced</summary>
+            <div className="mt-2">
+              <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">Slug</label>
+              <input
+                value={form.slug}
+                onChange={(e) => onChange('slug', e.target.value)}
+                placeholder="slack-notification"
+                className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors duration-150"
+              />
+            </div>
+          </details>
         </div>
 
         <div className="sm:col-span-2">

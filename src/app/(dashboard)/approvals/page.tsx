@@ -13,6 +13,7 @@ import {
 import { toast } from 'sonner'
 import { useRealtimeTable } from '@/hooks/useRealtimeTable'
 import { useData } from '@/hooks/useData'
+import { displayToolName } from '@/lib/utils'
 import PageHeader from '@/components/PageHeader'
 import Badge from '@/components/Badge'
 import EmptyState from '@/components/EmptyState'
@@ -187,7 +188,7 @@ export default function ApprovalsPage() {
               <div className="flex items-start justify-between">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
-                    <Badge label={a.tool_name} color="amber" />
+                    <Badge label={displayToolName(a.tool_name)} color="amber" />
                     {a.agents && <span className="text-xs text-neutral-500">by {a.agents.name}</span>}
                   </div>
                   <p className="text-xs text-neutral-400 mt-1">
@@ -257,7 +258,7 @@ export default function ApprovalsPage() {
               {resolved.map(a => (
                 <tr key={a.id} className="border-b border-neutral-800/50 hover:bg-neutral-800/30 transition-colors">
                   <td className="px-5 py-3.5">
-                    <Badge label={a.tool_name} color="neutral" />
+                    <Badge label={displayToolName(a.tool_name)} color="neutral" />
                   </td>
                   <td className="px-5 py-3.5 text-neutral-400 text-xs">{a.agents?.name || '—'}</td>
                   <td className="px-5 py-3.5">
@@ -361,7 +362,7 @@ export default function ApprovalsPage() {
                         {rule.agents?.name ?? 'Any agent'}
                       </span>
                       <span className="text-neutral-600 text-xs">→</span>
-                      <Badge label={rule.tool_name} color="neutral" />
+                      <Badge label={displayToolName(rule.tool_name)} color="neutral" />
                       <span className="text-neutral-600 text-xs">→</span>
                       <Badge label={actionLabel} color={actionColor} />
                     </div>

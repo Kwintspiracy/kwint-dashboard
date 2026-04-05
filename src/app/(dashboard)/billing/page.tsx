@@ -64,15 +64,15 @@ export default function BillingPage() {
     <div className="space-y-5 max-w-7xl">
       <PageHeader
         title="Billing"
-        subtitle={`${runs.length} runs · ${fmtTokens(totalTokens)} tokens used`}
+        subtitle={`${runs.length} runs · ~${fmtCost(entityCost + operatorCost)} estimated · ${fmtTokens(totalTokens)} tokens`}
       />
 
       {/* ── Summary cards ─────────────────────────────── */}
       <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-4">
-          <p className="text-xs text-neutral-500">Total tokens</p>
-          <p className="text-2xl font-bold text-white mt-1">{fmtTokens(totalTokens)}</p>
-          <p className="text-xs text-neutral-600 mt-1">{runs.length} runs</p>
+          <p className="text-xs text-neutral-500">Total est. cost</p>
+          <p className="text-2xl font-bold text-white mt-1">{fmtCost(entityCost + operatorCost)}</p>
+          <p className="text-xs text-neutral-600 mt-1">{fmtTokens(totalTokens)} tokens · {runs.length} runs</p>
         </div>
         <div className="rounded-xl border border-emerald-900/40 bg-neutral-950 p-4">
           <p className="text-xs text-neutral-500">Est. cost — own keys</p>

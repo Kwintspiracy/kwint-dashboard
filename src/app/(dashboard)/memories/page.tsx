@@ -324,7 +324,11 @@ export default function MemoriesPage() {
       {view === 'all' && (
         <div className="bg-neutral-900 border border-neutral-800/60 rounded-xl overflow-hidden divide-y divide-neutral-800/40">
           {displayMemories.length === 0 ? (
-            <EmptyState message={search ? 'No memories match your search' : 'No memories yet'} />
+            <EmptyState
+              message={search ? 'No memories match your search' : 'No memories yet'}
+              description={search ? undefined : 'Your agents will remember important facts here as they work. You can also add facts manually.'}
+              action={search ? undefined : { label: 'Add a memory', onClick: () => setShowAdd(true) }}
+            />
           ) : displayMemories.map(m => (
             <MemoryRow key={m.id} m={m} agents={agents} onUpdate={mutate} onDelete={() => { mutate(); mutateCounts() }} />
           ))}

@@ -210,9 +210,10 @@ export default function AgentsPage() {
   const [form, setForm] = useState({
     name: '', slug: '', personality: '', model: 'claude-sonnet-4-6',
     role: 'agent', telegram_bot_token: '', telegram_bot_username: '',
-    requires_approval: '' as string,
+    requires_approval: [] as string[],
     capabilities: [] as string[],
   })
+  const [slugManuallyEdited, setSlugManuallyEdited] = useState(false)
   const [telegramStatus, setTelegramStatus] = useState('')
   const [loadingEditId, setLoadingEditId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -241,6 +242,7 @@ export default function AgentsPage() {
     setShowTemplates(false)
     setEditingId(null)
     setTelegramStatus('')
+    setSlugManuallyEdited(false)
     setForm({
       name: template.name,
       slug: slugify(template.name),
@@ -249,7 +251,7 @@ export default function AgentsPage() {
       role: template.role,
       telegram_bot_token: '',
       telegram_bot_username: '',
-      requires_approval: template.suggestedApprovalTools.join(', '),
+      requires_approval: template.suggestedApprovalTools,
       capabilities: [],
     })
     setShowAdd(true)
@@ -274,32 +276,39 @@ export default function AgentsPage() {
     setSelectedOrchestratorId(orchParentRes.ok ? orchParentRes.data : null)
     setLoadingEditId(null)
     setEditingId(a.id); setShowAdd(false); setTelegramStatus('')
+    setSlugManuallyEdited(false)
     setPromptPreview(null); setShowPromptPreview(false)
     setForm({
       name: a.name, slug: a.slug, personality: a.personality, model: a.model,
       role: a.role || 'agent',
       telegram_bot_token: a.telegram_bot_token || '',
       telegram_bot_username: a.telegram_bot_username || '',
-      requires_approval: (a.requires_approval || []).join(', '),
+      requires_approval: a.requires_approval || [],
       capabilities: a.capabilities || [],
     })
   }
 
   function startAdd() {
     setEditingId(null); setShowAdd(true); setTelegramStatus('')
+    setSlugManuallyEdited(false)
     setForm({
       name: '', slug: '', personality: DEFAULT_PERSONALITY, model: 'claude-sonnet-4-6',
       role: 'agent', telegram_bot_token: '', telegram_bot_username: '',
-      requires_approval: '',
+      requires_approval: [],
       capabilities: [],
     })
   }
 
   function updateForm(field: string, value: string) {
+    if (field === 'slug') {
+      setSlugManuallyEdited(true)
+      setForm(prev => ({ ...prev, slug: value }))
+      return
+    }
     setForm(prev => {
       const next = { ...prev, [field]: value }
-      if (field === 'name' && !editingId) {
-        next.slug = value.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
+      if (field === 'name' && !slugManuallyEdited) {
+        next.slug = value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
       }
       if (field === 'role' && value === 'orchestrator' && !editingId) {
         next.personality = ORCHESTRATOR_PERSONALITY
@@ -311,11 +320,11 @@ export default function AgentsPage() {
   }
 
   async function handleSave() {
-    if (!form.name || !form.slug || !form.personality) return
+    if (!form.name.trim()) { toast.error('Name is required'); return }
+    if (!form.slug.trim()) { toast.error('ID is required'); return }
+    if (!form.personality.trim()) { toast.error('Instructions are required'); return }
     setSaving(true)
-    const approvalList = form.requires_approval
-      ? form.requires_approval.split(',').map(s => s.trim()).filter(Boolean)
-      : []
+    const isFirstAgent = agents.length === 0
 
     try {
     if (editingId) {
@@ -324,14 +333,16 @@ export default function AgentsPage() {
         role: form.role,
         telegram_bot_token: form.telegram_bot_token || null,
         telegram_bot_username: form.telegram_bot_username || null,
-        requires_approval: approvalList,
+        requires_approval: form.requires_approval,
       })
       if (!result.ok) { toast.error(result.error); return }
       const orchAssignments = assignedAgentIds.map(id => ({ sub_agent_id: id, instructions: agentInstructions[id] || null }))
-      await Promise.all([
+      const [skillRes, assignRes] = await Promise.all([
         setAgentSkillAssignmentsAction(editingId, assignedSkillIds),
         form.role === 'orchestrator' ? setOrchestratorAssignmentsAction(editingId, orchAssignments) : setAgentOrchestratorAction(editingId, selectedOrchestratorId),
       ])
+      if (!skillRes.ok) toast.error('Could not save skill assignments')
+      if (!assignRes.ok) toast.error('Could not save team assignments')
       toast.success('Agent updated')
       setEditingId(null)
     } else {
@@ -340,17 +351,20 @@ export default function AgentsPage() {
         role: form.role,
         telegram_bot_token: form.telegram_bot_token || null,
         telegram_bot_username: form.telegram_bot_username || null,
+        requires_approval: form.requires_approval,
       })
       if (!result.ok) { toast.error(result.error); return }
       const newId = (result as { ok: true; data: { id: string } }).data?.id
       if (newId) {
         const orchAssignments = assignedAgentIds.map(id => ({ sub_agent_id: id, instructions: agentInstructions[id] || null }))
-        await Promise.all([
+        const [skillRes, assignRes] = await Promise.all([
           setAgentSkillAssignmentsAction(newId, assignedSkillIds),
           form.role === 'orchestrator' ? setOrchestratorAssignmentsAction(newId, orchAssignments) : setAgentOrchestratorAction(newId, selectedOrchestratorId),
         ])
+        if (!skillRes.ok) toast.error('Could not save skill assignments')
+        if (!assignRes.ok) toast.error('Could not save team assignments')
       }
-      toast.success('Agent created')
+      toast.success(isFirstAgent ? 'Agent created! Now assign it some skills to give it capabilities.' : 'Agent created successfully.')
       setShowAdd(false)
     }
     mutate()
@@ -802,14 +816,14 @@ export default function AgentsPage() {
           {/* ── Two-column body ── */}
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px]">
 
-            {/* Left — Identity + Personality */}
+            {/* Left — Identity + Instructions */}
             <div className="p-6 space-y-6 border-b lg:border-b-0 lg:border-r border-neutral-800/50">
 
               {/* Identity */}
               <fieldset className="space-y-4">
                 <legend className="text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-3">Identity</legend>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
+                  <div className="sm:col-span-2">
                     <label htmlFor="agent-name" className="text-xs text-neutral-500 mb-1.5 block">Name</label>
                     <input
                       id="agent-name"
@@ -817,15 +831,19 @@ export default function AgentsPage() {
                       placeholder="e.g. Research Assistant"
                       className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white placeholder-neutral-700 focus:border-neutral-600 focus:outline-none transition-colors duration-150"
                     />
-                  </div>
-                  <div>
-                    <label htmlFor="agent-slug" className="text-xs text-neutral-500 mb-1.5 block">Slug</label>
-                    <input
-                      id="agent-slug"
-                      value={form.slug} onChange={(e) => updateForm('slug', e.target.value)}
-                      placeholder="research-assistant"
-                      className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono placeholder-neutral-700 focus:border-neutral-600 focus:outline-none transition-colors duration-150"
-                    />
+                    <p className="text-xs text-[--text-muted] mt-1">ID: {form.slug || '—'}</p>
+                    <details className="mt-1">
+                      <summary className="text-xs text-neutral-500 cursor-pointer select-none">Advanced</summary>
+                      <div className="mt-2">
+                        <label htmlFor="agent-slug" className="text-xs text-neutral-500 mb-1.5 block">Slug</label>
+                        <input
+                          id="agent-slug"
+                          value={form.slug} onChange={(e) => updateForm('slug', e.target.value)}
+                          placeholder="research-assistant"
+                          className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono placeholder-neutral-700 focus:border-neutral-600 focus:outline-none transition-colors duration-150"
+                        />
+                      </div>
+                    </details>
                   </div>
                   <div>
                     <label className="text-xs text-neutral-500 mb-1.5 block">Model</label>
@@ -846,13 +864,15 @@ export default function AgentsPage() {
                 )}
               </fieldset>
 
-              {/* Personality */}
+              {/* Instructions */}
               <fieldset className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <legend className="text-xs font-semibold text-neutral-500 uppercase tracking-wide">
-                    Personality
-                    <span className="ml-1.5 text-neutral-600 font-normal normal-case tracking-normal text-xs">— system prompt</span>
-                  </legend>
+                  <div>
+                    <legend className="text-xs font-semibold text-neutral-500 uppercase tracking-wide">
+                      Instructions
+                    </legend>
+                    <p className="text-xs text-neutral-600 mt-0.5">Tell your agent who it is and how to behave</p>
+                  </div>
                   <details className="relative text-right">
                     <summary className="text-xs text-neutral-600 hover:text-neutral-400 cursor-pointer select-none transition-colors list-none">
                       Placeholders ▾
@@ -862,10 +882,10 @@ export default function AgentsPage() {
                         Any placeholder activates <strong className="text-neutral-300">full-template mode</strong> — runner substitutes only, no auto-assembly.
                       </p>
                       {([
-                        ['{{skills}}', 'Skills index for this session'],
+                        ['{{skills}}', 'Include skill list'],
                         ['{{memories}}', 'Recalled memories'],
-                        ['{{team}}', 'Assigned agents roster'],
-                        ['{{date}}', "Today's date"],
+                        ['{{team}}', 'Include team roster'],
+                        ['{{date}}', 'Include today\'s date'],
                         ['{{briefing}}', 'Delegation context (sub-agents)'],
                         ['{{channel}}', 'Channel-specific instructions'],
                       ] as [string, string][]).map(([ph, desc]) => (
@@ -896,10 +916,10 @@ export default function AgentsPage() {
                 <textarea
                   id="agent-personality"
                   value={form.personality} onChange={(e) => updateForm('personality', e.target.value)}
-                  placeholder="# Agent: My Agent&#10;&#10;## Who you are&#10;..."
+                  placeholder="You are a helpful assistant..."
                   rows={22}
-                  aria-label="Agent personality / system prompt"
-                  className="w-full bg-neutral-950/60 border border-neutral-800 rounded-lg px-4 py-3 text-sm text-neutral-200 font-mono leading-relaxed focus:border-neutral-600 focus:outline-none transition-colors resize-y"
+                  aria-label="Agent instructions / system prompt"
+                  className="w-full bg-neutral-950/60 border border-neutral-800 rounded-lg px-4 py-3 text-sm text-neutral-200 leading-relaxed focus:border-neutral-600 focus:outline-none transition-colors resize-y"
                 />
 
                 {/* Team block preview */}
@@ -1092,19 +1112,36 @@ export default function AgentsPage() {
 
               {/* Human-in-the-Loop */}
               <section aria-labelledby="section-approval" className="border-t border-neutral-800/50 pt-5">
-                <h3 id="section-approval" className="text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-1">Approval</h3>
-                <p className="text-xs text-neutral-600 mb-2.5">Tools that require human sign-off before execution.</p>
-                <input
-                  id="requires-approval"
-                  value={form.requires_approval}
-                  onChange={(e) => updateForm('requires_approval', e.target.value)}
-                  placeholder="http_request, delegate_task"
-                  aria-label="Tools requiring approval, comma-separated"
-                  className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-3 py-2 text-xs text-white font-mono placeholder-neutral-700 focus:border-neutral-600 focus:outline-none transition-colors"
-                />
-                <p className="text-xs text-neutral-700 mt-1.5 leading-relaxed">
-                  web_search · save_memory · http_request · send_notification · delegate_task · load_skill
-                </p>
+                <h3 id="section-approval" className="text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-0.5">Require human approval before:</h3>
+                <p className="text-xs text-neutral-600 mb-2.5">Your agent will pause and wait for your OK before taking these actions.</p>
+                <div className="flex flex-col gap-0.5">
+                  {([
+                    ['web_search', 'Search the web'],
+                    ['http_request', 'Make web requests / API calls'],
+                    ['send_notification', 'Send notifications'],
+                    ['delegate_task', 'Assign work to another agent'],
+                    ['save_memory', 'Remember information'],
+                    ['load_skill', 'Load skill instructions'],
+                  ] as [string, string][]).map(([tool, label]) => {
+                    const checked = form.requires_approval.includes(tool)
+                    return (
+                      <label key={tool} className={`flex items-center gap-2.5 px-2 py-1.5 rounded-lg cursor-pointer transition-colors hover:bg-neutral-800/30 ${checked ? 'bg-neutral-800/20' : ''}`}>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => setForm(prev => ({
+                            ...prev,
+                            requires_approval: checked
+                              ? prev.requires_approval.filter(t => t !== tool)
+                              : [...prev.requires_approval, tool],
+                          }))}
+                          className="rounded border-neutral-700 bg-neutral-800 accent-amber-500 shrink-0 cursor-pointer"
+                        />
+                        <span className="text-xs text-neutral-300">{label}</span>
+                      </label>
+                    )
+                  })}
+                </div>
               </section>
 
               {/* Channels */}
@@ -1306,22 +1343,4 @@ You have access to all standard tools (web_search, save_memory, http_request, et
 6. Be transparent about which agents you consulted
 7. For multi-step tasks, break them down and delegate sequentially, passing results between steps`
 
-const DEFAULT_PERSONALITY = `# Agent: [Name]
-
-## Who you are
-
-Describe the agent's role and personality here.
-
----
-
-## Rules
-
-1. Be concise
-2. Save useful facts to memory
-3. If something fails, explain why clearly
-
----
-
-## Response format
-
-Keep responses structured and clear.`
+const DEFAULT_PERSONALITY = `You are a helpful assistant. You are thorough, accurate, and concise. When given a task, you break it down into clear steps and execute them carefully.`
