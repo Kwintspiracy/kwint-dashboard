@@ -264,7 +264,9 @@ export default function AgentsPage() {
       getOrchestratorAssignmentDetailsAction(a.id),
       getAgentOrchestratorAction(a.id),
     ])
-    setAssignedSkillIds(skillsRes.ok ? skillsRes.data : [])
+    // Filter out orphaned IDs pointing to deleted skills
+    const validSkillIds = new Set(skills.map(s => s.id))
+    setAssignedSkillIds(skillsRes.ok ? skillsRes.data.filter(id => validSkillIds.has(id)) : [])
     if (orchDetailsRes.ok) {
       setAssignedAgentIds(orchDetailsRes.data.map(d => d.sub_agent_id))
       const instr: Record<string, string> = {}
@@ -445,14 +447,20 @@ export default function AgentsPage() {
                       {a.is_default && (
                         <span className="text-xs px-2 py-1 rounded-full bg-emerald-950/60 text-emerald-400 border border-emerald-800/40 leading-tight">default</span>
                       )}
-                      {a.capabilities && a.capabilities.length > 0 && <>
-                        {a.capabilities.slice(0, 2).map(cap => (
-                          <span key={cap} className="px-1.5 py-0.5 text-xs font-medium bg-violet-950/60 text-violet-400 border border-violet-800/40 rounded leading-tight">{cap}</span>
-                        ))}
-                        {a.capabilities.length > 2 && (
-                          <span className="text-xs text-neutral-600" title={a.capabilities.slice(2).join(', ')}>+{a.capabilities.length - 2}</span>
-                        )}
-                      </>}
+                      {(() => {
+                        // Derive live skill names from current assignments (avoids stale capabilities field)
+                        const assignedSlugs = skillMap[a.id] ?? []
+                        const assignedSkills = skills.filter(s => assignedSlugs.includes(s.slug))
+                        if (assignedSkills.length === 0) return null
+                        return <>
+                          {assignedSkills.slice(0, 2).map(s => (
+                            <span key={s.id} className="px-1.5 py-0.5 text-xs font-medium bg-violet-950/60 text-violet-400 border border-violet-800/40 rounded leading-tight">{s.name}</span>
+                          ))}
+                          {assignedSkills.length > 2 && (
+                            <span className="text-xs text-neutral-600" title={assignedSkills.slice(2).map(s => s.name).join(', ')}>+{assignedSkills.length - 2}</span>
+                          )}
+                        </>
+                      })()}
                     </div>
                   </td>
                   <td className="px-4 py-3 hidden lg:table-cell">
