@@ -2212,8 +2212,21 @@ export async function startTaskAction(id: string): Promise<ActionResult<{ job_id
 
     // Kick off a job via the agent API
     const agentUrl = process.env.NEXT_PUBLIC_AGENT_API_URL
-    const apiKey = process.env.API_SECRET_KEY
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL
+      || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '')
+    const apiKey = process.env.NEXT_PRIVATE_WORKER || process.env.WORKER_SECRET || process.env.API_SECRET_KEY
     let jobId: string | null = null
+
+    // Append task tracking context so the orchestrator can update status on completion
+    const taskContext = [
+      taskText,
+      '---',
+      `task_id: ${id}`,
+      `When you finish this task, call PATCH ${appUrl}/api/tasks/${id}`,
+      `with header "Authorization: Bearer ${apiKey ?? '<API_SECRET_KEY>'}"`,
+      `and body {"status":"done","result":"<brief summary of what was accomplished>"}.`,
+      `If you cannot complete it, use {"status":"cancelled","result":"<reason>"}.`,
+    ].join('\n')
 
     if (agentUrl) {
       try {
@@ -2223,7 +2236,7 @@ export async function startTaskAction(id: string): Promise<ActionResult<{ job_id
             'Content-Type': 'application/json',
             ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
           },
-          body: JSON.stringify({ task: taskText, async: true, agent_slug: orchestratorSlug, entity_id: entityId }),
+          body: JSON.stringify({ task: taskContext, task_id: id, async: true, agent_slug: orchestratorSlug, entity_id: entityId }),
         })
         if (!res.ok) return fail(`Agent API error ${res.status}: ${await res.text().catch(() => '')}`)
         const result = await res.json().catch(() => ({}))

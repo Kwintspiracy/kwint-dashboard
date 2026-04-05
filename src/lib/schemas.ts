@@ -269,6 +269,7 @@ export const UpdateTaskSchema = z.object({
   priority: z.enum(['low', 'medium', 'high']).optional(),
   status: z.enum(['todo', 'in_progress', 'done', 'cancelled']).optional(),
   job_id: z.string().uuid().nullable().optional(),
+  result: z.string().max(5000).nullable().optional(),
 })
 
 export type CreateTaskInput = z.infer<typeof CreateTaskSchema>
