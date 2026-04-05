@@ -608,6 +608,102 @@ export async function updateAgentAction(
   }
 }
 
+// ─── Effective Prompt Preview ─────────────────────────────────────────────────
+
+type PromptSection = { source: string; label: string; content: string; tokens: number }
+
+function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 4)
+}
+
+export async function previewEffectivePromptAction(agentId: string): Promise<ActionResult<{
+  sections: PromptSection[]
+  totalTokens: number
+  isTemplateMode: boolean
+}>> {
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+
+    const { data: agent, error: agentErr } = await supabase
+      .from('agents')
+      .select('personality, role, task_context_template')
+      .eq('id', agentId)
+      .eq('entity_id', entityId)
+      .single()
+    if (agentErr || !agent) return fail('Agent not found')
+
+    const KNOWN_PLACEHOLDERS = ['{{skills}}', '{{memories}}', '{{team}}', '{{date}}', '{{briefing}}', '{{channel}}']
+    const isTemplateMode = KNOWN_PLACEHOLDERS.some(p => (agent.personality ?? '').includes(p))
+
+    const sections: PromptSection[] = []
+
+    // 1. Personality
+    sections.push({
+      source: 'personality',
+      label: 'Personality',
+      content: agent.personality ?? '',
+      tokens: estimateTokens(agent.personality ?? ''),
+    })
+
+    if (!isTemplateMode) {
+      // 2. Skills (auto-assembled)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: skillAssignments } = await supabase
+        .from('agent_skill_assignments')
+        .select('agent_skills(name, slug, content)')
+        .eq('agent_id', agentId)
+        .eq('entity_id', entityId)
+
+      if (skillAssignments && skillAssignments.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const skillContent = (skillAssignments as any[])
+          .map(sa => sa.agent_skills?.content)
+          .filter(Boolean)
+          .join('\n\n---\n\n')
+        if (skillContent) {
+          sections.push({
+            source: 'skills',
+            label: `Skills (${skillAssignments.length})`,
+            content: skillContent,
+            tokens: estimateTokens(skillContent),
+          })
+        }
+      }
+
+      // 3. Team (orchestrators only)
+      if (agent.role === 'orchestrator') {
+        const { data: teamAssignments } = await supabase
+          .from('agent_assignments')
+          .select('sub_agent_id, instructions, agents!agent_assignments_sub_agent_id_fkey(name, slug, capabilities)')
+          .eq('orchestrator_id', agentId)
+          .eq('entity_id', entityId)
+
+        if (teamAssignments && teamAssignments.length > 0) {
+          const lines = ["## Your team", "", "Use `delegate_task` with the agent's slug:", ""]
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          for (const ta of teamAssignments as any[]) {
+            const a = ta.agents
+            if (!a) continue
+            const caps = (a.capabilities ?? []).slice(0, 3)
+            lines.push(`- **${a.name}** — slug: \`${a.slug}\`${caps.length ? ` (${caps.join(', ')})` : ''}`)
+            if (ta.instructions) lines.push(`  Instructions: ${ta.instructions}`)
+          }
+          const teamContent = lines.join('\n')
+          sections.push({
+            source: 'team',
+            label: `Team (${teamAssignments.length} agents)`,
+            content: teamContent,
+            tokens: estimateTokens(teamContent),
+          })
+        }
+      }
+    }
+
+    const totalTokens = sections.reduce((sum, s) => sum + s.tokens, 0)
+    return ok({ sections, totalTokens, isTemplateMode })
+  } catch (e) { return dbError(e) }
+}
+
 export async function deleteAgentAction(id: string): Promise<ActionResult> {
   try {
     const { supabase, entityId } = await requireAuthWithEntity()
@@ -2195,38 +2291,35 @@ export async function startTaskAction(id: string): Promise<ActionResult<{ job_id
   try {
     const { supabase, entityId } = await requireAuthWithEntity()
 
-    // Load task + orchestrator slug
+    // Load task + orchestrator slug + task_context_template
     const { data: task, error: taskErr } = await supabase
       .from('agent_tasks')
-      .select('*, agents!agent_tasks_orchestrator_id_fkey(slug)')
+      .select('*, agents!agent_tasks_orchestrator_id_fkey(slug, task_context_template)')
       .eq('id', id)
       .eq('entity_id', entityId)
       .single()
     if (taskErr || !task) return fail('Task not found')
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const orchestratorSlug = (task as any).agents?.slug as string | undefined
-    if (!orchestratorSlug) return fail('Orchestrator not found')
+    const orchestrator = (task as any).agents as { slug: string; task_context_template: string | null } | null
+    if (!orchestrator?.slug) return fail('Orchestrator not found')
+    const orchestratorSlug = orchestrator.slug
 
     const taskText = [task.title, task.description].filter(Boolean).join('\n\n')
 
     // Kick off a job via the agent API
     const agentUrl = process.env.NEXT_PUBLIC_AGENT_API_URL
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL
-      || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '')
     const apiKey = process.env.NEXT_PRIVATE_WORKER || process.env.WORKER_SECRET || process.env.API_SECRET_KEY
     let jobId: string | null = null
 
-    // Append task tracking context so the orchestrator can update status on completion
-    const taskContext = [
-      taskText,
-      '---',
-      `task_id: ${id}`,
-      `When you finish this task, call PATCH ${appUrl}/api/tasks/${id}`,
-      `with header "Authorization: Bearer ${apiKey ?? '<API_SECRET_KEY>'}"`,
-      `and body {"status":"done","result":"<brief summary of what was accomplished>"}.`,
-      `If you cannot complete it, use {"status":"cancelled","result":"<reason>"}.`,
-    ].join('\n')
+    // Append task context — use orchestrator's custom template if set, otherwise a safe default.
+    // NOTE: the API secret is intentionally NOT injected into the LLM context.
+    // task_id is passed separately in the job payload for the runner to handle callbacks.
+    const DEFAULT_TASK_CONTEXT = 'When you finish this task, briefly summarize what you accomplished.'
+    const contextBlock = (orchestrator.task_context_template ?? DEFAULT_TASK_CONTEXT).trim()
+    const taskContext = contextBlock
+      ? `${taskText}\n\n---\n${contextBlock}`
+      : taskText
 
     if (agentUrl) {
       try {

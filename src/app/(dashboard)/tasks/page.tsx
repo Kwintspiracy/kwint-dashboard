@@ -8,6 +8,7 @@ import {
   deleteTaskAction,
   startTaskAction,
   getAgentsAction,
+  updateAgentAction,
 } from '@/lib/actions'
 import { TASK_TEMPLATES, TASK_TEMPLATE_CATEGORIES } from '@/lib/task-templates'
 import { useData } from '@/hooks/useData'
@@ -18,7 +19,7 @@ import CardSkeleton from '@/components/skeletons/CardSkeleton'
 import Badge from '@/components/Badge'
 import { toast } from 'sonner'
 
-type Agent = { id: string; name: string; slug: string; role: string }
+type Agent = { id: string; name: string; slug: string; role: string; task_context_template: string | null }
 
 type Task = {
   id: string
@@ -102,6 +103,9 @@ export default function TasksPage() {
   const [form, setForm] = useState({ ...EMPTY_FORM })
   const [saving, setSaving] = useState(false)
   const [starting, setStarting] = useState<string | null>(null)
+  const [showContextEditor, setShowContextEditor] = useState(false)
+  const [contextTemplate, setContextTemplate] = useState<string>('')
+  const [savingContext, setSavingContext] = useState(false)
 
   const { data: agentsRaw = [] } = useData(['agents', eid], getAgentsAction)
   const orchestrators = (agentsRaw as Agent[]).filter(a => a.role === 'orchestrator')
@@ -113,12 +117,34 @@ export default function TasksPage() {
     }
   }, [orchestrators, orchestratorId])
 
+  // Sync context template when orchestrator changes
+  useEffect(() => {
+    const orch = orchestrators.find(o => o.id === orchestratorId)
+    setContextTemplate(orch?.task_context_template ?? '')
+    setShowContextEditor(false)
+  }, [orchestratorId])
+
   const tasksKey = orchestratorId ? (['tasks', orchestratorId] as unknown[]) : ('tasks:none' as string)
   const { data: tasksRaw = [], isLoading, mutate } = useData(
     tasksKey,
     orchestratorId ? () => getTasksAction(orchestratorId) : async () => [],
   )
   const tasks = tasksRaw as Task[]
+
+  async function saveContextTemplate() {
+    if (!orchestratorId) return
+    setSavingContext(true)
+    try {
+      const result = await updateAgentAction(orchestratorId, {
+        task_context_template: contextTemplate.trim() || null,
+      })
+      if (!result.ok) { toast.error(result.error); return }
+      toast.success('Task context saved')
+      setShowContextEditor(false)
+    } finally {
+      setSavingContext(false)
+    }
+  }
 
   function startAdd() {
     setEditingId(null)
@@ -240,6 +266,58 @@ export default function TasksPage() {
               <option key={o.id} value={o.id}>{o.name}</option>
             ))}
           </select>
+        </div>
+      )}
+
+      {/* Task context template — what the orchestrator receives with every task */}
+      {orchestratorId && (
+        <div className="border border-neutral-800/50 rounded-xl overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setShowContextEditor(v => !v)}
+            className="w-full flex items-center justify-between px-4 py-3 text-xs hover:bg-neutral-800/20 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-neutral-500 uppercase tracking-wide">Instructions sent to orchestrator</span>
+              {contextTemplate && (
+                <span className="px-1.5 py-px bg-emerald-950/50 text-emerald-500 border border-emerald-800/30 rounded text-xs">custom</span>
+              )}
+            </div>
+            <span className="text-neutral-700">{showContextEditor ? '▲' : '▼'}</span>
+          </button>
+
+          {showContextEditor && (
+            <div className="border-t border-neutral-800/50 p-4 space-y-3">
+              <p className="text-xs text-neutral-600 leading-relaxed">
+                This text is appended to every task sent to this orchestrator. Leave blank to use the default:
+                <em className="text-neutral-500 block mt-1">&ldquo;When you finish this task, briefly summarize what you accomplished.&rdquo;</em>
+              </p>
+              <textarea
+                value={contextTemplate}
+                onChange={e => setContextTemplate(e.target.value)}
+                placeholder="e.g. Break this task into subtasks, delegate each to a specialist, then compile results…"
+                rows={5}
+                className="w-full bg-neutral-950/60 border border-neutral-800 rounded-lg px-3 py-2.5 text-xs text-neutral-200 font-mono leading-relaxed focus:border-neutral-600 focus:outline-none transition-colors resize-y"
+              />
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={saveContextTemplate}
+                  disabled={savingContext}
+                  className="px-4 py-1.5 text-xs font-semibold bg-white text-black rounded-full hover:bg-neutral-200 active:scale-[0.97] transition-all duration-150 disabled:opacity-50"
+                >
+                  {savingContext ? 'Saving…' : 'Save'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setContextTemplate(''); saveContextTemplate() }}
+                  className="px-3 py-1.5 text-xs text-neutral-600 hover:text-neutral-400 transition-colors"
+                >
+                  Reset to default
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

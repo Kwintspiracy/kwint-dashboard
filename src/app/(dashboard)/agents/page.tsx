@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { getAgentsAction, createAgentAction, updateAgentAction, deleteAgentAction, setDefaultAgentAction, activateTelegramAction, deactivateTelegramAction, getLlmKeysAction, getOperatorProvidersAction, getSkillsAction, getAgentSkillAssignmentsAction, setAgentSkillAssignmentsAction, getOrchestratorAssignmentsAction, getOrchestratorAssignmentDetailsAction, setOrchestratorAssignmentsAction, getAgentOrchestratorAction, setAgentOrchestratorAction, getAllAgentAssignmentsAction, getAllSkillAssignmentsAction } from '@/lib/actions'
+import { getAgentsAction, createAgentAction, updateAgentAction, deleteAgentAction, setDefaultAgentAction, activateTelegramAction, deactivateTelegramAction, getLlmKeysAction, getOperatorProvidersAction, getSkillsAction, getAgentSkillAssignmentsAction, setAgentSkillAssignmentsAction, getOrchestratorAssignmentsAction, getOrchestratorAssignmentDetailsAction, setOrchestratorAssignmentsAction, getAgentOrchestratorAction, setAgentOrchestratorAction, getAllAgentAssignmentsAction, getAllSkillAssignmentsAction, previewEffectivePromptAction } from '@/lib/actions'
 import { timeAgo } from '@/lib/utils'
 import { toast } from 'sonner'
 import { useData } from '@/hooks/useData'
@@ -183,7 +183,7 @@ export default function AgentsPage() {
   )
   const operatorProviders = new Set(operatorProvidersRaw as string[])
   const agents = agentsRaw as Agent[]
-  type Skill = { id: string; name: string; slug: string; active: boolean }
+  type Skill = { id: string; name: string; slug: string; active: boolean; content: string | null }
   const skills = skillsRaw as Skill[]
   type AgentAssignment = { orchestrator_id: string; sub_agent_id: string }
   const allAssignments: AgentAssignment[] = (allAssignmentsRaw as { ok: boolean; data?: AgentAssignment[] } | undefined)?.ok
@@ -216,6 +216,23 @@ export default function AgentsPage() {
   const [telegramStatus, setTelegramStatus] = useState('')
   const [loadingEditId, setLoadingEditId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [expandedSkillIds, setExpandedSkillIds] = useState<Set<string>>(new Set())
+  type PromptPreview = { sections: { source: string; label: string; content: string; tokens: number }[]; totalTokens: number; isTemplateMode: boolean }
+  const [promptPreview, setPromptPreview] = useState<PromptPreview | null>(null)
+  const [promptPreviewLoading, setPromptPreviewLoading] = useState(false)
+  const [showPromptPreview, setShowPromptPreview] = useState(false)
+
+  async function loadPromptPreview() {
+    if (!editingId) return
+    setPromptPreviewLoading(true)
+    setShowPromptPreview(true)
+    try {
+      const result = await previewEffectivePromptAction(editingId)
+      if (result.ok) setPromptPreview(result.data)
+    } finally {
+      setPromptPreviewLoading(false)
+    }
+  }
 
   function slugify(name: string) {
     return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
@@ -258,6 +275,7 @@ export default function AgentsPage() {
     setSelectedOrchestratorId(orchParentRes.ok ? orchParentRes.data : null)
     setLoadingEditId(null)
     setEditingId(a.id); setShowAdd(false); setTelegramStatus('')
+    setExpandedSkillIds(new Set()); setPromptPreview(null); setShowPromptPreview(false)
     setForm({
       name: a.name, slug: a.slug, personality: a.personality, model: a.model,
       role: a.role || 'agent',
@@ -860,6 +878,37 @@ export default function AgentsPage() {
                     </div>
                   </details>
                 </div>
+
+                {/* Phase 1: Template mode indicator */}
+                {(() => {
+                  const KNOWN = ['{{skills}}', '{{memories}}', '{{team}}', '{{date}}', '{{briefing}}', '{{channel}}']
+                  const detected = KNOWN.filter(p => form.personality.includes(p))
+                  const templateMode = detected.length > 0
+                  return (
+                    <div className={`flex items-start gap-2 rounded-lg px-3 py-2 text-xs border ${templateMode ? 'bg-sky-950/20 border-sky-800/30 text-sky-300' : 'bg-neutral-900/40 border-neutral-800/40 text-neutral-600'}`}>
+                      <span className="shrink-0 font-mono mt-px">{templateMode ? '⚡' : '⚙'}</span>
+                      <div className="leading-relaxed">
+                        {templateMode ? (
+                          <>
+                            <span className="font-semibold text-sky-300">Template mode</span>
+                            <span className="text-sky-600/80"> — runner fills placeholders only, no auto-assembly of skills/memories/team.</span>
+                            <div className="flex flex-wrap gap-1 mt-1.5">
+                              {detected.map(p => (
+                                <code key={p} className="px-1.5 py-px bg-sky-900/40 rounded text-sky-400 font-mono text-xs border border-sky-800/30">{p}</code>
+                              ))}
+                            </div>
+                          </>
+                        ) : (
+                          <span>
+                            <span className="font-medium text-neutral-500">Auto-assembly mode</span>
+                            <span> — runner appends skills, memories, team and date automatically.</span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })()}
+
                 <textarea
                   id="agent-personality"
                   value={form.personality} onChange={(e) => updateForm('personality', e.target.value)}
@@ -931,21 +980,48 @@ export default function AgentsPage() {
                     <a href="/connectors" className="text-neutral-400 underline hover:text-white transition-colors">install from Marketplace</a>
                   </p>
                 ) : (
-                  <div className="flex flex-col">
+                  <div className="flex flex-col gap-0.5">
                     {skills.map(skill => {
                       const checked = assignedSkillIds.includes(skill.id)
+                      const expanded = expandedSkillIds.has(skill.id)
                       return (
-                        <label key={skill.id} className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-neutral-800/30 cursor-pointer transition-colors">
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={() => setAssignedSkillIds(prev => checked ? prev.filter(id => id !== skill.id) : [...prev, skill.id])}
-                            className="rounded border-neutral-700 bg-neutral-800 accent-emerald-500"
-                          />
-                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${skill.active ? 'bg-emerald-400' : 'bg-neutral-600'}`} />
-                          <span className="text-xs text-neutral-300 flex-1 truncate">{skill.name}</span>
-                          <span className="text-xs text-neutral-700 font-mono">{skill.slug}</span>
-                        </label>
+                        <div key={skill.id} className={`rounded-lg transition-colors ${checked ? 'bg-neutral-800/20' : ''}`}>
+                          <div className="flex items-center gap-2 px-2 py-1.5">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => setAssignedSkillIds(prev => checked ? prev.filter(id => id !== skill.id) : [...prev, skill.id])}
+                              className="rounded border-neutral-700 bg-neutral-800 accent-emerald-500 shrink-0 cursor-pointer"
+                            />
+                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${skill.active ? 'bg-emerald-400' : 'bg-neutral-600'}`} />
+                            <span className="text-xs text-neutral-300 flex-1 truncate">{skill.name}</span>
+                            {skill.content && (
+                              <button
+                                type="button"
+                                onClick={() => setExpandedSkillIds(prev => {
+                                  const next = new Set(prev)
+                                  expanded ? next.delete(skill.id) : next.add(skill.id)
+                                  return next
+                                })}
+                                className="text-xs text-neutral-700 hover:text-neutral-400 transition-colors font-mono shrink-0"
+                                title="Preview skill prompt"
+                              >
+                                {expanded ? '▲' : '▼'}
+                              </button>
+                            )}
+                          </div>
+                          {expanded && skill.content && (
+                            <div className="mx-2 mb-2 border border-neutral-800/60 rounded-lg overflow-hidden">
+                              <div className="px-2.5 py-1 bg-neutral-800/30 border-b border-neutral-800/60 flex items-center justify-between">
+                                <span className="text-xs text-neutral-600 font-mono">{skill.slug}</span>
+                                <span className="text-xs text-neutral-700">~{Math.ceil(skill.content.length / 4)} tokens</span>
+                              </div>
+                              <pre className="px-3 py-2 text-xs text-neutral-500 font-mono leading-relaxed overflow-x-auto bg-neutral-950/40 whitespace-pre-wrap max-h-40 overflow-y-auto">
+                                {skill.content.slice(0, 800)}{skill.content.length > 800 ? '\n…' : ''}
+                              </pre>
+                            </div>
+                          )}
+                        </div>
                       )
                     })}
                   </div>
@@ -1130,6 +1206,71 @@ export default function AgentsPage() {
 
             </div>
           </div>
+
+          {/* Phase 3: Effective prompt preview — full-width below the two-column grid */}
+          {editingId && (
+            <div className="border-t border-neutral-800/50">
+              <button
+                type="button"
+                onClick={showPromptPreview ? () => setShowPromptPreview(false) : loadPromptPreview}
+                className="w-full flex items-center justify-between px-6 py-3 text-xs text-neutral-600 hover:text-neutral-400 hover:bg-neutral-800/20 transition-all duration-150"
+              >
+                <span className="font-semibold uppercase tracking-wide">What the agent receives ▾</span>
+                {promptPreview && !promptPreviewLoading && (
+                  <span className="text-neutral-700">~{promptPreview.totalTokens.toLocaleString()} tokens total</span>
+                )}
+              </button>
+
+              {showPromptPreview && (
+                <div className="px-6 pb-6 space-y-3">
+                  {promptPreviewLoading ? (
+                    <p className="text-xs text-neutral-600 py-4 text-center">Assembling prompt…</p>
+                  ) : promptPreview ? (
+                    <>
+                      {promptPreview.isTemplateMode && (
+                        <div className="flex items-center gap-2 text-xs text-sky-400 bg-sky-950/20 border border-sky-800/30 rounded-lg px-3 py-2">
+                          <span>⚡</span>
+                          <span>Template mode — only your placeholders are filled. The sections below show what each one expands to.</span>
+                        </div>
+                      )}
+                      {promptPreview.sections.map((section, i) => {
+                        const colors: Record<string, string> = {
+                          personality: 'border-violet-800/40 bg-violet-950/10',
+                          skills: 'border-emerald-800/40 bg-emerald-950/10',
+                          team: 'border-sky-800/40 bg-sky-950/10',
+                        }
+                        const labelColors: Record<string, string> = {
+                          personality: 'text-violet-400',
+                          skills: 'text-emerald-400',
+                          team: 'text-sky-400',
+                        }
+                        const colorClass = colors[section.source] ?? 'border-neutral-800 bg-neutral-900/30'
+                        const labelColor = labelColors[section.source] ?? 'text-neutral-400'
+                        return (
+                          <div key={i} className={`border rounded-lg overflow-hidden ${colorClass}`}>
+                            <div className="flex items-center justify-between px-3 py-1.5 border-b border-inherit">
+                              <span className={`text-xs font-semibold ${labelColor}`}>{section.label}</span>
+                              <span className="text-xs text-neutral-700">~{section.tokens.toLocaleString()} tokens</span>
+                            </div>
+                            <pre className="px-4 py-3 text-xs text-neutral-400 font-mono leading-relaxed whitespace-pre-wrap overflow-x-auto max-h-52 overflow-y-auto bg-transparent">
+                              {section.content.slice(0, 2000)}{section.content.length > 2000 ? '\n…' : ''}
+                            </pre>
+                          </div>
+                        )
+                      })}
+                      <button
+                        type="button"
+                        onClick={loadPromptPreview}
+                        className="text-xs text-neutral-700 hover:text-neutral-400 transition-colors"
+                      >
+                        ↻ Refresh after saving
+                      </button>
+                    </>
+                  ) : null}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>
