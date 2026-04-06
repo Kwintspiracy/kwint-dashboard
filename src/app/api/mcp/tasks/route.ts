@@ -49,14 +49,18 @@ const TOOLS = [
 async function resolveEntityId(token: string): Promise<string | null> {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!supabaseUrl || !serviceKey) return null
+  if (!supabaseUrl || !serviceKey) {
+    console.error('[mcp/tasks] missing env: url=%s key=%s', !!supabaseUrl, !!serviceKey)
+    return null
+  }
 
   const supabase = createClient(supabaseUrl, serviceKey)
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('entities')
     .select('id')
     .eq('mcp_token', token)
     .single()
+  if (error) console.error('[mcp/tasks] token lookup error:', error.message, 'token:', token)
   return data?.id ?? null
 }
 
