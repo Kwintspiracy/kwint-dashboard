@@ -2162,9 +2162,82 @@ export async function setSkillApprovalsAction(raw: unknown): Promise<ActionResul
       .eq('skill_id', parsed.data.skill_id)
       .eq('entity_id', entityId)
     if (error) return dbFail(error)
+    await syncHttpApprovalRule(supabase, entityId, parsed.data.agent_id)
     return ok(null)
   } catch (e) {
     return dbError(e)
+  }
+}
+
+// Keeps the approval_rules table in sync with per-operation skill overrides.
+// If any assigned skill has an operation marked requires_approval, ensures an
+// approval_rules row exists for http_request so the runner gate fires.
+// Typed tool names exposed by skill adapters — kept in sync with agent/adapters/*.py (item 4.1)
+const SKILL_ADAPTER_TOOLS: Record<string, string[]> = {
+  'gmail':          ['gmail_send_email', 'gmail_list_emails'],
+  'resend':         ['resend_send_email'],
+  'google-sheets':  ['sheets_read_range', 'sheets_write_range', 'sheets_append_row'],
+  'slack':          ['slack_send_message', 'slack_list_channels', 'slack_get_messages'],
+  'outlook':        ['outlook_send_email', 'outlook_list_emails'],
+}
+
+async function syncHttpApprovalRule(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  entityId: string,
+  agentId: string,
+): Promise<void> {
+  // Fetch all skill assignments with their slugs and approval_overrides
+  const { data } = await supabase
+    .from('agent_skill_assignments')
+    .select('approval_overrides, agent_skills(slug)')
+    .eq('agent_id', agentId)
+    .eq('entity_id', entityId)
+
+  const rows = (data ?? []) as Array<{ approval_overrides: Record<string, boolean> | null; agent_skills: { slug: string } | null }>
+  const anyRequires = rows.some(row => Object.values(row.approval_overrides ?? {}).some(Boolean))
+
+  // Collect adapter tool names for skills with approval enabled (item 4.1)
+  const adapterToolsToGate = new Set<string>()
+  for (const row of rows) {
+    const hasApproval = Object.values(row.approval_overrides ?? {}).some(Boolean)
+    if (hasApproval) {
+      const slug = row.agent_skills?.slug
+      if (slug && SKILL_ADAPTER_TOOLS[slug]) {
+        SKILL_ADAPTER_TOOLS[slug].forEach(t => adapterToolsToGate.add(t))
+      }
+    }
+  }
+
+  // Delete old rules for http_request and all known adapter tools
+  const toolsToDelete = ['http_request', ...Object.values(SKILL_ADAPTER_TOOLS).flat()]
+  for (const toolName of toolsToDelete) {
+    await supabase
+      .from('approval_rules')
+      .delete()
+      .eq('agent_id', agentId)
+      .eq('tool_name', toolName)
+      .eq('entity_id', entityId)
+  }
+
+  if (!anyRequires) return
+
+  // Insert approval rule for http_request (fallback for skills without adapters)
+  await supabase.from('approval_rules').insert({
+    agent_id: agentId,
+    tool_name: 'http_request',
+    action: 'require_approval',
+    entity_id: entityId,
+  })
+
+  // Insert approval rules for each typed adapter tool (item 4.1)
+  for (const toolName of adapterToolsToGate) {
+    await supabase.from('approval_rules').insert({
+      agent_id: agentId,
+      tool_name: toolName,
+      action: 'require_approval',
+      entity_id: entityId,
+    })
   }
 }
 
@@ -2207,6 +2280,7 @@ export async function setAgentSkillAssignmentsAction(agentId: string, skillIds: 
       capabilities.push(...caps)
     }
     await supabase.from('agents').update({ capabilities }).eq('id', agentId).eq('entity_id', entityId)
+    await syncHttpApprovalRule(supabase, entityId, agentId)
     return ok(null)
   } catch (e) {
     return dbError(e)
