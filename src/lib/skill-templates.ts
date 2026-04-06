@@ -406,7 +406,7 @@ System label IDs: INBOX, SENT, DRAFT, TRASH, SPAM, UNREAD, STARRED, IMPORTANT
   },
   {
     id: 'google-drive', name: 'Google Drive', slug: 'google-drive',
-    description: 'List, read, and manage files in Google Drive',
+    description: 'List, search, read, and upload files in Google Drive',
     category: 'google', color: '#FBBC04',
     icon: 'M7.71 3.5L1.15 15l3.43 6 6.55-11.5L7.71 3.5zm1.14 0l6.56 11.5H22L15.44 3.5H8.85zM15 16l-3.43 6h13.72l3.43-6H15z',
     brandIcon: '/app-icons/google-drive.svg',
@@ -421,7 +421,15 @@ System label IDs: INBOX, SENT, DRAFT, TRASH, SPAM, UNREAD, STARRED, IMPORTANT
       { key: 'oauth_client_secret', label: 'Client Secret', type: 'password', placeholder: 'GOCSPX-...', required: true, help: 'Google Cloud Console → Credentials → OAuth 2.0 Client IDs' },
       { key: 'oauth_refresh_token', label: 'Refresh Token', type: 'password', placeholder: '1//...', required: true, help: 'Generate at developers.google.com/oauthplayground — enable "offline access", use scope drive' },
     ],
-    content: `# Google Drive API\n\nOAuth2 — the runner auto-refreshes the access token using the stored refresh token.\n\n## List files\nGET /files?q=trashed=false&fields=files(id,name,mimeType)\n\n## Search\nGET /files?q=name+contains+'report'\n\n## Get file metadata\nGET /files/{fileId}\n\n## Download file\nGET /files/{fileId}?alt=media\n\nUse connector_slug="google-drive" for auth.`,
+    content: `# Google Drive API\n\nOAuth2 — the runner auto-refreshes the access token using the stored refresh token.\n\n## List files\nGET /files\n\n## Get file metadata or content\nGET /files/{fileId}\n\n## Upload file\nPOST /upload/drive/v3/files\n\nUse connector_slug="google-drive" for auth. Google Docs are exported as plain text automatically.`,
+    required_config: [
+      { label: 'Google Drive connector', description: 'OAuth2 credentials with drive scope', type: 'connector_slug', value: 'google-drive', critical: true },
+    ],
+    operations: [
+      { name: 'List files', slug: 'drive_list_files', risk: 'read', requires_approval: false },
+      { name: 'Read file', slug: 'drive_read_file', risk: 'read', requires_approval: false },
+      { name: 'Upload file', slug: 'drive_upload_file', risk: 'write', requires_approval: true },
+    ],
   },
 
   // ═══════════════════════════════════════════════════
