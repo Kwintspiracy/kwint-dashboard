@@ -14,6 +14,7 @@ import { AGENT_TEMPLATES, type AgentTemplate } from '@/lib/agent-templates'
 import { LLM_PROVIDERS, getProviderForModel } from '@/lib/llm-providers'
 import { SKILL_CAPABILITIES } from '@/lib/skill-templates'
 import Toggle from '@/components/Toggle'
+import SidePanel from '@/components/SidePanel'
 
 type Agent = {
   id: string; name: string; slug: string; personality: string
@@ -774,100 +775,16 @@ export default function AgentsPage() {
         </div>
       )}
 
-      {(editingId || showAdd) && (
-        <div className="bg-neutral-900 border border-neutral-800/60 rounded-xl overflow-hidden">
+      <SidePanel
+        open={editingId !== null || showAdd}
+        onClose={() => { setEditingId(null); setShowAdd(false) }}
+        title={editingId ? 'Edit Agent' : 'New Agent'}
+        subtitle={editingId ? `/${form.slug}` : undefined}
+        width="lg"
+      >
 
-          {/* ── Form header ── */}
-          <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800/60 bg-neutral-900">
-            <div className="flex items-center gap-3">
-              <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${editingId ? 'bg-violet-950/60 border border-violet-800/40' : 'bg-neutral-800 border border-neutral-700/50'}`}>
-                <svg className={`w-3.5 h-3.5 ${editingId ? 'text-violet-400' : 'text-neutral-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  {editingId
-                    ? <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                    : <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                  }
-                </svg>
-              </div>
-              <div>
-                <h2 className="text-sm font-semibold text-white">{editingId ? 'Edit Agent' : 'New Agent'}</h2>
-                {editingId && <p className="text-xs text-neutral-600 mt-px">/{form.slug}</p>}
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              {editingId && form.telegram_bot_token && (() => {
-                const isActive = !!agents.find(a => a.id === editingId)?.telegram_webhook_url
-                return (
-                  <div className="flex items-center gap-2 pr-3 border-r border-neutral-800/80">
-                    {isActive && !telegramStatus && (
-                      <span className="flex items-center gap-1.5 text-xs text-emerald-400">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />
-                        Webhook active
-                      </span>
-                    )}
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        setTelegramStatus('Registering...')
-                        try {
-                          const res = await activateTelegramAction(form.slug)
-                          setTelegramStatus(res.ok ? 'Webhook active!' : `Error: ${res.error}`)
-                          if (res.ok) mutate()
-                        } catch { setTelegramStatus('Failed to connect') }
-                      }}
-                      className="px-3 py-1.5 text-xs font-medium border border-emerald-800/60 text-emerald-400 rounded-lg hover:bg-emerald-950/60 transition-all duration-150"
-                    >
-                      {isActive ? 'Re-activate' : 'Activate Telegram'}
-                    </button>
-                    {isActive && (
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          setTelegramStatus('Removing...')
-                          try {
-                            const res = await deactivateTelegramAction(form.slug)
-                            setTelegramStatus(res.ok ? 'Webhook removed' : `Error: ${res.error}`)
-                            if (res.ok) mutate()
-                          } catch { setTelegramStatus('Failed') }
-                        }}
-                        className="px-3 py-1.5 text-xs font-medium border border-neutral-700/60 text-neutral-400 rounded-lg hover:border-red-800/60 hover:text-red-400 transition-all duration-150"
-                        aria-label="Deactivate Telegram webhook"
-                      >
-                        Deactivate
-                      </button>
-                    )}
-                    {telegramStatus && <span className="text-xs text-neutral-500">{telegramStatus}</span>}
-                  </div>
-                )
-              })()}
-              <button
-                type="button"
-                onClick={() => { setEditingId(null); setShowAdd(false) }}
-                className="px-3 py-1.5 text-xs font-medium border border-neutral-700/60 text-neutral-400 rounded-lg hover:text-white hover:border-neutral-600 transition-all duration-150"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSave}
-                disabled={saving}
-                className="inline-flex items-center gap-2 px-4 py-1.5 text-xs font-semibold bg-white text-black rounded-lg hover:bg-neutral-200 active:bg-neutral-300 active:scale-[0.97] transition-all duration-150 disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {saving && (
-                  <svg className="w-3 h-3 animate-spin shrink-0" viewBox="0 0 24 24" fill="none">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
-                  </svg>
-                )}
-                {saving ? (editingId ? 'Saving…' : 'Creating…') : (editingId ? 'Save changes' : 'Create agent')}
-              </button>
-            </div>
-          </div>
-
-          {/* ── Two-column body ── */}
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px]">
-
-            {/* Left — Identity + Instructions */}
-            <div className="p-6 space-y-6 border-b lg:border-b-0 lg:border-r border-neutral-800/50">
+            {/* Identity + Instructions */}
+            <div className="space-y-6">
 
               {/* Identity */}
               <fieldset className="space-y-4">
@@ -1021,10 +938,7 @@ export default function AgentsPage() {
               </fieldset>
             </div>
 
-            {/* Right sidebar — Config */}
-            <div className="p-5 space-y-5 bg-neutral-950/30">
-
-              {/* Skills */}
+            {/* Skills */}
               <section aria-labelledby="section-skills">
                 <h3 id="section-skills" className="text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-1">Skills</h3>
                 <p className="text-xs text-neutral-600 mb-2.5">Leave unchecked to allow all workspace skills.</p>
@@ -1371,6 +1285,51 @@ export default function AgentsPage() {
                       </div>
                     ) : null
                   })()}
+                  {editingId && form.telegram_bot_token && (() => {
+                    const isActive = !!agents.find(a => a.id === editingId)?.telegram_webhook_url
+                    return (
+                      <div className="flex flex-wrap items-center gap-2">
+                        {isActive && !telegramStatus && (
+                          <span className="flex items-center gap-1.5 text-xs text-emerald-400">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />
+                            Webhook active
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            setTelegramStatus('Registering...')
+                            try {
+                              const res = await activateTelegramAction(form.slug)
+                              setTelegramStatus(res.ok ? 'Webhook active!' : `Error: ${res.error}`)
+                              if (res.ok) mutate()
+                            } catch { setTelegramStatus('Failed to connect') }
+                          }}
+                          className="px-3 py-1.5 text-xs font-medium border border-emerald-800/60 text-emerald-400 rounded-lg hover:bg-emerald-950/60 transition-all duration-150"
+                        >
+                          {isActive ? 'Re-activate' : 'Activate Telegram'}
+                        </button>
+                        {isActive && (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              setTelegramStatus('Removing...')
+                              try {
+                                const res = await deactivateTelegramAction(form.slug)
+                                setTelegramStatus(res.ok ? 'Webhook removed' : `Error: ${res.error}`)
+                                if (res.ok) mutate()
+                              } catch { setTelegramStatus('Failed') }
+                            }}
+                            className="px-3 py-1.5 text-xs font-medium border border-neutral-700/60 text-neutral-400 rounded-lg hover:border-red-800/60 hover:text-red-400 transition-all duration-150"
+                            aria-label="Deactivate Telegram webhook"
+                          >
+                            Deactivate
+                          </button>
+                        )}
+                        {telegramStatus && <span className="text-xs text-neutral-500">{telegramStatus}</span>}
+                      </div>
+                    )
+                  })()}
                 </div>
 
                 {/* Slack + Discord — docs only, collapsed */}
@@ -1394,10 +1353,7 @@ export default function AgentsPage() {
                 </details>
               </section>
 
-            </div>
-          </div>
-
-          {/* Phase 3: Agent preview — plain language summary */}
+            {/* Phase 3: Agent preview — plain language summary */}
           {editingId && (
             <div className="border-t border-neutral-800/50">
               <button
@@ -1561,8 +1517,25 @@ export default function AgentsPage() {
               )}
             </div>
           )}
-        </div>
-      )}
+
+          {/* Save / Cancel */}
+          <div className="flex gap-2 pt-1">
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold bg-white text-black rounded-lg hover:bg-neutral-200 active:bg-neutral-300 active:scale-[0.97] transition-all duration-150 disabled:opacity-60 disabled:pointer-events-none"
+            >
+              {saving && <svg className="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>}
+              {saving ? (editingId ? 'Saving…' : 'Creating…') : (editingId ? 'Save changes' : 'Create agent')}
+            </button>
+            <button
+              onClick={() => { setEditingId(null); setShowAdd(false) }}
+              className="px-4 py-2 text-xs font-medium border border-neutral-800 text-neutral-500 rounded-lg hover:text-white hover:border-neutral-700 transition-colors duration-150"
+            >
+              Cancel
+            </button>
+          </div>
+      </SidePanel>
     </div>
   )
 }

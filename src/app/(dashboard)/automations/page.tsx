@@ -26,6 +26,7 @@ import Badge from '@/components/Badge'
 import EmptyState from '@/components/EmptyState'
 import TableSkeleton from '@/components/skeletons/TableSkeleton'
 import { toast } from 'sonner'
+import SidePanel from '@/components/SidePanel'
 
 type Agent = { id: string; name: string; slug: string }
 
@@ -693,18 +694,43 @@ export default function AutomationsPage() {
                     </td>
 
                     <td className="px-5 py-4 text-right">
-                      <div className="flex items-center justify-end gap-3">
-                        <button onClick={() => startEdit(s)} className="text-xs text-neutral-500 hover:text-white transition-colors duration-150">Edit</button>
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => startEdit(s)}
+                          title="Edit"
+                          className="p-2 rounded-lg text-neutral-500 hover:text-white hover:bg-neutral-800 transition-all duration-150"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                          </svg>
+                        </button>
                         <button
                           role="switch"
                           aria-checked={s.active}
                           aria-label={`Toggle ${s.name} active`}
                           onClick={() => handleToggle(s)}
-                          className={`text-xs transition-colors duration-150 ${s.active ? 'text-neutral-500 hover:text-amber-400' : 'text-neutral-500 hover:text-emerald-400'}`}
+                          title={s.active ? 'Pause' : 'Resume'}
+                          className={`p-2 rounded-lg hover:bg-neutral-800 transition-all duration-150 ${s.active ? 'text-neutral-500 hover:text-amber-400' : 'text-neutral-500 hover:text-emerald-400'}`}
                         >
-                          {s.active ? 'Pause' : 'Resume'}
+                          {s.active ? (
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25v13.5m-7.5-13.5v13.5" />
+                            </svg>
+                          ) : (
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
+                            </svg>
+                          )}
                         </button>
-                        <button onClick={() => handleDelete(s.id)} className="text-xs text-neutral-500 hover:text-red-400 transition-colors duration-150">Delete</button>
+                        <button
+                          onClick={() => handleDelete(s.id)}
+                          title="Delete"
+                          className="p-2 rounded-lg text-neutral-500 hover:text-red-400 hover:bg-neutral-800 transition-all duration-150"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -714,16 +740,12 @@ export default function AutomationsPage() {
             {schedules.length === 0 && <EmptyState message="No automations yet" />}
           </div>
 
-          {/* Create / Edit schedule form */}
-          {isFormOpen && (
-            <div className="bg-neutral-900 border border-neutral-800/60 rounded-xl p-6 space-y-5">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-white">{editingId ? 'Edit Automation' : 'New Automation'}</p>
-                <button onClick={cancelForm} className="text-neutral-600 hover:text-neutral-300 transition-colors duration-150 p-1">
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M12 4L4 12M4 4l8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-                </button>
-              </div>
-
+          <SidePanel
+            open={isFormOpen}
+            onClose={cancelForm}
+            title={editingId ? 'Edit Schedule' : 'New Schedule'}
+            width="lg"
+          >
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">Name</label>
@@ -908,8 +930,7 @@ export default function AutomationsPage() {
                   Cancel
                 </button>
               </div>
-            </div>
-          )}
+          </SidePanel>
         </>
       )}
 
@@ -919,17 +940,6 @@ export default function AutomationsPage() {
           <div className="space-y-3">
             {triggers.map((t) => (
               <div key={t.id} className="bg-neutral-900 border border-neutral-800/60 rounded-xl p-5 hover:border-neutral-700/60 transition-colors duration-150">
-                {editingTriggerId === t.id ? (
-                  <TriggerForm
-                    form={triggerForm}
-                    agents={agents}
-                    error={triggerError}
-                    isEdit
-                    onChange={updateTriggerForm}
-                    onSave={handleSaveTrigger}
-                    onCancel={cancelTriggerForm}
-                  />
-                ) : (
                   <div className="space-y-3">
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex items-center gap-2.5 min-w-0 flex-wrap">
@@ -942,15 +952,40 @@ export default function AutomationsPage() {
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center gap-3 shrink-0">
-                        <button onClick={() => startEditTrigger(t)} className="text-xs text-neutral-500 hover:text-white transition-colors duration-150">Edit</button>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          onClick={() => startEditTrigger(t)}
+                          title="Edit"
+                          className="p-2 rounded-lg text-neutral-500 hover:text-white hover:bg-neutral-800 transition-all duration-150"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                          </svg>
+                        </button>
                         <button
                           onClick={() => handleToggleTrigger(t)}
-                          className={`text-xs transition-colors duration-150 ${t.active ? 'text-neutral-500 hover:text-amber-400' : 'text-neutral-500 hover:text-emerald-400'}`}
+                          title={t.active ? 'Pause' : 'Resume'}
+                          className={`p-2 rounded-lg hover:bg-neutral-800 transition-all duration-150 ${t.active ? 'text-neutral-500 hover:text-amber-400' : 'text-neutral-500 hover:text-emerald-400'}`}
                         >
-                          {t.active ? 'Pause' : 'Resume'}
+                          {t.active ? (
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25v13.5m-7.5-13.5v13.5" />
+                            </svg>
+                          ) : (
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
+                            </svg>
+                          )}
                         </button>
-                        <button onClick={() => handleDeleteTrigger(t.id)} className="text-xs text-neutral-500 hover:text-red-400 transition-colors duration-150">Delete</button>
+                        <button
+                          onClick={() => handleDeleteTrigger(t.id)}
+                          title="Delete"
+                          className="p-2 rounded-lg text-neutral-500 hover:text-red-400 hover:bg-neutral-800 transition-all duration-150"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
                       </div>
                     </div>
 
@@ -984,35 +1019,30 @@ export default function AutomationsPage() {
                       <span className="text-xs text-neutral-700 font-mono truncate">/{t.slug}</span>
                     </div>
                   </div>
-                )}
               </div>
             ))}
-            {triggers.length === 0 && !showAddTrigger && (
+            {triggers.length === 0 && !isTriggerFormOpen && (
               <div className="bg-neutral-900 border border-neutral-800/60 rounded-xl">
                 <EmptyState message="No webhook triggers yet" />
               </div>
             )}
           </div>
 
-          {showAddTrigger && (
-            <div className="bg-neutral-900 border border-neutral-800/60 rounded-xl p-6">
-              <div className="flex items-center justify-between mb-5">
-                <p className="text-sm font-semibold text-white">New Webhook Trigger</p>
-                <button onClick={cancelTriggerForm} className="text-neutral-600 hover:text-neutral-300 transition-colors duration-150 p-1">
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M12 4L4 12M4 4l8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-                </button>
-              </div>
-              <TriggerForm
-                form={triggerForm}
-                agents={agents}
-                error={triggerError}
-                isEdit={false}
-                onChange={updateTriggerForm}
-                onSave={handleSaveTrigger}
-                onCancel={cancelTriggerForm}
-              />
-            </div>
-          )}
+          <SidePanel
+            open={isTriggerFormOpen}
+            onClose={cancelTriggerForm}
+            title={editingTriggerId ? 'Edit Trigger' : 'New Trigger'}
+          >
+            <TriggerForm
+              form={triggerForm}
+              agents={agents}
+              error={triggerError}
+              isEdit={editingTriggerId !== null}
+              onChange={updateTriggerForm}
+              onSave={handleSaveTrigger}
+              onCancel={cancelTriggerForm}
+            />
+          </SidePanel>
         </>
       )}
 
@@ -1055,16 +1085,6 @@ export default function AutomationsPage() {
             <div className="space-y-3">
               {plugins.map((p) => (
                 <div key={p.id} className="bg-neutral-900 border border-neutral-800/60 rounded-xl p-5 hover:border-neutral-700/60 transition-colors duration-150">
-                  {editingPluginId === p.id ? (
-                    <PluginForm
-                      form={pluginForm}
-                      error={pluginError}
-                      isEdit
-                      onChange={updatePluginForm}
-                      onSave={handleSavePlugin}
-                      onCancel={cancelPluginForm}
-                    />
-                  ) : (
                     <div className="space-y-2.5">
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex items-center gap-2.5 min-w-0 flex-wrap">
@@ -1079,15 +1099,40 @@ export default function AutomationsPage() {
                             {p.hook.replace(/_/g, ' ')}
                           </span>
                         </div>
-                        <div className="flex items-center gap-3 shrink-0">
-                          <button onClick={() => startEditPlugin(p)} className="text-xs text-neutral-500 hover:text-white transition-colors duration-150">Edit</button>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            onClick={() => startEditPlugin(p)}
+                            title="Edit"
+                            className="p-2 rounded-lg text-neutral-500 hover:text-white hover:bg-neutral-800 transition-all duration-150"
+                          >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                            </svg>
+                          </button>
                           <button
                             onClick={() => handleTogglePlugin(p)}
-                            className={`text-xs transition-colors duration-150 ${p.active ? 'text-neutral-500 hover:text-amber-400' : 'text-neutral-500 hover:text-emerald-400'}`}
+                            title={p.active ? 'Pause' : 'Resume'}
+                            className={`p-2 rounded-lg hover:bg-neutral-800 transition-all duration-150 ${p.active ? 'text-neutral-500 hover:text-amber-400' : 'text-neutral-500 hover:text-emerald-400'}`}
                           >
-                            {p.active ? 'Pause' : 'Resume'}
+                            {p.active ? (
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25v13.5m-7.5-13.5v13.5" />
+                              </svg>
+                            ) : (
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
+                              </svg>
+                            )}
                           </button>
-                          <button onClick={() => handleDeletePlugin(p.id)} className="text-xs text-neutral-500 hover:text-red-400 transition-colors duration-150">Delete</button>
+                          <button
+                            onClick={() => handleDeletePlugin(p.id)}
+                            title="Delete"
+                            className="p-2 rounded-lg text-neutral-500 hover:text-red-400 hover:bg-neutral-800 transition-all duration-150"
+                          >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
                         </div>
                       </div>
                       {p.description && (
@@ -1107,31 +1152,26 @@ export default function AutomationsPage() {
                       )}
                       <p className="text-xs text-neutral-700">Added {timeAgo(p.created_at)}</p>
                     </div>
-                  )}
                 </div>
               ))}
             </div>
           )}
 
-          {/* Create plugin form */}
-          {showAddPlugin && (
-            <div className="bg-neutral-900 border border-neutral-800/60 rounded-xl p-6">
-              <div className="flex items-center justify-between mb-5">
-                <p className="text-sm font-semibold text-white">New Plugin</p>
-                <button onClick={cancelPluginForm} className="text-neutral-600 hover:text-neutral-300 transition-colors duration-150 p-1">
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M12 4L4 12M4 4l8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-                </button>
-              </div>
-              <PluginForm
-                form={pluginForm}
-                error={pluginError}
-                isEdit={false}
-                onChange={updatePluginForm}
-                onSave={handleSavePlugin}
-                onCancel={cancelPluginForm}
-              />
-            </div>
-          )}
+          <SidePanel
+            open={isPluginFormOpen}
+            onClose={cancelPluginForm}
+            title={editingPluginId ? 'Edit Plugin' : 'New Plugin'}
+            width="lg"
+          >
+            <PluginForm
+              form={pluginForm}
+              error={pluginError}
+              isEdit={editingPluginId !== null}
+              onChange={updatePluginForm}
+              onSave={handleSavePlugin}
+              onCancel={cancelPluginForm}
+            />
+          </SidePanel>
 
           {/* Browse templates when plugins exist */}
           {plugins.length > 0 && !isPluginFormOpen && (

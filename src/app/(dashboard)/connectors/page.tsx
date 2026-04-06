@@ -12,6 +12,7 @@ import EmptyState from '@/components/EmptyState'
 import CardSkeleton from '@/components/skeletons/CardSkeleton'
 import { toast } from 'sonner'
 import Toggle from '@/components/Toggle'
+import SidePanel from '@/components/SidePanel'
 
 type Connector = {
   id: string; name: string; slug: string
@@ -411,16 +412,34 @@ export default function ConnectorsPage() {
                 )}
 
                 {/* Footer actions */}
-                <div className="flex gap-3 mt-auto pt-2.5 border-t border-neutral-800/40 items-center">
-                  <button onClick={() => startEdit(c)} className="text-xs text-neutral-500 hover:text-white transition-colors duration-150">Edit</button>
-                  <button onClick={() => handleDelete(c.id)} className="text-xs text-neutral-500 hover:text-red-400 transition-colors duration-150">Delete</button>
+                <div className="flex items-center gap-1 mt-auto pt-2.5 border-t border-neutral-800/40">
+                  <button
+                    onClick={() => startEdit(c)}
+                    title="Edit"
+                    className="p-2 rounded-lg text-neutral-500 hover:text-white hover:bg-neutral-800 transition-all duration-150"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => handleDelete(c.id)}
+                    title="Delete"
+                    className="p-2 rounded-lg text-neutral-500 hover:text-red-400 hover:bg-neutral-800 transition-all duration-150"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
                   {CONNECTOR_OAUTH[c.slug] && (
                     <a
                       href={`/api/oauth/start?connector_id=${c.id}`}
-                      className="ml-auto inline-flex items-center gap-1.5 text-xs font-medium text-violet-400 hover:text-violet-300 transition-colors duration-150"
+                      title={c.has_oauth_token ? 'Reconnect OAuth' : 'Connect OAuth'}
+                      className="ml-auto p-2 rounded-lg text-neutral-500 hover:text-violet-400 hover:bg-neutral-800 transition-all duration-150"
                     >
-                      <span className="w-1.5 h-1.5 rounded-full bg-violet-500" />
-                      {c.has_oauth_token ? 'Reconnect' : 'Connect'}
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
+                      </svg>
                     </a>
                   )}
                 </div>
@@ -436,106 +455,100 @@ export default function ConnectorsPage() {
             />
           )}
 
-          {/* Connector form */}
-          {isFormOpen && (
-            <div className="bg-neutral-900 border border-neutral-800/60 rounded-xl p-6 space-y-5">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-white">{editingId ? 'Edit Connector' : 'New Connector'}</p>
-                <button onClick={cancelForm} className="text-neutral-600 hover:text-neutral-300 transition-colors duration-150 p-1">
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M12 4L4 12M4 4l8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="sm:col-span-2">
-                  <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">Name</label>
-                  <input value={form.name} onChange={(e) => updateForm('name', e.target.value)} placeholder="e.g. GitHub"
-                    className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none transition-colors duration-150" />
-                  <p className="text-xs text-[--text-muted] mt-1">ID: {form.slug || '—'}</p>
-                  <details className="mt-1">
-                    <summary className="text-xs text-neutral-500 cursor-pointer select-none">Advanced</summary>
-                    <div className="mt-2">
-                      <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">Slug</label>
-                      <input value={form.slug} onChange={(e) => updateForm('slug', e.target.value)} placeholder="e.g. github"
-                        className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors duration-150" />
-                    </div>
-                  </details>
-                </div>
-                <div>
-                  <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">Base URL <span className="normal-case text-neutral-700 font-normal">(optional)</span></label>
-                  <input value={form.base_url} onChange={(e) => updateForm('base_url', e.target.value)} placeholder="https://api.example.com"
-                    className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none transition-colors duration-150" />
-                </div>
-                <div>
-                  <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">Auth Type</label>
-                  <select value={form.auth_type} onChange={(e) => updateForm('auth_type', e.target.value)}
-                    className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none transition-colors duration-150">
-                    {(Object.entries(AUTH_TYPE_LABELS) as [AuthType, string][]).map(([v, l]) => (
-                      <option key={v} value={v}>{l}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {(authType === 'api_key' || authType === 'bearer' || authType === 'basic') && (
-                <div>
-                  <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">
-                    {authType === 'bearer' ? 'Bearer Token' : authType === 'basic' ? 'Credentials (user:password)' : 'API Key'}
-                    {' '}<span className="normal-case text-neutral-700 font-normal">{editingId ? '(leave empty to keep current)' : '(optional)'}</span>
-                  </label>
-                  <input value={form.api_key} onChange={(e) => updateForm('api_key', e.target.value)}
-                    placeholder={authType === 'bearer' ? 'eyJ...' : authType === 'basic' ? 'username:password' : 'sk-...'}
-                    type="password"
-                    className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors duration-150" />
-                </div>
-              )}
-
-              {authType === 'oauth2' && (
-                <div className="space-y-4 border border-neutral-800/60 rounded-xl p-4 bg-neutral-800/10">
-                  <p className="text-xs text-neutral-500 font-semibold uppercase tracking-wider">OAuth2 credentials</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">Client ID</label>
-                      <input value={form.oauth_client_id} onChange={(e) => updateForm('oauth_client_id', e.target.value)} placeholder="xxxxxx.apps.googleusercontent.com"
-                        className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors duration-150" />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">Client Secret <span className="normal-case text-neutral-700 font-normal">{editingId ? '(leave empty to keep)' : ''}</span></label>
-                      <input value={form.oauth_client_secret} onChange={(e) => updateForm('oauth_client_secret', e.target.value)} placeholder="GOCSPX-..."
-                        type="password"
-                        className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors duration-150" />
-                    </div>
-                    <div className="sm:col-span-2">
-                      <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">Refresh Token <span className="normal-case text-neutral-700 font-normal">{editingId ? '(leave empty to keep)' : ''}</span></label>
-                      <input value={form.oauth_refresh_token} onChange={(e) => updateForm('oauth_refresh_token', e.target.value)} placeholder="1//..."
-                        type="password"
-                        className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors duration-150" />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">Token URL</label>
-                      <input value={form.oauth_token_url} onChange={(e) => updateForm('oauth_token_url', e.target.value)} placeholder="https://oauth2.googleapis.com/token"
-                        className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none transition-colors duration-150" />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">Scopes <span className="normal-case text-neutral-700 font-normal">(space-separated)</span></label>
-                      <input value={form.oauth_scopes} onChange={(e) => updateForm('oauth_scopes', e.target.value)} placeholder="https://www.googleapis.com/auth/gmail.modify"
-                        className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none transition-colors duration-150" />
-                    </div>
+          <SidePanel
+            open={isFormOpen}
+            onClose={cancelForm}
+            title={editingId ? 'Edit Connector' : 'New Connector'}
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="sm:col-span-2">
+                <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">Name</label>
+                <input value={form.name} onChange={(e) => updateForm('name', e.target.value)} placeholder="e.g. GitHub"
+                  className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none transition-colors duration-150" />
+                <p className="text-xs text-[--text-muted] mt-1">ID: {form.slug || '—'}</p>
+                <details className="mt-1">
+                  <summary className="text-xs text-neutral-500 cursor-pointer select-none">Advanced</summary>
+                  <div className="mt-2">
+                    <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">Slug</label>
+                    <input value={form.slug} onChange={(e) => updateForm('slug', e.target.value)} placeholder="e.g. github"
+                      className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors duration-150" />
                   </div>
-                </div>
-              )}
-
-              <div className="flex gap-2 pt-1">
-                <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold bg-white text-black rounded-lg hover:bg-neutral-200 active:bg-neutral-300 active:scale-[0.97] transition-all duration-150 disabled:opacity-60 disabled:pointer-events-none">
-                  {saving && <svg className="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>}
-                  {editingId ? 'Save changes' : 'Create connector'}
-                </button>
-                <button onClick={cancelForm} className="px-4 py-2 text-xs font-medium border border-neutral-800 text-neutral-500 rounded-lg hover:text-white hover:border-neutral-700 transition-colors duration-150">
-                  Cancel
-                </button>
+                </details>
+              </div>
+              <div>
+                <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">Base URL <span className="normal-case text-neutral-700 font-normal">(optional)</span></label>
+                <input value={form.base_url} onChange={(e) => updateForm('base_url', e.target.value)} placeholder="https://api.example.com"
+                  className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none transition-colors duration-150" />
+              </div>
+              <div>
+                <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">Auth Type</label>
+                <select value={form.auth_type} onChange={(e) => updateForm('auth_type', e.target.value)}
+                  className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none transition-colors duration-150">
+                  {(Object.entries(AUTH_TYPE_LABELS) as [AuthType, string][]).map(([v, l]) => (
+                    <option key={v} value={v}>{l}</option>
+                  ))}
+                </select>
               </div>
             </div>
-          )}
+
+            {(authType === 'api_key' || authType === 'bearer' || authType === 'basic') && (
+              <div>
+                <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">
+                  {authType === 'bearer' ? 'Bearer Token' : authType === 'basic' ? 'Credentials (user:password)' : 'API Key'}
+                  {' '}<span className="normal-case text-neutral-700 font-normal">{editingId ? '(leave empty to keep current)' : '(optional)'}</span>
+                </label>
+                <input value={form.api_key} onChange={(e) => updateForm('api_key', e.target.value)}
+                  placeholder={authType === 'bearer' ? 'eyJ...' : authType === 'basic' ? 'username:password' : 'sk-...'}
+                  type="password"
+                  className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors duration-150" />
+              </div>
+            )}
+
+            {authType === 'oauth2' && (
+              <div className="space-y-4 border border-neutral-800/60 rounded-xl p-4 bg-neutral-800/10">
+                <p className="text-xs text-neutral-500 font-semibold uppercase tracking-wider">OAuth2 credentials</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">Client ID</label>
+                    <input value={form.oauth_client_id} onChange={(e) => updateForm('oauth_client_id', e.target.value)} placeholder="xxxxxx.apps.googleusercontent.com"
+                      className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors duration-150" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">Client Secret <span className="normal-case text-neutral-700 font-normal">{editingId ? '(leave empty to keep)' : ''}</span></label>
+                    <input value={form.oauth_client_secret} onChange={(e) => updateForm('oauth_client_secret', e.target.value)} placeholder="GOCSPX-..."
+                      type="password"
+                      className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors duration-150" />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">Refresh Token <span className="normal-case text-neutral-700 font-normal">{editingId ? '(leave empty to keep)' : ''}</span></label>
+                    <input value={form.oauth_refresh_token} onChange={(e) => updateForm('oauth_refresh_token', e.target.value)} placeholder="1//..."
+                      type="password"
+                      className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors duration-150" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">Token URL</label>
+                    <input value={form.oauth_token_url} onChange={(e) => updateForm('oauth_token_url', e.target.value)} placeholder="https://oauth2.googleapis.com/token"
+                      className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none transition-colors duration-150" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">Scopes <span className="normal-case text-neutral-700 font-normal">(space-separated)</span></label>
+                    <input value={form.oauth_scopes} onChange={(e) => updateForm('oauth_scopes', e.target.value)} placeholder="https://www.googleapis.com/auth/gmail.modify"
+                      className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none transition-colors duration-150" />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-2 pt-1">
+              <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold bg-white text-black rounded-lg hover:bg-neutral-200 active:bg-neutral-300 active:scale-[0.97] transition-all duration-150 disabled:opacity-60 disabled:pointer-events-none">
+                {saving && <svg className="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>}
+                {editingId ? 'Save changes' : 'Create connector'}
+              </button>
+              <button onClick={cancelForm} className="px-4 py-2 text-xs font-medium border border-neutral-800 text-neutral-500 rounded-lg hover:text-white hover:border-neutral-700 transition-colors duration-150">
+                Cancel
+              </button>
+            </div>
+          </SidePanel>
         </div>
       )}
 

@@ -16,6 +16,7 @@ import EmptyState from '@/components/EmptyState'
 import CardSkeleton from '@/components/skeletons/CardSkeleton'
 import { toast } from 'sonner'
 import Toggle from '@/components/Toggle'
+import SidePanel from '@/components/SidePanel'
 
 type McpServer = {
   id: string
@@ -261,18 +262,37 @@ export default function McpServersPage() {
               )}
 
               {/* Actions */}
-              <div className="flex gap-3 mt-auto pt-2 border-t border-neutral-800/30">
+              <div className="flex items-center gap-1 mt-auto pt-2 border-t border-neutral-800/30">
                 {s.transport === 'http' && (
                   <button
                     onClick={() => handleTest(s.id)}
                     disabled={testingId === s.id}
-                    className="text-xs text-violet-400 hover:text-violet-300 transition-colors disabled:opacity-50"
+                    title="Test connection"
+                    className="p-2 rounded-lg text-neutral-500 hover:text-violet-400 hover:bg-neutral-800 transition-all duration-150 disabled:opacity-50"
                   >
-                    {testingId === s.id ? 'Testing...' : 'Test connection'}
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+                    </svg>
                   </button>
                 )}
-                <button onClick={() => startEdit(s)} className="text-xs text-neutral-400 hover:text-white transition-colors">Edit</button>
-                <button onClick={() => handleDelete(s.id)} className="text-xs text-neutral-400 hover:text-red-400 transition-colors">Delete</button>
+                <button
+                  onClick={() => startEdit(s)}
+                  title="Edit"
+                  className="p-2 rounded-lg text-neutral-500 hover:text-white hover:bg-neutral-800 transition-all duration-150"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                </button>
+                <button
+                  onClick={() => handleDelete(s.id)}
+                  title="Delete"
+                  className="p-2 rounded-lg text-neutral-500 hover:text-red-400 hover:bg-neutral-800 transition-all duration-150"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
               </div>
             </div>
           )
@@ -287,103 +307,100 @@ export default function McpServersPage() {
         />
       )}
 
-      {/* Add / Edit form */}
-      {isFormOpen && (
-        <div className="bg-neutral-900/50 border border-neutral-800/50 rounded-xl p-6 space-y-5">
-          <p className="text-sm font-semibold text-white">
-            {editingId ? 'Edit Tool Server' : 'New Tool Server'}
-          </p>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="sm:col-span-2">
-              <label className="block text-xs text-neutral-500 mb-1.5">Name</label>
-              <input
-                value={form.name}
-                onChange={e => updateForm('name', e.target.value)}
-                placeholder="e.g. GitHub Tools"
-                className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none transition-colors"
-              />
-              <p className="text-xs text-[--text-muted] mt-1">ID: {form.slug || '—'}</p>
-              <details className="mt-1">
-                <summary className="text-xs text-neutral-500 cursor-pointer select-none">Advanced</summary>
-                <div className="mt-2">
-                  <label className="block text-xs text-neutral-500 mb-1.5">Slug</label>
-                  <input
-                    value={form.slug}
-                    onChange={e => updateForm('slug', e.target.value)}
-                    placeholder="e.g. github-tools"
-                    className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors"
-                  />
-                </div>
-              </details>
-            </div>
-            <div>
-              <label className="block text-xs text-neutral-500 mb-1.5">Transport</label>
-              <select
-                value={form.transport}
-                onChange={e => updateForm('transport', e.target.value)}
-                className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none transition-colors"
-              >
-                <option value="http">HTTP</option>
-                <option value="stdio">stdio (local only)</option>
-              </select>
-            </div>
-
-            {form.transport === 'http' && (
-              <div>
-                <label className="block text-xs text-neutral-500 mb-1.5">Server URL</label>
-                <input
-                  value={form.url}
-                  onChange={e => updateForm('url', e.target.value)}
-                  placeholder="https://mcp.example.com"
-                  className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors"
-                />
-              </div>
-            )}
-
-            {form.transport === 'stdio' && (
-              <div>
-                <label className="block text-xs text-neutral-500 mb-1.5">Command</label>
-                <input
-                  value={form.command}
-                  onChange={e => updateForm('command', e.target.value)}
-                  placeholder="npx -y @modelcontextprotocol/server-github"
-                  className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors"
-                />
-                <p className="text-xs text-amber-500/80 mt-1.5">
-                  stdio transport is not available in serverless environments.
-                </p>
-              </div>
-            )}
-          </div>
-
-          {/* Active toggle row */}
-          <div className="flex items-center gap-3">
-            <Toggle
-              checked={form.active}
-              color="violet"
-              onChange={() => updateForm('active', !form.active)}
+      <SidePanel
+        open={isFormOpen}
+        onClose={cancelForm}
+        title={editingId ? 'Edit Tool Server' : 'New Tool Server'}
+      >
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="sm:col-span-2">
+            <label className="block text-xs text-neutral-500 mb-1.5">Name</label>
+            <input
+              value={form.name}
+              onChange={e => updateForm('name', e.target.value)}
+              placeholder="e.g. GitHub Tools"
+              className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none transition-colors"
             />
-            <span className="text-xs text-neutral-400">Active</span>
+            <p className="text-xs text-[--text-muted] mt-1">ID: {form.slug || '—'}</p>
+            <details className="mt-1">
+              <summary className="text-xs text-neutral-500 cursor-pointer select-none">Advanced</summary>
+              <div className="mt-2">
+                <label className="block text-xs text-neutral-500 mb-1.5">Slug</label>
+                <input
+                  value={form.slug}
+                  onChange={e => updateForm('slug', e.target.value)}
+                  placeholder="e.g. github-tools"
+                  className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors"
+                />
+              </div>
+            </details>
+          </div>
+          <div>
+            <label className="block text-xs text-neutral-500 mb-1.5">Transport</label>
+            <select
+              value={form.transport}
+              onChange={e => updateForm('transport', e.target.value)}
+              className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none transition-colors"
+            >
+              <option value="http">HTTP</option>
+              <option value="stdio">stdio (local only)</option>
+            </select>
           </div>
 
-          <div className="flex gap-2 pt-1">
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="px-4 py-2 text-xs font-semibold bg-white text-black rounded-lg hover:bg-neutral-200 active:bg-neutral-300 active:scale-[0.97] transition-all duration-150 disabled:opacity-50"
-            >
-              {saving ? 'Saving...' : editingId ? 'Save changes' : 'Add tool server'}
-            </button>
-            <button
-              onClick={cancelForm}
-              className="px-4 py-2 text-xs font-medium border border-neutral-700 text-neutral-400 rounded-lg hover:text-white hover:border-neutral-600 transition-colors"
-            >
-              Cancel
-            </button>
-          </div>
+          {form.transport === 'http' && (
+            <div>
+              <label className="block text-xs text-neutral-500 mb-1.5">Server URL</label>
+              <input
+                value={form.url}
+                onChange={e => updateForm('url', e.target.value)}
+                placeholder="https://mcp.example.com"
+                className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors"
+              />
+            </div>
+          )}
+
+          {form.transport === 'stdio' && (
+            <div>
+              <label className="block text-xs text-neutral-500 mb-1.5">Command</label>
+              <input
+                value={form.command}
+                onChange={e => updateForm('command', e.target.value)}
+                placeholder="npx -y @modelcontextprotocol/server-github"
+                className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono focus:border-neutral-600 focus:outline-none transition-colors"
+              />
+              <p className="text-xs text-amber-500/80 mt-1.5">
+                stdio transport is not available in serverless environments.
+              </p>
+            </div>
+          )}
         </div>
-      )}
+
+        {/* Active toggle row */}
+        <div className="flex items-center gap-3">
+          <Toggle
+            checked={form.active}
+            color="violet"
+            onChange={() => updateForm('active', !form.active)}
+          />
+          <span className="text-xs text-neutral-400">Active</span>
+        </div>
+
+        <div className="flex gap-2 pt-1">
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="px-4 py-2 text-xs font-semibold bg-white text-black rounded-lg hover:bg-neutral-200 active:bg-neutral-300 active:scale-[0.97] transition-all duration-150 disabled:opacity-50"
+          >
+            {saving ? 'Saving...' : editingId ? 'Save changes' : 'Add tool server'}
+          </button>
+          <button
+            onClick={cancelForm}
+            className="px-4 py-2 text-xs font-medium border border-neutral-700 text-neutral-400 rounded-lg hover:text-white hover:border-neutral-600 transition-colors"
+          >
+            Cancel
+          </button>
+        </div>
+      </SidePanel>
     </div>
   )
 }
