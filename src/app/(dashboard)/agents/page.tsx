@@ -11,6 +11,8 @@ import Badge from '@/components/Badge'
 import EmptyState from '@/components/EmptyState'
 import TableSkeleton from '@/components/skeletons/TableSkeleton'
 import { AGENT_TEMPLATES, type AgentTemplate } from '@/lib/agent-templates'
+import { AGENT_PACKS, type AgentPack } from '@/lib/agent-packs'
+import { installPackAction } from '@/lib/actions'
 import { LLM_PROVIDERS, getProviderForModel } from '@/lib/llm-providers'
 import { SKILL_CAPABILITIES } from '@/lib/skill-templates'
 import Toggle from '@/components/Toggle'
@@ -281,6 +283,9 @@ export default function AgentsPage() {
   const [showAdd, setShowAdd] = useState(false)
   const [showTemplates, setShowTemplates] = useState(false)
   const [pendingTemplateSlugs, setPendingTemplateSlugs] = useState<string[]>([])
+  const [templateTab, setTemplateTab] = useState<'templates' | 'packs'>('templates')
+  const [templateCategory, setTemplateCategory] = useState<string>('all')
+  const [installingPack, setInstallingPack] = useState<string | null>(null)
   const [form, setForm] = useState({
     name: '', slug: '', personality: '', model: 'claude-sonnet-4-6',
     role: 'agent', telegram_bot_token: '', telegram_bot_username: '',
@@ -346,6 +351,22 @@ export default function AgentsPage() {
       avatar_url: null,
     })
     setShowAdd(true)
+  }
+
+  async function handleInstallPack(pack: AgentPack) {
+    setInstallingPack(pack.id)
+    try {
+      const result = await installPackAction(pack.id)
+      if (result.ok) {
+        mutate()
+        setShowTemplates(false)
+        toast.success(`Pack installed — ${result.data.agentNames.join(', ')} created`)
+      } else {
+        toast.error(result.error)
+      }
+    } finally {
+      setInstallingPack(null)
+    }
   }
 
   async function startEdit(a: Agent) {
@@ -809,60 +830,124 @@ export default function AgentsPage() {
 
       {showTemplates && (
         <div className="bg-neutral-900 border border-neutral-800/60 rounded-xl overflow-hidden">
-          {/* Templates header */}
+          {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800/60 bg-neutral-900/80">
             <div>
               <p className="text-sm font-semibold text-white">Agent Templates</p>
               <p className="text-xs text-neutral-500 mt-0.5">Pre-built agents — customize before saving</p>
             </div>
-            <button
-              onClick={() => setShowTemplates(false)}
-              className="p-1.5 rounded-lg text-neutral-500 hover:text-white hover:bg-neutral-800 transition-all duration-150"
-              aria-label="Close template picker"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-
-          <div className="p-5">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {AGENT_TEMPLATES.map(template => (
+            <div className="flex items-center gap-2">
+              {/* Tab toggle */}
+              <div className="flex items-center bg-neutral-800/60 border border-neutral-700/60 rounded-lg p-0.5">
                 <button
-                  key={template.id}
-                  onClick={() => selectTemplate(template)}
-                  className="text-left p-4 bg-neutral-800/30 border border-neutral-800/80 rounded-xl hover:border-neutral-600/80 hover:bg-neutral-800/60 transition-all duration-150 group relative flex flex-col"
-                >
-                  <div className="flex items-start gap-3">
-                    <span className="text-xl leading-none mt-0.5 shrink-0">{template.icon}</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap mb-1">
-                        <span className="text-sm font-semibold text-neutral-100">{template.name}</span>
-                        {template.role === 'orchestrator' ? (
-                          <span className="px-2 py-1 text-xs font-medium bg-sky-950/60 text-sky-400 border border-sky-800/40 rounded-full leading-tight">orchestrator</span>
-                        ) : (
-                          <span className="px-2 py-1 text-xs font-medium bg-neutral-800 text-neutral-500 border border-neutral-700/60 rounded-full leading-tight">agent</span>
-                        )}
-                      </div>
-                      <p className="text-xs text-neutral-500 leading-relaxed">{template.description}</p>
-                      {template.capabilities.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-2.5">
-                          {template.capabilities.map(cap => (
-                            <span key={cap} className="px-2 py-1 text-xs font-medium bg-violet-950/60 text-violet-400 border border-violet-800/40 rounded-full leading-tight">{cap}</span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  {/* "Use template" hint on hover */}
-                  <div className="absolute inset-0 rounded-xl flex items-end justify-end p-3 opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none">
-                    <span className="text-xs font-semibold text-violet-400 bg-violet-950/80 border border-violet-800/60 px-2 py-1 rounded-md">Use template →</span>
-                  </div>
-                </button>
-              ))}
+                  onClick={() => setTemplateTab('templates')}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-150 ${templateTab === 'templates' ? 'bg-neutral-700 text-white' : 'text-neutral-400 hover:text-neutral-200'}`}
+                >Templates</button>
+                <button
+                  onClick={() => setTemplateTab('packs')}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-150 ${templateTab === 'packs' ? 'bg-violet-600 text-white' : 'text-neutral-400 hover:text-neutral-200'}`}
+                >✦ Packs</button>
+              </div>
+              <button
+                onClick={() => setShowTemplates(false)}
+                className="p-1.5 rounded-lg text-neutral-500 hover:text-white hover:bg-neutral-800 transition-all duration-150"
+                aria-label="Close"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
             </div>
           </div>
+
+          {templateTab === 'templates' ? (
+            <div className="p-5">
+              {/* Category filter pills */}
+              <div className="flex flex-wrap gap-1.5 mb-4">
+                {(['all', 'productivity', 'marketing', 'development', 'sales', 'media', 'data', 'hiring'] as const).map(cat => (
+                  <button
+                    key={cat}
+                    onClick={() => setTemplateCategory(cat)}
+                    className={`px-3 py-1 text-xs font-medium rounded-full border transition-all duration-150 capitalize ${
+                      templateCategory === cat
+                        ? 'bg-violet-600 text-white border-violet-500'
+                        : 'bg-neutral-800/40 text-neutral-400 border-neutral-700/60 hover:text-neutral-200 hover:border-neutral-600'
+                    }`}
+                  >
+                    {cat === 'all' ? 'All' : cat}
+                  </button>
+                ))}
+              </div>
+              {/* Templates grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {AGENT_TEMPLATES.filter(t => templateCategory === 'all' || t.category === templateCategory).map(template => (
+                  <button
+                    key={template.id}
+                    onClick={() => selectTemplate(template)}
+                    className="text-left p-4 bg-neutral-800/30 border border-neutral-800/80 rounded-xl hover:border-neutral-600/80 hover:bg-neutral-800/60 transition-all duration-150 group relative flex flex-col"
+                  >
+                    <div className="flex items-start gap-3">
+                      <span className="text-xl leading-none mt-0.5 shrink-0">{template.icon}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                          <span className="text-sm font-semibold text-neutral-100">{template.name}</span>
+                          {template.role === 'orchestrator' ? (
+                            <span className="px-2 py-0.5 text-xs font-medium bg-sky-950/60 text-sky-400 border border-sky-800/40 rounded-full leading-tight">orchestrator</span>
+                          ) : (
+                            <span className="px-2 py-0.5 text-xs font-medium bg-neutral-800 text-neutral-500 border border-neutral-700/60 rounded-full leading-tight">agent</span>
+                          )}
+                        </div>
+                        <p className="text-xs text-neutral-500 leading-relaxed">{template.description}</p>
+                        {template.capabilities.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {template.capabilities.slice(0, 3).map(cap => (
+                              <span key={cap} className="px-1.5 py-0.5 text-xs font-medium bg-violet-950/60 text-violet-400 border border-violet-800/40 rounded-full leading-tight">{cap}</span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="absolute inset-0 rounded-xl flex items-end justify-end p-3 opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none">
+                      <span className="text-xs font-semibold text-violet-400 bg-violet-950/80 border border-violet-800/60 px-2 py-1 rounded-md">Use template →</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            /* Packs tab */
+            <div className="p-5">
+              <p className="text-xs text-neutral-500 mb-4">Install a pack to instantly create a full team of agents, pre-wired with a hierarchy. Connect your tools and start delegating.</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {AGENT_PACKS.map(pack => (
+                  <div key={pack.id} className="flex flex-col p-4 bg-neutral-800/30 border border-neutral-800/80 rounded-xl hover:border-neutral-700/80 transition-all duration-150">
+                    <div className="flex items-start gap-3 mb-3">
+                      <span className="text-2xl leading-none mt-0.5">{pack.icon}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-neutral-100">{pack.name}</p>
+                        <p className="text-xs text-neutral-500 mt-0.5">{pack.agentCount} agents · {pack.category}</p>
+                      </div>
+                    </div>
+                    <p className="text-xs text-neutral-400 leading-relaxed mb-3 flex-1">{pack.description}</p>
+                    {pack.suggestedConnectors.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mb-3">
+                        {pack.suggestedConnectors.map(slug => (
+                          <span key={slug} className="px-2 py-0.5 text-xs font-medium bg-neutral-700/40 text-neutral-400 border border-neutral-700/60 rounded-full">{slug}</span>
+                        ))}
+                      </div>
+                    )}
+                    <button
+                      onClick={() => handleInstallPack(pack)}
+                      disabled={installingPack === pack.id}
+                      className="w-full py-2 text-xs font-semibold rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-all duration-150"
+                    >
+                      {installingPack === pack.id ? 'Installing…' : 'Install Pack'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

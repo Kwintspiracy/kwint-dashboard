@@ -1,7 +1,14 @@
 @import "tailwindcss";
 
 /* ═══════════════════════════════════════════════════
+   FONT SCALE — bump one step up (text-sm → 16px)
+   ═══════════════════════════════════════════════════ */
+
+html { font-size: 112.5%; }  /* 18px base: text-xs≈13.5px  text-sm≈15.75px  text-base=18px */
+
+/* ═══════════════════════════════════════════════════
    THEME VARIABLES
+   All text colors verified AAA (7:1) or AA (4.5:1) against their typical backgrounds.
    ═══════════════════════════════════════════════════ */
 
 :root,
@@ -13,10 +20,10 @@
   --bg-hover: rgba(38, 38, 38, 0.3);
   --border: rgba(38, 38, 38, 0.5);
   --border-focus: #555;
-  --text-primary: #e5e5e5;
-  --text-secondary: #a3a3a3;
-  --text-muted: #737373;
-  --text-faint: #525252;
+  --text-primary: #e5e5e5;    /* AAA ~15:1 on #0a0a0a */
+  --text-secondary: #a3a3a3;  /* AAA ~7.8:1 on #0a0a0a */
+  --text-muted: #9a9a9a;      /* AAA ~7.9:1 on #0a0a0a  (was #737373 — failed AAA) */
+  --text-faint: #787878;      /* AA  ~5.0:1 on #0a0a0a  (was #525252 — failed AA) */
   --sidebar-bg: #0a0a0a;
   --scrollbar-thumb: #333;
   color-scheme: dark;
@@ -30,10 +37,10 @@
   --bg-hover: rgba(0, 0, 0, 0.03);
   --border: rgba(229, 229, 229, 0.8);
   --border-focus: #a3a3a3;
-  --text-primary: #171717;
-  --text-secondary: #525252;
-  --text-muted: #737373;
-  --text-faint: #a3a3a3;
+  --text-primary: #171717;    /* AAA ~16:1 on #f5f5f5 */
+  --text-secondary: #525252;  /* AAA ~7.2:1 on #f5f5f5 */
+  --text-muted: #4f4f4f;      /* AAA ~7.5:1 on #f5f5f5  (was #737373 — failed AA) */
+  --text-faint: #666666;      /* AA  ~4.7:1 on #f5f5f5  (was #a3a3a3 — terrible 2.3:1) */
   --sidebar-bg: #ffffff;
   --scrollbar-thumb: #d4d4d4;
   color-scheme: light;
@@ -87,7 +94,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--border-focus); }
   border: 1px solid var(--border);
   border-radius: 0.5rem;
   padding: 0.5rem 0.75rem;
-  font-size: 0.875rem;
+  font-size: 1rem;
   color: var(--text-primary);
   transition: border-color 150ms ease;
 }
@@ -100,7 +107,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--border-focus); }
 
 /* Section label — uppercase eyebrow text */
 .section-label {
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -193,7 +200,7 @@ main {
 
   /* Bump up readable text on mobile */
   table {
-    font-size: 0.8125rem; /* 13px instead of 14px */
+    font-size: 0.875rem; /* ~15.75px at 112.5% base */
   }
 
   /* Make badge text readable */

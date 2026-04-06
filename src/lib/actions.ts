@@ -2630,3 +2630,73 @@ export async function getBillingRunsAction(): Promise<any[]> {
   if (error) throw new Error(error.message)
   return data ?? []
 }
+
+// ─── Pack Install ─────────────────────────────────────────────────────────────
+
+export async function installPackAction(packId: string): Promise<ActionResult<{ agentIds: string[]; agentNames: string[] }>> {
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+
+    const { AGENT_PACKS } = await import('@/lib/agent-packs')
+    const { AGENT_TEMPLATES } = await import('@/lib/agent-templates')
+
+    const pack = AGENT_PACKS.find(p => p.id === packId)
+    if (!pack) return fail('Pack not found')
+
+    const createdIds: Record<string, string> = {}
+    const createdNames: string[] = []
+
+    for (const templateId of pack.agents) {
+      const template = AGENT_TEMPLATES.find(t => t.id === templateId)
+      if (!template) continue
+
+      const baseSlug = template.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+      const suffix = Math.random().toString(36).slice(2, 6)
+      const slug = `${baseSlug}-${suffix}`
+
+      const { data, error } = await supabase
+        .from('agents')
+        .insert({
+          entity_id: entityId,
+          name: template.name,
+          slug,
+          personality: template.personality,
+          model: template.model,
+          role: template.role,
+        })
+        .select('id')
+        .single()
+
+      if (error || !data) {
+        console.error('[installPackAction] failed to create agent', templateId, error)
+        continue
+      }
+      createdIds[templateId] = data.id
+      createdNames.push(template.name)
+    }
+
+    // Wire hierarchy: orchestrator -> sub-agents via agent_assignments
+    const orchestratorDbId = createdIds[pack.orchestratorId]
+    if (orchestratorDbId) {
+      const subAgentIds = pack.agents
+        .filter(id => id !== pack.orchestratorId)
+        .map(id => createdIds[id])
+        .filter(Boolean) as string[]
+
+      if (subAgentIds.length > 0) {
+        const rows = subAgentIds.map(subId => ({
+          orchestrator_id: orchestratorDbId,
+          sub_agent_id: subId,
+          entity_id: entityId,
+          instructions: null,
+        }))
+        await supabase.from('agent_assignments').insert(rows)
+        await supabase.from('agents').update({ role: 'orchestrator' }).eq('id', orchestratorDbId).eq('entity_id', entityId)
+      }
+    }
+
+    return ok({ agentIds: Object.values(createdIds), agentNames: createdNames })
+  } catch (e) {
+    return dbError(e)
+  }
+}
