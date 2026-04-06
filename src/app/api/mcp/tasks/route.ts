@@ -48,103 +48,63 @@ const TOOLS = [
 
 async function resolveEntityId(token: string): Promise<string | null> {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!supabaseUrl || !serviceKey) {
-    console.error('[mcp/tasks] missing env: url=%s key=%s', !!supabaseUrl, !!serviceKey)
+  // Use anon key — token lookup goes through a SECURITY DEFINER function that bypasses RLS
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!supabaseUrl || !anonKey) {
+    console.error('[mcp/tasks] missing env: url=%s anon=%s', !!supabaseUrl, !!anonKey)
     return null
   }
 
-  const supabase = createClient(supabaseUrl, serviceKey)
-  const { data, error } = await supabase
-    .from('entities')
-    .select('id')
-    .eq('mcp_token', token)
-    .single()
-  if (error) console.error('[mcp/tasks] token lookup error:', error.message, 'token:', token)
-  return data?.id ?? null
+  const supabase = createClient(supabaseUrl, anonKey)
+  const { data, error } = await supabase.rpc('get_entity_by_mcp_token', { p_token: token })
+  if (error) console.error('[mcp/tasks] token lookup error:', error.message)
+  return (data as string | null) ?? null
 }
 
 // ── Tool executors ────────────────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function listTasks(supabase: any, entityId: string, args: Record<string, unknown>) {
-  const { status, priority, limit = 50 } = args as {
-    status?: string; priority?: string; limit?: number
-  }
-
-  let q = supabase
-    .from('agent_tasks')
-    .select('id, title, description, priority, status, result, created_at')
-    .eq('entity_id', entityId)
-    .order('created_at', { ascending: false })
-    .limit(Math.min(Number(limit) || 50, 200))
-
-  if (status) q = q.eq('status', status)
-  if (priority) q = q.eq('priority', priority)
-
-  const { data, error } = await q
+  const { status, priority, limit = 50 } = args as { status?: string; priority?: string; limit?: number }
+  const { data, error } = await supabase.rpc('mcp_list_tasks', {
+    p_entity_id: entityId,
+    p_status: status ?? null,
+    p_priority: priority ?? null,
+    p_limit: Math.min(Number(limit) || 50, 200),
+  })
   if (error) throw new Error(error.message)
   return data ?? []
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function createTask(supabase: any, entityId: string, args: Record<string, unknown>) {
-  const { title, description, priority = 'medium' } = args as {
-    title: string; description?: string; priority?: string
-  }
+  const { title, description, priority = 'medium' } = args as { title: string; description?: string; priority?: string }
   if (!title?.trim()) throw new Error('title is required')
-
-  // Find first active orchestrator for the entity (optional FK)
-  const { data: agent } = await supabase
-    .from('agents')
-    .select('id')
-    .eq('entity_id', entityId)
-    .eq('active', true)
-    .eq('role', 'orchestrator')
-    .order('created_at')
-    .limit(1)
-    .single()
-
-  const { data, error } = await supabase
-    .from('agent_tasks')
-    .insert({
-      entity_id: entityId,
-      orchestrator_id: agent?.id ?? null,
-      title: title.trim(),
-      description: (description as string | undefined)?.trim() ?? null,
-      priority: priority as 'low' | 'medium' | 'high',
-      status: 'todo',
-    })
-    .select('id, title, description, priority, status, result, created_at')
-    .single()
-
+  const { data, error } = await supabase.rpc('mcp_create_task', {
+    p_entity_id: entityId,
+    p_title: title.trim(),
+    p_description: (description as string | undefined)?.trim() ?? null,
+    p_priority: priority,
+  })
   if (error) throw new Error(error.message)
-  return data
+  return Array.isArray(data) ? data[0] : data
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function updateTask(supabase: any, entityId: string, args: Record<string, unknown>) {
-  const { task_id, status, result } = args as {
-    task_id: string; status?: string; result?: string
-  }
+  const { task_id, status, result } = args as { task_id: string; status?: string; result?: string }
   if (!task_id) throw new Error('task_id is required')
-
-  const patch: Record<string, unknown> = {}
-  if (status) patch.status = status
-  if (result !== undefined) patch.result = result
-  if (Object.keys(patch).length === 0) throw new Error('Provide at least one of: status, result')
-
-  const { data, error } = await supabase
-    .from('agent_tasks')
-    .update(patch)
-    .eq('id', task_id)
-    .eq('entity_id', entityId)   // prevents cross-tenant writes
-    .select('id, title, description, priority, status, result, created_at')
-    .single()
-
+  if (!status && result === undefined) throw new Error('Provide at least one of: status, result')
+  const { data, error } = await supabase.rpc('mcp_update_task', {
+    p_entity_id: entityId,
+    p_task_id: task_id,
+    p_status: status ?? null,
+    p_result: result ?? null,
+  })
   if (error) throw new Error(error.message)
-  if (!data) throw new Error('Task not found or not owned by this workspace')
-  return data
+  const row = Array.isArray(data) ? data[0] : data
+  if (!row) throw new Error('Task not found or not owned by this workspace')
+  return row
 }
 
 // ── JSON-RPC helpers ──────────────────────────────────────────────────────────
@@ -200,8 +160,8 @@ export async function POST(request: NextRequest) {
     if (!name) return rpcErr(id, -32602, 'Missing tool name')
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-    const supabase = createClient(supabaseUrl, serviceKey)
+    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    const supabase = createClient(supabaseUrl, anonKey)
 
     try {
       let result: unknown
