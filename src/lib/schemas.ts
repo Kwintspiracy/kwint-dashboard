@@ -58,10 +58,22 @@ export type UpdateConnectorInput = z.infer<typeof UpdateConnectorSchema>
 
 // ─── Skill ───────────────────────────────────────────────────────────────────
 
+const RequiredConfigItemSchema = z.object({
+  label: z.string(),
+  description: z.string(),
+  type: z.enum(['connector_slug', 'manual']),
+  value: z.string().optional(),
+  critical: z.boolean().default(true),
+})
+
 export const CreateSkillSchema = z.object({
   name: z.string().min(1, 'Name is required').max(120),
   slug: SlugSchema,
   content: z.string().min(1, 'Content is required'),
+  description: z.string().max(300).nullable().optional(),
+  default_content: z.string().nullable().optional(),
+  content_overridden: z.boolean().optional(),
+  required_config: z.array(RequiredConfigItemSchema).nullable().optional(),
   connector_ids: z.array(UuidSchema).optional(),
 })
 
@@ -69,6 +81,10 @@ export const UpdateSkillSchema = z.object({
   name: z.string().min(1).max(120).optional(),
   slug: SlugSchema.optional(),
   content: z.string().min(1).optional(),
+  description: z.string().max(300).nullable().optional(),
+  default_content: z.string().nullable().optional(),
+  content_overridden: z.boolean().optional(),
+  required_config: z.array(RequiredConfigItemSchema).nullable().optional(),
   active: z.boolean().optional(),
   connector_ids: z.array(UuidSchema).optional(),
 })

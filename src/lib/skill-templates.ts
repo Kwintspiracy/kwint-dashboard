@@ -3,6 +3,14 @@ export type SkillCategory =
   | 'analytics' | 'storage' | 'ai' | 'ecommerce' | 'dev' | 'crm' | 'hr'
   | 'search' | 'google' | 'media'
 
+export type RequiredConfigItem = {
+  label: string
+  description: string
+  type: 'connector_slug' | 'manual'
+  value?: string
+  critical: boolean
+}
+
 export type SkillTemplate = {
   id: string
   name: string
@@ -30,6 +38,7 @@ export type SkillTemplate = {
   }[]
   content: string
   capabilities?: string[]
+  required_config?: RequiredConfigItem[]
 }
 
 /** Maps skill slug → capability tags (auto-derived, no manual input needed). */
@@ -141,6 +150,11 @@ export const SKILL_CAPABILITIES: Record<string, string[]> = {
   'freshdesk':        ['customer-support'],
   'salesforce':       ['crm', 'sales'],
   'intercom':         ['customer-support', 'messaging'],
+  // Platform skills
+  'task-board':       ['task-management'],
+  'http-request':     [],
+  'memory':           ['memory'],
+  'cortex':           ['memory', 'knowledge-base'],
   // Search / Research
   'serper':           ['web-search', 'research'],
   'tavily':           ['web-search', 'research'],
@@ -208,7 +222,53 @@ export const SKILL_TEMPLATES: SkillTemplate[] = [
     brandIcon: '/app-icons/google-sheets.svg',
     connector: { slug: 'google-sheets' },
     fields: [],
-    content: `# Google Sheets API\n\nUse the \`http_request\` tool to call the internal Sheets proxy.\nAll authentication is handled server-side.\n\n## Read cells\n\`\`\`json\n{"url": "{APP_URL}/api/sheets", "method": "POST", "body": {"spreadsheet_id": "ID", "range": "Sheet1!A1:Z100", "action": "read"}}\n\`\`\`\n\n## Write cells\n\`\`\`json\n{"url": "{APP_URL}/api/sheets", "method": "POST", "body": {"spreadsheet_id": "ID", "range": "Sheet1!A1:C2", "action": "write", "values": [["A","B"],["1","2"]]}}\n\`\`\``,
+    content: `# Google Sheets API
+
+Use this skill to read, write, or append rows in a Google Spreadsheet. All authentication is handled by the connector — use connector_slug="google-sheets".
+
+Base URL: https://sheets.googleapis.com/v4
+
+## When to use
+Use this when the user asks to read data from a spreadsheet, log results, update cells, or append new rows.
+
+## Read a range
+GET /spreadsheets/{spreadsheetId}/values/{range}
+- range examples: "Sheet1!A1:Z100", "Sheet1!A:A" (entire column), "Sheet1!1:1" (entire row)
+- Response: { range, majorDimension, values: [["col1","col2"], ["val1","val2"], ...] }
+- If values is empty or absent, the range is blank.
+
+Working example:
+GET /spreadsheets/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms/values/Sheet1!A1:D10
+
+## Write to a range (overwrite)
+PUT /spreadsheets/{spreadsheetId}/values/{range}?valueInputOption=USER_ENTERED
+Body:
+\`\`\`json
+{
+  "range": "Sheet1!A1:C2",
+  "majorDimension": "ROWS",
+  "values": [["Name","Score","Date"], ["Alice","95","2026-04-01"]]
+}
+\`\`\`
+- valueInputOption=USER_ENTERED parses dates/formulas; use RAW for literal strings.
+
+## Append rows (add to bottom of data)
+POST /spreadsheets/{spreadsheetId}/values/{range}:append?valueInputOption=USER_ENTERED
+Body: same shape as write above
+- Always use :append — never overwrite existing rows unless explicitly asked.
+
+## Clear a range
+POST /spreadsheets/{spreadsheetId}/values/{range}:clear (no body needed)
+
+## Error handling
+- 400: invalid range format — check sheet name spelling and A1 notation
+- 403: connector lacks write permission — read-only token was provided
+- 404: spreadsheetId wrong — confirm the URL with the user
+
+**Never guess cell contents** — always read before writing to confirm the current structure.`,
+    required_config: [
+      { label: 'Google Sheets connector', description: 'OAuth2 credentials required to read/write spreadsheets', type: 'connector_slug', value: 'google-sheets', critical: true },
+    ],
   },
   {
     id: 'gmail', name: 'Gmail', slug: 'gmail',
@@ -227,7 +287,99 @@ export const SKILL_TEMPLATES: SkillTemplate[] = [
       { key: 'oauth_client_secret', label: 'Client Secret', type: 'password', placeholder: 'GOCSPX-...', required: true, help: 'Google Cloud Console → Credentials → OAuth 2.0 Client IDs' },
       { key: 'oauth_refresh_token', label: 'Refresh Token', type: 'password', placeholder: '1//...', required: true, help: 'Generate at developers.google.com/oauthplayground — enable "offline access", use scope gmail.modify' },
     ],
-    content: `# Gmail API\n\nOAuth2 — the runner auto-refreshes the access token using the stored refresh token.\nBase URL: https://gmail.googleapis.com\n\n## Search / list messages\nGET /gmail/v1/users/me/messages?q=QUERY&maxResults=20\n\nUseful query strings:\n- \`is:unread\` — unread only\n- \`from:user@example.com\` — from sender\n- \`subject:invoice\` — subject contains word\n- \`after:2024/01/01\` — received after date\n- \`has:attachment\` — has attachment\n- \`label:INBOX is:unread\` — unread inbox\n\nReturns a list of \`{id, threadId}\`. Use the id to fetch full content.\n\n## Get message (full content)\nGET /gmail/v1/users/me/messages/{id}?format=full\n\nKey fields in response:\n- \`payload.headers\` — array of {name, value}; look for Subject, From, To, Date, Message-ID\n- \`payload.body.data\` — base64url-encoded body (single-part message)\n- \`payload.parts[]\` — for multipart; find part with mimeType "text/plain" or "text/html", body.data is base64url\n- \`threadId\` — use this to reply in-thread\n\nDecoding body: base64url → replace \`-\`→\`+\` and \`_\`→\`/\`, then standard base64 decode.\n\n## Get thread (full conversation)\nGET /gmail/v1/users/me/threads/{threadId}?format=full\n\nReturns \`messages[]\` array in chronological order.\n\n## Send new email\nPOST /gmail/v1/users/me/messages/send\n\nBuild an RFC 2822 message string, then base64url-encode it:\n\`\`\`\nFrom: sender@example.com\nTo: recipient@example.com\nSubject: Hello\nContent-Type: text/plain; charset=utf-8\n\nMessage body here.\n\`\`\`\n\`\`\`json\n{"raw": "<base64url-encoded RFC 2822 string>"}\n\`\`\`\n\n## Reply to an email\nPOST /gmail/v1/users/me/messages/send\n\nInclude \`In-Reply-To\` and \`References\` headers (use original Message-ID), set same \`threadId\`:\n\`\`\`\nFrom: me@example.com\nTo: original-sender@example.com\nSubject: Re: Original Subject\nIn-Reply-To: <original-message-id>\nReferences: <original-message-id>\nContent-Type: text/plain; charset=utf-8\n\nReply body here.\n\`\`\`\n\`\`\`json\n{"raw": "<base64url RFC 2822>", "threadId": "THREAD_ID"}\n\`\`\`\n\n## Create a draft\nPOST /gmail/v1/users/me/drafts\n\`\`\`json\n{"message": {"raw": "<base64url RFC 2822>"}}\n\`\`\`\n\n## Mark as read\nPOST /gmail/v1/users/me/messages/{id}/modify\n\`\`\`json\n{"removeLabelIds": ["UNREAD"]}\n\`\`\`\n\n## Mark as unread\nPOST /gmail/v1/users/me/messages/{id}/modify\n\`\`\`json\n{"addLabelIds": ["UNREAD"]}\n\`\`\`\n\n## Move to trash\nPOST /gmail/v1/users/me/messages/{id}/trash\n\n## Add or remove labels\nPOST /gmail/v1/users/me/messages/{id}/modify\n\`\`\`json\n{"addLabelIds": ["LABEL_ID"], "removeLabelIds": ["LABEL_ID"]}\n\`\`\`\n\n## List labels\nGET /gmail/v1/users/me/labels\n\nSystem label IDs: INBOX, SENT, DRAFT, TRASH, SPAM, UNREAD, STARRED, IMPORTANT\n\nUse connector_slug="gmail" for auth.`,
+    content: `# Gmail API
+
+Use this skill to read, send, reply to, and manage emails. All OAuth2 authentication is handled by the connector — use connector_slug="gmail".
+
+Base URL: https://gmail.googleapis.com
+
+## When to use
+Use when the user asks to check emails, send a message, reply to a thread, search their inbox, or manage labels.
+
+## Search / list messages
+GET /gmail/v1/users/me/messages?q=QUERY&maxResults=20
+
+Useful query strings:
+- \`is:unread\` — unread only
+- \`from:user@example.com\` — from a specific sender
+- \`subject:invoice\` — subject contains word
+- \`after:2026/01/01\` — received after date
+- \`has:attachment\` — has attachment
+- \`label:INBOX is:unread\` — unread inbox
+
+Returns a list of \`{id, threadId}\`. Use the id to fetch full content.
+
+## Get message (full content)
+GET /gmail/v1/users/me/messages/{id}?format=full
+
+Key response fields:
+- \`payload.headers\` — array of {name, value}; look for Subject, From, To, Date, Message-ID
+- \`payload.body.data\` — base64url-encoded body (single-part)
+- \`payload.parts[]\` — for multipart; find part with mimeType "text/plain", body.data is base64url
+- \`threadId\` — use this when replying to stay in-thread
+
+Decoding body: base64url → replace \`-\`→\`+\` and \`_\`→\`/\`, then standard base64 decode.
+
+## Get thread (full conversation)
+GET /gmail/v1/users/me/threads/{threadId}?format=full
+Returns \`messages[]\` in chronological order.
+
+## Send new email
+POST /gmail/v1/users/me/messages/send
+
+Build an RFC 2822 string, then base64url-encode it:
+\`\`\`
+From: sender@example.com
+To: recipient@example.com
+Subject: Hello
+Content-Type: text/plain; charset=utf-8
+
+Message body here.
+\`\`\`
+\`\`\`json
+{"raw": "<base64url-encoded RFC 2822 string>"}
+\`\`\`
+
+## Reply to an email
+POST /gmail/v1/users/me/messages/send
+
+Include \`In-Reply-To\` and \`References\` headers (use original Message-ID), pass same \`threadId\`:
+\`\`\`json
+{"raw": "<base64url RFC 2822 with In-Reply-To header>", "threadId": "THREAD_ID"}
+\`\`\`
+
+## Create a draft
+POST /gmail/v1/users/me/drafts
+\`\`\`json
+{"message": {"raw": "<base64url RFC 2822>"}}
+\`\`\`
+
+## Mark as read / unread
+POST /gmail/v1/users/me/messages/{id}/modify
+\`\`\`json
+{"removeLabelIds": ["UNREAD"]}
+\`\`\`
+
+## Move to trash
+POST /gmail/v1/users/me/messages/{id}/trash
+
+## Add or remove labels
+POST /gmail/v1/users/me/messages/{id}/modify
+\`\`\`json
+{"addLabelIds": ["LABEL_ID"], "removeLabelIds": ["LABEL_ID"]}
+\`\`\`
+
+System label IDs: INBOX, SENT, DRAFT, TRASH, SPAM, UNREAD, STARRED, IMPORTANT
+
+## Error handling
+- 401: connector token expired — the runner should auto-refresh; if persistent, reconnect the Gmail connector
+- 400: malformed RFC 2822 string — check base64url encoding and required headers
+- 403: insufficient Gmail scope — connector must have gmail.modify scope
+
+**Never summarize or fabricate email content** — always fetch the actual message before reporting on it.`,
+    required_config: [
+      { label: 'Gmail connector', description: 'Google OAuth2 credentials with gmail.modify scope', type: 'connector_slug', value: 'gmail', critical: true },
+    ],
   },
   {
     id: 'google-drive', name: 'Google Drive', slug: 'google-drive',
@@ -332,7 +484,67 @@ export const SKILL_TEMPLATES: SkillTemplate[] = [
     brandIcon: '/app-icons/stripe.svg',
     connector: { slug: 'stripe', base_url: 'https://api.stripe.com/v1' },
     fields: [{ key: 'api_key', label: 'Secret Key', type: 'password', placeholder: 'sk_test_...', required: true, help: 'From Stripe Dashboard > Developers > API keys' }],
-    content: `# Stripe API\n\nNote: Stripe uses form-encoded bodies, not JSON.\nSet Content-Type: application/x-www-form-urlencoded\n\n## List customers\nGET /customers?limit=10\n\n## Create customer\nPOST /customers (body: name=John&email=john@example.com)\n\n## List invoices\nGET /invoices?limit=10\n\n## List payments\nGET /payment_intents?limit=10\n\nUse connector_slug="stripe" for auth.`,
+    content: `# Stripe API
+
+Use this skill to manage customers, payments, subscriptions, and invoices. Use connector_slug="stripe" for auth.
+
+Base URL: https://api.stripe.com/v1
+**IMPORTANT: Stripe uses form-encoded bodies, not JSON.**
+Set header: Content-Type: application/x-www-form-urlencoded
+
+## When to use
+Use when the user asks to check a payment, look up a customer, create a payment link, manage subscriptions, or retrieve invoice data.
+
+## List customers
+GET /customers?limit=10&email=user@example.com
+
+Response: data[].{id, email, name, created, metadata}
+
+## Create a customer
+POST /customers
+Body (form-encoded): email=user@example.com&name=John+Doe&metadata[source]=agent
+
+## Retrieve a customer
+GET /customers/{customer_id}
+
+## List payment intents (recent payments)
+GET /payment_intents?limit=20&customer={customer_id}
+
+Response: data[].{id, amount, currency, status, created}
+Status values: succeeded, requires_payment_method, canceled, processing
+
+## List subscriptions
+GET /subscriptions?customer={customer_id}&status=active
+
+Response: data[].{id, status, current_period_end, items.data[].price.{id, unit_amount, currency}}
+
+## Cancel a subscription
+DELETE /subscriptions/{subscription_id}
+
+## Create a payment link
+POST /payment_links
+Body: line_items[0][price]={PRICE_ID}&line_items[0][quantity]=1
+
+## List invoices
+GET /invoices?customer={customer_id}&limit=10
+
+Response: data[].{id, status, amount_due, amount_paid, due_date, hosted_invoice_url}
+
+## Create a refund
+POST /refunds
+Body: payment_intent={PAYMENT_INTENT_ID}&amount=5000
+amount is in smallest currency unit (cents for USD). Omit amount to refund in full.
+
+## Error handling
+- 401: wrong API key — check connector has correct secret key (sk_live_... or sk_test_...)
+- 400: invalid parameters — check form-encoding, not JSON
+- 402: card declined — payment_intent.last_payment_error.message has details
+- 429: rate limited — wait and retry
+
+**Never process real payments without explicit user confirmation.** For testing, use test API keys (sk_test_...) and test card numbers.`,
+    required_config: [
+      { label: 'Stripe Secret Key', description: 'Stripe secret key (sk_live_... or sk_test_...) from Stripe Dashboard > Developers', type: 'connector_slug', value: 'stripe', critical: true },
+    ],
   },
   {
     id: 'lemon-squeezy', name: 'Lemon Squeezy', slug: 'lemon-squeezy',
@@ -357,7 +569,79 @@ export const SKILL_TEMPLATES: SkillTemplate[] = [
     darkBrandIcon: true,
     connector: { slug: 'notion', base_url: 'https://api.notion.com/v1' },
     fields: [{ key: 'api_key', label: 'Integration Token', type: 'password', placeholder: 'ntn_...', required: true, help: 'notion.so/my-integrations > Create integration' }],
-    content: `# Notion API\n\nAll requests need: Notion-Version: 2022-06-28\n\n## Query database\nPOST /databases/{id}/query\n\`\`\`json\n{"filter": {"property": "Status", "status": {"equals": "In Progress"}}}\n\`\`\`\n\n## Create page\nPOST /pages\n\n## Search\nPOST /search\n\`\`\`json\n{"query": "search term"}\n\`\`\`\n\nUse connector_slug="notion" for auth. Add Notion-Version header manually.`,
+    content: `# Notion API
+
+Use this skill to create pages, query databases, and search content in Notion. Use connector_slug="notion" for auth.
+
+Base URL: https://api.notion.com/v1
+Required header on every request: \`Notion-Version: 2022-06-28\`
+
+## When to use
+Use when the user asks to add a note, create a page, log data to a Notion database, or search their workspace.
+
+## Search for a database or page by name
+POST /search
+\`\`\`json
+{"query": "Meeting Notes", "filter": {"value": "database", "property": "object"}}
+\`\`\`
+Response: results[].{id, title} — use the id as database_id for queries below.
+
+## Query a database (list rows)
+POST /databases/{database_id}/query
+\`\`\`json
+{
+  "filter": {"property": "Status", "status": {"equals": "In Progress"}},
+  "sorts": [{"property": "Created", "direction": "descending"}],
+  "page_size": 20
+}
+\`\`\`
+Response: results[].{id, properties} — each property has type-specific value structure.
+To get all rows: omit filter, use page_size=100, paginate with start_cursor from next_cursor.
+
+## Create a page in a database
+POST /pages
+\`\`\`json
+{
+  "parent": {"database_id": "DATABASE_ID"},
+  "properties": {
+    "Name": {"title": [{"text": {"content": "New Entry"}}]},
+    "Status": {"status": {"name": "Not started"}},
+    "Date": {"date": {"start": "2026-04-05"}}
+  }
+}
+\`\`\`
+Property types: title, rich_text, number, select, multi_select, status, date, checkbox, url, email.
+
+## Create a standalone page
+POST /pages
+\`\`\`json
+{
+  "parent": {"page_id": "PARENT_PAGE_ID"},
+  "properties": {"title": {"title": [{"text": {"content": "My Page Title"}}]}},
+  "children": [
+    {"object": "block", "type": "paragraph", "paragraph": {"rich_text": [{"type": "text", "text": {"content": "Page content here."}}]}}
+  ]
+}
+\`\`\`
+
+## Update a page (change properties)
+PATCH /pages/{page_id}
+\`\`\`json
+{"properties": {"Status": {"status": {"name": "Done"}}}}
+\`\`\`
+
+## Get page content (blocks)
+GET /blocks/{page_id}/children?page_size=100
+
+## Error handling
+- 400: invalid property type or name — check the database schema before writing
+- 401: integration not connected to that database — user must share the DB with the integration
+- 404: page/database not found — confirm the ID with user
+
+**Always search first** to find the correct database_id before creating pages — never guess an ID.`,
+    required_config: [
+      { label: 'Notion Integration Token', description: 'Internal integration token (ntn_...) with read/write access', type: 'connector_slug', value: 'notion', critical: true },
+    ],
   },
   {
     id: 'trello', name: 'Trello', slug: 'trello',
@@ -388,7 +672,63 @@ export const SKILL_TEMPLATES: SkillTemplate[] = [
     icon: 'M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm-1 15l-4-4 1.41-1.41L11 14.17l6.59-6.59L19 9l-8 8z',
     connector: { slug: 'linear', base_url: 'https://api.linear.app' },
     fields: [{ key: 'api_key', label: 'API Key', type: 'password', placeholder: 'lin_api_...', required: true, help: 'Linear > Settings > Security > Personal API keys' }],
-    content: `# Linear API (GraphQL)\n\nAll requests are POST to /graphql with JSON body.\n\n## Create issue\n\`\`\`json\n{"query": "mutation { issueCreate(input: {title: \\"Bug\\", teamId: \\"TEAM_ID\\"}) { success issue { id identifier } } }"}\n\`\`\`\n\n## List issues\n\`\`\`json\n{"query": "{ issues(first: 10) { nodes { id title state { name } } } }"}\n\`\`\`\n\nUse connector_slug="linear" for auth.`,
+    content: `# Linear API (GraphQL)
+
+Use this skill to create issues, update statuses, and list work items in Linear. Use connector_slug="linear" for auth.
+
+Endpoint: POST https://api.linear.app/graphql
+All requests are GraphQL mutations/queries sent as JSON bodies.
+
+## When to use
+Use when the user asks to create a bug report, update an issue status, list in-progress work, or assign tasks in Linear.
+
+## List teams (get teamId first)
+\`\`\`json
+{"query": "{ teams { nodes { id name } } }"}
+\`\`\`
+Save the teamId — required for creating issues.
+
+## Create an issue
+\`\`\`json
+{
+  "query": "mutation IssueCreate($input: IssueCreateInput!) { issueCreate(input: $input) { success issue { id identifier url title } } }",
+  "variables": {
+    "input": {
+      "title": "Bug: login fails on mobile",
+      "description": "Steps to reproduce: ...",
+      "teamId": "TEAM_ID",
+      "priority": 2
+    }
+  }
+}
+\`\`\`
+priority: 0=no priority, 1=urgent, 2=high, 3=medium, 4=low
+Response: issueCreate.issue.identifier (e.g. "ENG-42") and url.
+
+## List issues (filter by state)
+\`\`\`json
+{
+  "query": "{ issues(filter: {team: {id: {eq: \\"TEAM_ID\\"}}, state: {name: {in: [\\"In Progress\\", \\"Todo\\"]}}}, first: 20) { nodes { id identifier title state { name } assignee { name } } } }"
+}
+\`\`\`
+
+## Update issue (change state or assignee)
+\`\`\`json
+{
+  "query": "mutation { issueUpdate(id: \\"ISSUE_ID\\", input: {stateId: \\"STATE_ID\\"}) { success issue { id state { name } } } }"
+}
+\`\`\`
+Get stateId from: \`{ workflowStates(filter: {team: {id: {eq: "TEAM_ID"}}}) { nodes { id name } } }\`
+
+## Error handling
+- errors[].message: "Entity not found" — issue ID or team ID is wrong
+- errors[].extensions.type: "AUTHENTICATION_ERROR" — API key invalid or expired
+- GraphQL errors are in the \`errors\` array even when HTTP status is 200 — always check it
+
+**Never guess team IDs** — always query teams first and use the real ID.`,
+    required_config: [
+      { label: 'Linear API Key', description: 'Personal API key (lin_api_...) from Linear Settings > Security', type: 'connector_slug', value: 'linear', critical: true },
+    ],
   },
   {
     id: 'airtable', name: 'Airtable', slug: 'airtable',
@@ -413,7 +753,75 @@ export const SKILL_TEMPLATES: SkillTemplate[] = [
     brandIcon: '/app-icons/slack.svg',
     connector: { slug: 'slack', base_url: 'https://slack.com/api' },
     fields: [{ key: 'api_key', label: 'Bot Token', type: 'password', placeholder: 'xoxb-...', required: true, help: 'Slack App > OAuth & Permissions > Bot User OAuth Token' }],
-    content: `# Slack API\n\n## Send message\nPOST /chat.postMessage\n\`\`\`json\n{"channel": "CHANNEL_ID", "text": "Hello!"}\n\`\`\`\n\n## List channels\nGET /conversations.list?types=public_channel\n\n## Read messages\nGET /conversations.history?channel=CHANNEL_ID&limit=10\n\nUse connector_slug="slack" for auth.`,
+    content: `# Slack API
+
+Use this skill to send messages, read channels, and interact with a Slack workspace. Use connector_slug="slack" for auth.
+
+Base URL: https://slack.com/api
+
+## When to use
+Use when the user asks to post a Slack message, notify a channel, read recent messages, or look up a channel ID.
+
+## Send a message to a channel
+POST /chat.postMessage
+\`\`\`json
+{
+  "channel": "C12345678",
+  "text": "Deployment succeeded on main branch.",
+  "unfurl_links": false
+}
+\`\`\`
+- \`channel\` can be a channel ID (C...) or channel name (#general). IDs are preferred.
+- Response success field must be \`true\`. If false, check the error field.
+
+## Send a rich message with blocks
+POST /chat.postMessage
+\`\`\`json
+{
+  "channel": "C12345678",
+  "blocks": [
+    {"type": "section", "text": {"type": "mrkdwn", "text": "*Alert:* Server CPU above 90%."}},
+    {"type": "section", "fields": [
+      {"type": "mrkdwn", "text": "*Host:* prod-1"},
+      {"type": "mrkdwn", "text": "*Value:* 94%"}
+    ]}
+  ],
+  "text": "Server alert"
+}
+\`\`\`
+Always include a plain \`text\` fallback alongside blocks.
+
+## List channels (find channel IDs)
+GET /conversations.list?types=public_channel,private_channel&limit=200&exclude_archived=true
+
+Response: channels[].{id, name, is_private}
+Paginate with \`cursor\` from response_metadata.next_cursor if present.
+
+## Read recent messages
+GET /conversations.history?channel=C12345678&limit=20
+
+Response: messages[].{text, user, ts, thread_ts}
+
+## Reply to a thread
+POST /chat.postMessage
+\`\`\`json
+{"channel": "C12345678", "thread_ts": "1234567890.123456", "text": "Reply here"}
+\`\`\`
+
+## Look up a user
+GET /users.lookupByEmail?email=user@example.com
+Returns: user.id — use this as the \`channel\` value to DM someone.
+
+## Error handling
+- channel_not_found: channel ID is wrong or bot not invited — ask user to /invite @bot in that channel
+- not_in_channel: same issue
+- invalid_auth: connector token expired — reconnect the Slack connector
+- ratelimited: wait 1 second between messages
+
+**Never fabricate messages** — always confirm the exact text with the user before posting.`,
+    required_config: [
+      { label: 'Slack Bot Token', description: 'Slack app bot token (xoxb-...) with chat:write and channels:read scopes', type: 'connector_slug', value: 'slack', critical: true },
+    ],
   },
   {
     id: 'discord', name: 'Discord', slug: 'discord',
@@ -491,7 +899,72 @@ export const SKILL_TEMPLATES: SkillTemplate[] = [
     icon: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z',
     connector: { slug: 'openai', base_url: 'https://api.openai.com/v1' },
     fields: [{ key: 'api_key', label: 'API Key', type: 'password', placeholder: 'sk-...', required: true, help: 'From platform.openai.com > API keys' }],
-    content: `# OpenAI API\n\n## Chat completion\nPOST /chat/completions\n\`\`\`json\n{"model": "gpt-4o", "messages": [{"role": "user", "content": "Hello"}]}\n\`\`\`\n\n## Generate image\nPOST /images/generations\n\`\`\`json\n{"model": "dall-e-3", "prompt": "A cat", "size": "1024x1024"}\n\`\`\`\n\n## Embeddings\nPOST /embeddings\n\`\`\`json\n{"model": "text-embedding-3-small", "input": "text to embed"}\n\`\`\`\n\nUse connector_slug="openai" for auth.`,
+    content: `# OpenAI API
+
+Use this skill to generate text, create images, or produce embeddings using OpenAI models. Use connector_slug="openai" for auth.
+
+Base URL: https://api.openai.com/v1
+
+## When to use
+Use when you need a second AI opinion, want to generate an image, need embeddings for semantic search, or when the task explicitly calls for GPT models.
+
+## Chat completion (text generation)
+POST /chat/completions
+\`\`\`json
+{
+  "model": "gpt-4o",
+  "messages": [
+    {"role": "system", "content": "You are a concise assistant."},
+    {"role": "user", "content": "Summarize this in 3 bullet points: ..."}
+  ],
+  "max_tokens": 500,
+  "temperature": 0.7
+}
+\`\`\`
+Response: choices[0].message.content
+
+Models: gpt-4o (best quality), gpt-4o-mini (fast, cheap), o1 (reasoning tasks), o1-mini (cheaper reasoning)
+
+## Generate image (DALL-E 3)
+POST /images/generations
+\`\`\`json
+{
+  "model": "dall-e-3",
+  "prompt": "A photorealistic cat sitting on a rooftop at sunset, cinematic lighting",
+  "size": "1024x1024",
+  "quality": "standard",
+  "n": 1
+}
+\`\`\`
+Response: data[0].url (expires in 1 hour — download immediately if persistence needed)
+size options: "1024x1024" | "1792x1024" | "1024x1792"
+quality: "standard" | "hd"
+
+## Embeddings (for semantic search or similarity)
+POST /embeddings
+\`\`\`json
+{
+  "model": "text-embedding-3-small",
+  "input": "The text to embed"
+}
+\`\`\`
+Response: data[0].embedding (array of floats, 1536 dimensions for small model)
+
+## Transcribe audio (Whisper)
+POST /audio/transcriptions (multipart/form-data)
+Fields: file (audio file), model="whisper-1"
+Response: {text}
+
+## Error handling
+- 401: invalid API key — check connector has correct sk-... key
+- 429: rate limited or quota exceeded — check usage at platform.openai.com/usage
+- 400: invalid model name or parameters
+- 500/503: OpenAI service issue — retry after 10 seconds
+
+**Use the cheapest model that meets the need.** Default to gpt-4o-mini unless the task needs complex reasoning.`,
+    required_config: [
+      { label: 'OpenAI API Key', description: 'OpenAI API key (sk-...) from platform.openai.com > API keys', type: 'connector_slug', value: 'openai', critical: true },
+    ],
   },
   {
     id: 'replicate', name: 'Replicate', slug: 'replicate',
@@ -543,7 +1016,74 @@ export const SKILL_TEMPLATES: SkillTemplate[] = [
     darkBrandIcon: true,
     connector: { slug: 'github', base_url: 'https://api.github.com' },
     fields: [{ key: 'api_key', label: 'Personal Access Token', type: 'password', placeholder: 'ghp_...', required: true, help: 'GitHub > Settings > Developer Settings > Personal Access Tokens' }],
-    content: `# GitHub API\n\n## List repos\nGET /user/repos?sort=updated&per_page=10\n\n## Create issue\nPOST /repos/{owner}/{repo}/issues\n\`\`\`json\n{"title": "Bug report", "body": "Description..."}\n\`\`\`\n\n## List PRs\nGET /repos/{owner}/{repo}/pulls?state=open\n\n## Search code\nGET /search/code?q=keyword+repo:{owner}/{repo}\n\nUse connector_slug="github" for auth.`,
+    content: `# GitHub API
+
+Use this skill to manage repositories, issues, pull requests, and code search. Use connector_slug="github" for auth.
+
+Base URL: https://api.github.com
+Required headers (added automatically by connector): Authorization: Bearer {token}, Accept: application/vnd.github+json, X-GitHub-Api-Version: 2022-11-28
+
+## When to use
+Use when the user asks to file a bug, check open PRs, review recent commits, search code, or trigger a workflow.
+
+## List user's repos
+GET /user/repos?sort=updated&per_page=20&affiliation=owner,collaborator
+
+## Create an issue
+POST /repos/{owner}/{repo}/issues
+\`\`\`json
+{
+  "title": "Bug: login fails with SSO enabled",
+  "body": "## Steps to reproduce\\n1. Enable SSO\\n2. Click login\\n\\n## Expected\\nUser logs in\\n\\n## Actual\\n500 error",
+  "labels": ["bug"],
+  "assignees": ["username"]
+}
+\`\`\`
+Response: {id, number, html_url} — share the html_url with the user.
+
+## List open issues
+GET /repos/{owner}/{repo}/issues?state=open&per_page=20&sort=updated
+
+## Add a comment to an issue or PR
+POST /repos/{owner}/{repo}/issues/{issue_number}/comments
+\`\`\`json
+{"body": "I can reproduce this on v2.3.1. PR incoming."}
+\`\`\`
+
+## List open pull requests
+GET /repos/{owner}/{repo}/pulls?state=open&sort=updated&per_page=20
+
+## Get a single PR (review status, files changed)
+GET /repos/{owner}/{repo}/pulls/{pull_number}
+GET /repos/{owner}/{repo}/pulls/{pull_number}/files
+
+## List recent commits on a branch
+GET /repos/{owner}/{repo}/commits?sha=main&per_page=20
+
+## Search repositories
+GET /search/repositories?q=QUERY+language:typescript&sort=stars&per_page=10
+
+## Search code
+GET /search/code?q=QUERY+repo:{owner}/{repo}
+- Rate limited to 10 requests/min for authenticated users
+
+## Create or trigger a workflow dispatch
+POST /repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches
+\`\`\`json
+{"ref": "main", "inputs": {"environment": "staging"}}
+\`\`\`
+
+## Error handling
+- 401: token invalid or expired — reconnect the GitHub connector
+- 403: insufficient scope — token lacks repo or write:discussion permission
+- 404: repo not found or private without access
+- 422: validation error — check required fields (title for issues)
+- 429: rate limit exceeded — wait 60 seconds
+
+**Always use the real owner/repo** — never guess. Ask the user if unsure.`,
+    required_config: [
+      { label: 'GitHub Personal Access Token', description: 'PAT (ghp_...) or fine-grained token with repo read/write scope', type: 'connector_slug', value: 'github', critical: true },
+    ],
   },
   {
     id: 'gitlab', name: 'GitLab', slug: 'gitlab',
@@ -641,7 +1181,59 @@ export const SKILL_TEMPLATES: SkillTemplate[] = [
     icon: 'M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z',
     connector: { slug: 'tavily', base_url: 'https://api.tavily.com' },
     fields: [{ key: 'api_key', label: 'API Key', type: 'password', placeholder: 'tvly-...', required: true, help: 'From tavily.com > Dashboard > API Keys' }],
-    content: `# Tavily Search\n\nAPI key goes in the request body, not header.\n\n## Search\nPOST /search\n\`\`\`json\n{"api_key": "YOUR_API_KEY", "query": "search query", "search_depth": "basic", "max_results": 5}\n\`\`\`\n\n- search_depth: "basic" (fast) or "advanced" (thorough)\n- max_results: 1-10\n\n**Note:** Do NOT use connector_slug for auth — Tavily uses API key in body.`,
+    content: `# Tavily Search
+
+Use this skill to search the web and get structured, AI-curated results with source URLs. Use connector_slug="tavily" for auth.
+
+Base URL: https://api.tavily.com
+**IMPORTANT: The API key goes in the request body, not in a header.**
+
+## When to use
+Use when the user asks to look up current information, research a topic, find recent news, or verify a fact you're not certain about. Never summarize from memory when current data is needed — search instead.
+
+## Web search
+POST /search
+\`\`\`json
+{
+  "api_key": "tvly-YOUR_KEY",
+  "query": "latest AI funding rounds April 2026",
+  "search_depth": "basic",
+  "max_results": 5,
+  "include_answer": true
+}
+\`\`\`
+Response:
+- \`answer\`: AI-synthesized summary (if include_answer=true)
+- \`results[]\`: {title, url, content, score} — content is an excerpt, score is relevance (0–1)
+
+Parameters:
+- search_depth: "basic" (faster, ~2s) | "advanced" (thorough, ~10s, costs 2 credits)
+- max_results: 1–10 (default 5)
+- include_answer: true to get a synthesized answer
+- include_domains: ["example.com"] to restrict sources
+- exclude_domains: ["wikipedia.org"] to exclude sources
+
+## Working example
+\`\`\`json
+{
+  "api_key": "tvly-abc123",
+  "query": "Vercel pricing 2026",
+  "search_depth": "basic",
+  "max_results": 3,
+  "include_answer": true
+}
+\`\`\`
+
+## Error handling
+- 401: invalid API key — check connector has correct tvly-... key
+- 429: rate limit exceeded — wait 1 second and retry
+- Empty results: query too specific — broaden the search terms
+
+**Always cite sources** — include result URLs when sharing search findings with the user.
+**Use "basic" depth by default** to save credits; only use "advanced" for research tasks.`,
+    required_config: [
+      { label: 'Tavily API Key', description: 'API key (tvly-...) from tavily.com > Dashboard', type: 'connector_slug', value: 'tavily', critical: true },
+    ],
   },
 
   // ═══════════════════════════════════════════════════
@@ -987,7 +1579,73 @@ export const SKILL_TEMPLATES: SkillTemplate[] = [
     brandIcon: '/app-icons/google-calendar.svg',
     connector: { slug: 'google-calendar', base_url: 'https://www.googleapis.com/calendar/v3' },
     fields: [{ key: 'api_key', label: 'Calendar API Key', type: 'password', placeholder: 'AIza...', required: true, help: 'From Google Cloud Console' }],
-    content: `# Google Calendar API\n\n## List calendars\nGET /users/me/calendarList\n\n## List events\nGET /calendars/{calendarId}/events?timeMin={ISO}&timeMax={ISO}&singleEvents=true&orderBy=startTime\n\n## Create event\nPOST /calendars/{calendarId}/events\n\`\`\`json\n{"summary": "Meeting", "start": {"dateTime": "2026-01-01T10:00:00Z"}, "end": {"dateTime": "2026-01-01T11:00:00Z"}}\n\`\`\`\n\n## Delete event\nDELETE /calendars/{calendarId}/events/{eventId}\n\nUse connector_slug="google-calendar" for auth.`,
+    content: `# Google Calendar API
+
+Use this skill to read, create, update, and delete calendar events. Use connector_slug="google-calendar" for auth.
+
+Base URL: https://www.googleapis.com/calendar/v3
+
+## When to use
+Use when the user asks to check their schedule, book a meeting, create a reminder, or find available time slots.
+
+## List calendars (find calendarId)
+GET /users/me/calendarList
+Response: items[].{id, summary, primary} — primary calendar has primary=true, id is usually an email address.
+
+## List upcoming events
+GET /calendars/{calendarId}/events?timeMin=2026-04-05T00:00:00Z&timeMax=2026-04-12T00:00:00Z&singleEvents=true&orderBy=startTime&maxResults=20
+
+- calendarId: use "primary" for the main calendar, or the id from calendarList
+- timeMin/timeMax: ISO 8601 format, always include timezone offset (e.g. 2026-04-05T00:00:00+02:00)
+- singleEvents=true: expands recurring events into individual instances
+- Response: items[].{id, summary, start.dateTime, end.dateTime, location, attendees[].email}
+
+## Create an event
+POST /calendars/{calendarId}/events
+\`\`\`json
+{
+  "summary": "Team standup",
+  "description": "Daily sync",
+  "location": "Google Meet",
+  "start": {"dateTime": "2026-04-07T10:00:00+02:00", "timeZone": "Europe/Paris"},
+  "end": {"dateTime": "2026-04-07T10:30:00+02:00", "timeZone": "Europe/Paris"},
+  "attendees": [{"email": "colleague@example.com"}],
+  "reminders": {"useDefault": true}
+}
+\`\`\`
+Response: {id, htmlLink} — share htmlLink so user can view it.
+
+For all-day events use "date" instead of "dateTime": \`"start": {"date": "2026-04-07"}\`
+
+## Update an event
+PATCH /calendars/{calendarId}/events/{eventId}
+\`\`\`json
+{"summary": "Updated title", "start": {"dateTime": "2026-04-07T11:00:00+02:00"}}
+\`\`\`
+
+## Delete an event
+DELETE /calendars/{calendarId}/events/{eventId}
+
+## Check free/busy time
+POST /freeBusy
+\`\`\`json
+{
+  "timeMin": "2026-04-07T09:00:00Z",
+  "timeMax": "2026-04-07T18:00:00Z",
+  "items": [{"id": "primary"}]
+}
+\`\`\`
+Response: calendars.primary.busy[].{start, end}
+
+## Error handling
+- 401: OAuth token expired — runner will auto-refresh; if persistent, reconnect the connector
+- 403: insufficient scope — connector must have calendar.events scope
+- 404: calendarId or eventId wrong — re-fetch calendarList
+
+**Always confirm the date, time, and timezone with the user before creating or modifying events.**`,
+    required_config: [
+      { label: 'Google Calendar connector', description: 'Google OAuth2 credentials with calendar.events scope', type: 'connector_slug', value: 'google-calendar', critical: true },
+    ],
   },
   {
     id: 'google-docs', name: 'Google Docs', slug: 'google-docs',
@@ -1022,7 +1680,73 @@ export const SKILL_TEMPLATES: SkillTemplate[] = [
     brandIcon: '/app-icons/telegram.svg',
     connector: { slug: 'telegram', base_url: 'https://api.telegram.org' },
     fields: [{ key: 'api_key', label: 'Bot Token', type: 'password', placeholder: '123456:ABC-DEF...', required: true, help: 'From @BotFather on Telegram' }],
-    content: `# Telegram Bot API\n\nBase URL format: /bot{token}/methodName\n\n## Send message\nPOST /bot{token}/sendMessage\n\`\`\`json\n{"chat_id": "123456", "text": "Hello!", "parse_mode": "Markdown"}\n\`\`\`\n\n## Get updates\nGET /bot{token}/getUpdates?offset={offset}&limit=100\n\n## Send photo\nPOST /bot{token}/sendPhoto\n\`\`\`json\n{"chat_id": "123456", "photo": "https://example.com/photo.jpg", "caption": "Caption"}\n\`\`\`\n\n## Get chat info\nGET /bot{token}/getChat?chat_id={chat_id}\n\nUse connector_slug="telegram" for auth.`,
+    content: `# Telegram Bot API
+
+Use this skill to send messages, photos, and documents via Telegram. Use connector_slug="telegram" for auth.
+
+Base URL: https://api.telegram.org
+All methods follow the pattern: POST /bot{token}/methodName
+
+The connector injects the token automatically — you do not need to include it manually.
+
+## When to use
+Use when the user or agent needs to send a Telegram notification, alert, or report to a specific chat or group.
+
+## Send a text message
+POST /bot{token}/sendMessage
+\`\`\`json
+{
+  "chat_id": "123456789",
+  "text": "Deployment to production completed successfully. ✅",
+  "parse_mode": "Markdown"
+}
+\`\`\`
+- chat_id: can be a numeric user ID, @channelusername, or group chat ID (negative number)
+- parse_mode: "Markdown" (use *bold*, _italic_, \`code\`) or "HTML" (<b>bold</b>)
+- Response: {ok: true, result: {message_id}} — check ok field
+
+## Send a photo
+POST /bot{token}/sendPhoto
+\`\`\`json
+{
+  "chat_id": "123456789",
+  "photo": "https://example.com/chart.png",
+  "caption": "Weekly performance chart"
+}
+\`\`\`
+
+## Send a document/file
+POST /bot{token}/sendDocument
+\`\`\`json
+{
+  "chat_id": "123456789",
+  "document": "https://example.com/report.pdf",
+  "caption": "Monthly report"
+}
+\`\`\`
+
+## Send a message to multiple chats
+Call sendMessage once per chat_id — Telegram does not support bulk sending in a single request.
+
+## Get bot info (verify connectivity)
+GET /bot{token}/getMe
+Response: {ok: true, result: {username, first_name}} — use this to test the connector.
+
+## Get recent updates (incoming messages)
+GET /bot{token}/getUpdates?offset=0&limit=10&timeout=0
+Response: result[].{update_id, message.{chat.id, text, from.username}}
+
+## Error handling
+- 400: chat not found — chat_id is wrong or user hasn't started the bot
+- 401: token invalid — reconnect the Telegram connector
+- 403: bot was blocked by user — cannot send to that chat_id
+- 429: Too Many Requests — Telegram rate-limits to ~30 messages/second; add delay for bulk sends
+
+**Never send messages without user confirmation** if the content involves financial amounts, personal data, or irreversible actions.`,
+    required_config: [
+      { label: 'Telegram Bot Token', description: 'Bot token from @BotFather (123456:ABC-DEF...)', type: 'connector_slug', value: 'telegram', critical: true },
+      { label: 'Chat ID required', description: 'You need the chat_id of the target user or group — ask the user for it or get it from /getUpdates', type: 'manual', critical: false },
+    ],
   },
 
   // ═══════════════════════════════════════════════════
@@ -1693,6 +2417,258 @@ export const SKILL_TEMPLATES: SkillTemplate[] = [
     connector: { slug: 'gemini', base_url: 'https://generativelanguage.googleapis.com/v1beta' },
     fields: [{ key: 'api_key', label: 'API Key', type: 'password', placeholder: 'AIza...', required: true, help: 'aistudio.google.com > Get API key' }],
     content: `# Google Gemini API\n\nAuth: Pass API key as query param — append ?key={api_key} to every request URL.\nNo Authorization header is used.\n\n## Generate content\nPOST /models/gemini-2.0-flash-exp:generateContent?key={api_key}\n\`\`\`json\n{"contents": [{"parts": [{"text": "Summarize the key trends in renewable energy for 2025."}]}]}\n\`\`\`\n\nResponse path: candidates[0].content.parts[0].text\n\n## Vision (image + text)\nPOST /models/gemini-2.0-flash-exp:generateContent?key={api_key}\n\`\`\`json\n{"contents": [{"parts": [{"text": "Describe this image"}, {"inlineData": {"mimeType": "image/jpeg", "data": "<base64-encoded-image>"}}]}]}\n\`\`\`\n\n## Streaming\nPOST /models/gemini-2.0-flash-exp:streamGenerateContent?key={api_key}\n\nReturns a stream of JSON objects; each has candidates[0].content.parts[0].text.\n\n## List available models\nGET /models?key={api_key}\n\nNotable models: gemini-2.0-flash-exp (fast, 1M context), gemini-1.5-pro (complex tasks), gemini-1.5-flash (balanced).\n\nUse connector_slug="gemini" for auth (key is injected as query param by the runner).`,
+    required_config: [
+      { label: 'Google Gemini API Key', description: 'API key (AIza...) from aistudio.google.com', type: 'connector_slug', value: 'gemini', critical: true },
+    ],
+  },
+
+  // ═══════════════════════════════════════════════════
+  // PLATFORM SKILLS (built-in)
+  // ═══════════════════════════════════════════════════
+
+  {
+    id: 'task-board', name: 'Task Board', slug: 'task-board',
+    description: 'Create and manage tasks on the platform task board',
+    category: 'planning', color: '#6366F1',
+    icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4',
+    connector: undefined,
+    fields: [],
+    capabilities: ['task-management'],
+    content: `# Task Board API
+
+Use this skill to create tasks on the platform task board. Tasks appear in the Tasks page of the dashboard.
+
+## When to use
+Use this when the user asks you to create a task, add something to the to-do list, log work for yourself or another agent, or track an action item.
+
+## Create a task
+POST {APP_URL}/api/tasks
+Headers:
+  Authorization: Bearer {WORKER_SECRET}
+  Content-Type: application/json
+
+\`\`\`json
+{
+  "agent_slug": "your-agent-slug",
+  "title": "Review Q1 performance report",
+  "description": "Check the report at docs.example.com/q1 and summarize key metrics",
+  "priority": "medium"
+}
+\`\`\`
+
+Parameters:
+- agent_slug (required): your own slug (e.g. "orchestrator") — this associates the task with you
+- title (required): clear, action-oriented task title
+- description (optional): additional context, links, or instructions
+- priority: "low" | "medium" | "high" (default: "medium")
+
+Response:
+\`\`\`json
+{"ok": true, "task": {"id": "uuid", "title": "...", "status": "todo", "priority": "medium", "created_at": "..."}}
+\`\`\`
+
+## Error handling
+- 401: WORKER_SECRET is wrong — check environment configuration
+- 404: agent_slug not found — use your actual slug, not a generic name
+- 400: title is required — always include a meaningful title
+- 500: server misconfigured — contact support
+
+## Rules
+- Use your own agent_slug — do not impersonate other agents
+- Create one task per action item — do not bundle multiple unrelated items
+- Always include a description when the task needs context to execute later
+- **Never say you created a task without actually calling this endpoint** — fabricating task creation is worse than failing`,
+    required_config: [
+      { label: 'APP_URL and WORKER_SECRET', description: 'Platform environment variables required for task creation — already configured if the platform is running', type: 'manual', critical: false },
+    ],
+  },
+
+  {
+    id: 'http-request', name: 'HTTP Request', slug: 'http-request',
+    description: 'Make arbitrary HTTP requests to any REST API',
+    category: 'dev', color: '#64748B',
+    icon: 'M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z',
+    connector: undefined,
+    fields: [],
+    content: `# HTTP Request
+
+Use this skill to call any REST API that doesn't have a dedicated skill. This is the escape hatch for integrations not listed in the Skills library.
+
+## When to use
+Use this when you need to call an API endpoint and there is no dedicated skill for it. Always prefer a dedicated skill (Slack, GitHub, etc.) when one exists — they have pre-configured auth and better error guidance.
+
+## How to make a request
+Use the \`http_request\` tool with these parameters:
+- url: the full URL including query parameters
+- method: GET | POST | PUT | PATCH | DELETE
+- headers: object with header name/value pairs
+- body: request body (JSON object or string)
+
+## Working examples
+
+**GET with API key in header:**
+\`\`\`json
+{
+  "url": "https://api.example.com/v1/users?limit=10",
+  "method": "GET",
+  "headers": {"Authorization": "Bearer YOUR_API_KEY", "Accept": "application/json"}
+}
+\`\`\`
+
+**POST with JSON body:**
+\`\`\`json
+{
+  "url": "https://api.example.com/v1/items",
+  "method": "POST",
+  "headers": {"Authorization": "Bearer YOUR_API_KEY", "Content-Type": "application/json"},
+  "body": {"name": "New Item", "type": "task"}
+}
+\`\`\`
+
+**POST with form-encoded body (e.g. Stripe, Twilio):**
+\`\`\`json
+{
+  "url": "https://api.example.com/v1/send",
+  "method": "POST",
+  "headers": {"Authorization": "Basic BASE64_CREDENTIALS", "Content-Type": "application/x-www-form-urlencoded"},
+  "body": "param1=value1&param2=value2"
+}
+\`\`\`
+
+## Auth patterns by API type
+- Bearer token: \`Authorization: Bearer {token}\`
+- API key in header: \`X-API-Key: {key}\` or \`api-key: {key}\` (varies by service)
+- Basic auth: \`Authorization: Basic base64("{user}:{password}")\`
+- API key in query: append \`?api_key={key}\` to the URL
+- Custom header: e.g. Shopify uses \`X-Shopify-Access-Token\`, ElevenLabs uses \`xi-api-key\`
+
+## Error handling
+- Always check the HTTP status code in the response
+- 2xx = success; 4xx = client error (bad request or auth); 5xx = server error
+- On 401/403: the API key or auth method is wrong
+- On 429: rate limited — wait before retrying (check Retry-After header)
+- On 422: request body validation failed — check required fields
+
+**Never hardcode secrets in the instructions.** Store credentials as connector fields and reference them via connector_slug.`,
+  },
+
+  {
+    id: 'memory', name: 'Memory', slug: 'memory',
+    description: 'Save and retrieve information across agent runs using long-term memory',
+    category: 'ai', color: '#8B5CF6',
+    icon: 'M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z',
+    connector: undefined,
+    fields: [],
+    capabilities: ['memory'],
+    content: `# Memory Skill
+
+Use this skill to store information persistently across agent runs and retrieve it in future conversations. Memory lets agents remember context, user preferences, facts, and previous decisions.
+
+## When to use
+- Save: when you learn something important about the user, complete a significant task, or need to remember a decision for next time
+- Search: at the start of a task, check memory for relevant past context before asking the user to repeat themselves
+
+## Save a memory
+Use the \`save_memory\` tool:
+\`\`\`json
+{
+  "content": "User prefers weekly summaries sent on Fridays at 9am Paris time",
+  "metadata": {"type": "user_preference", "topic": "reporting"}
+}
+\`\`\`
+
+Good memory content:
+- Specific facts: "User's Stripe customer ID is cus_abc123"
+- Preferences: "User wants all Slack messages to use English, not French"
+- Decisions: "Agreed to archive completed tasks after 30 days"
+- Relationships: "John Doe (john@acme.com) is the primary contact for Acme Corp"
+
+Bad memory content (do not save these):
+- Vague summaries: "User talked about their business"
+- Temporary state: "Currently processing the Q1 report"
+- Duplicates of what's in the current conversation
+
+## Search memory
+Use the \`search_memory\` tool:
+\`\`\`json
+{
+  "query": "user's Stripe customer ID",
+  "limit": 5
+}
+\`\`\`
+Returns ranked results with content and similarity score.
+
+## Memory rules
+1. **Search before asking** — if you need information the user may have told you before, check memory first
+2. **Save after learning** — when the user shares a preference, ID, or decision, save it immediately
+3. **Be specific** — vague memories are useless; include names, IDs, dates, and exact values
+4. **One fact per memory** — don't bundle unrelated facts into one entry
+5. **Never fabricate** — only save things actually said by the user or observed during task execution`,
+  },
+
+  {
+    id: 'cortex', name: 'Cortex', slug: 'cortex',
+    description: 'Access the agent\'s own long-term context, past decisions, and knowledge base',
+    category: 'ai', color: '#06B6D4',
+    icon: 'M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z',
+    connector: undefined,
+    fields: [],
+    capabilities: ['memory', 'knowledge-base'],
+    content: `# Cortex — Agent Context & Knowledge Base
+
+Cortex is the agent's internal knowledge system. Use it to retrieve persistent context, background knowledge, and prior decisions that the agent has accumulated.
+
+## When to use
+- At the start of any task: retrieve relevant context before acting
+- When you need background on the user, their business, or ongoing projects
+- When continuing work from a previous session
+- To check if you've made a similar decision before
+
+## Retrieve context
+Use the \`search_memory\` tool with Cortex:
+\`\`\`json
+{
+  "query": "user's company and primary contacts",
+  "limit": 10
+}
+\`\`\`
+
+## Store important context
+Use the \`save_memory\` tool:
+\`\`\`json
+{
+  "content": "Company name: Acme Corp. CEO: Sarah Chen. Primary Slack channel: #operations. Stripe account: live mode, MRR ~$12k.",
+  "metadata": {"type": "entity_context", "category": "company_info"}
+}
+\`\`\`
+
+## Context categories to maintain
+
+**User & company profile:**
+- Name, role, company, timezone, preferred language
+- Key contacts (name + email + role)
+- Communication preferences (how often to report, which channel)
+
+**Technical configuration:**
+- API credentials overview (which services are connected)
+- Custom workflows or recurring tasks
+- Data sources and their formats
+
+**Decisions & agreements:**
+- "User agreed to X on DATE"
+- "Always use template Y for Z"
+- "Skip approval for tasks under $100"
+
+**Ongoing work:**
+- Active projects and their current state
+- Next actions and open questions
+
+## Cortex maintenance rules
+1. Update context when the user shares new information — don't wait for them to ask
+2. Check Cortex before every non-trivial task
+3. Flag outdated entries: if you find a stored fact is wrong, update it
+4. Never store sensitive secrets in Cortex (passwords, full credit card numbers)
+5. **The goal**: next session should feel like continuing a conversation, not starting over`,
   },
 
 ]

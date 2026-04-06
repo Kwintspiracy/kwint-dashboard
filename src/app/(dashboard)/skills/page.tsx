@@ -11,6 +11,7 @@ import {
   updateSkillConnectorsAction,
   deleteSkillAction,
   rollbackSkillAction,
+  resetSkillToDefaultAction,
   retryJobAction,
 } from '@/lib/actions'
 import { useData } from '@/hooks/useData'
@@ -24,8 +25,13 @@ import { SKILL_TEMPLATES } from '@/lib/skill-templates'
 
 type ConnectorRef = { id: string; name: string; slug: string }
 type Connector = ConnectorRef & { base_url: string | null; has_key: boolean; active: boolean }
+type RequiredConfigItem = { label: string; description: string; type: 'connector_slug' | 'manual'; value?: string; critical: boolean }
 type Skill = {
   id: string; name: string; slug: string; content: string
+  description: string | null
+  default_content: string | null
+  content_overridden: boolean
+  required_config: RequiredConfigItem[] | null
   active: boolean; created_at: string
   skill_connectors: { connector_id: string; connectors: ConnectorRef }[]
 }
@@ -45,7 +51,8 @@ export default function SkillsPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [form, setForm] = useState({ name: '', slug: '', content: '' })
+  const [resetting, setResetting] = useState(false)
+  const [form, setForm] = useState({ name: '', slug: '', content: '', description: '', default_content: '', content_overridden: false, required_config: null as RequiredConfigItem[] | null })
   const [slugManuallyEdited, setSlugManuallyEdited] = useState(false)
   const [selectedConnectorIds, setSelectedConnectorIds] = useState<string[]>([])
   const [versionCounts, setVersionCounts] = useState<Record<string, number>>({})
@@ -98,7 +105,13 @@ export default function SkillsPage() {
 
   function startEdit(s: Skill) {
     setEditingId(s.id)
-    setForm({ name: s.name, slug: s.slug, content: s.content })
+    setForm({
+      name: s.name, slug: s.slug, content: s.content,
+      description: s.description ?? '',
+      default_content: s.default_content ?? '',
+      content_overridden: s.content_overridden ?? false,
+      required_config: s.required_config ?? null,
+    })
     setSlugManuallyEdited(false)
     setSelectedConnectorIds((s.skill_connectors || []).map(sc => sc.connector_id))
     setShowAdd(false)
@@ -108,7 +121,7 @@ export default function SkillsPage() {
 
   function startAdd() {
     setEditingId(null)
-    setForm({ name: '', slug: '', content: '' })
+    setForm({ name: '', slug: '', content: '', description: '', default_content: '', content_overridden: false, required_config: null })
     setSlugManuallyEdited(false)
     setSelectedConnectorIds([])
     setShowAdd(true)
@@ -150,7 +163,10 @@ export default function SkillsPage() {
     try {
       if (editingId) {
         const [updateResult, connResult] = await Promise.all([
-          updateSkillAction(editingId, { name: form.name, slug: form.slug, content: form.content }),
+          updateSkillAction(editingId, {
+            name: form.name, slug: form.slug, content: form.content,
+            description: form.description || null,
+          }),
           updateSkillConnectorsAction(editingId, selectedConnectorIds),
         ])
         if (!updateResult.ok) { toast.error(updateResult.error); return }
@@ -158,7 +174,13 @@ export default function SkillsPage() {
         toast.success('Skill updated')
         setEditingId(null)
       } else {
-        const result = await createSkillAction({ name: form.name, slug: form.slug, content: form.content, connector_ids: selectedConnectorIds })
+        const result = await createSkillAction({
+          name: form.name, slug: form.slug, content: form.content,
+          description: form.description || null,
+          default_content: form.default_content || null,
+          required_config: form.required_config || null,
+          connector_ids: selectedConnectorIds,
+        })
         if (!result.ok) { toast.error(result.error); return }
         toast.success('Skill created')
         setShowAdd(false)
@@ -166,6 +188,22 @@ export default function SkillsPage() {
       load()
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handleResetToDefault() {
+    if (!editingId) return
+    if (!confirm('Reset skill content to the original template? Your customizations will be saved in version history.')) return
+    setResetting(true)
+    try {
+      const result = await resetSkillToDefaultAction(editingId)
+      if (!result.ok) { toast.error(result.error); return }
+      toast.success('Content reset to default')
+      const resetData = result.data as unknown as Skill
+      setForm(prev => ({ ...prev, content: resetData.content, content_overridden: false }))
+      await load()
+    } finally {
+      setResetting(false)
     }
   }
 
@@ -309,8 +347,19 @@ export default function SkillsPage() {
                     <SkillToggle id={s.id} active={s.active} name={s.name} />
                   </td>
                   <td className="px-5 py-3.5">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className={`font-medium ${s.active ? 'text-neutral-200' : 'text-neutral-500'}`}>{s.name}</span>
+                      {s.default_content && !s.content_overridden && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-emerald-400 bg-emerald-950/20 border border-emerald-900/30 rounded-md">
+                          <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+                          Validated
+                        </span>
+                      )}
+                      {s.content_overridden && (
+                        <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium text-amber-400 bg-amber-950/20 border border-amber-900/30 rounded-md">
+                          Customized
+                        </span>
+                      )}
                       {vCount > 0 && (
                         <span className="inline-flex items-center px-2 py-1 text-xs font-semibold text-neutral-500 bg-neutral-800/80 border border-neutral-700/60 rounded-md">
                           v{vCount + 1}
@@ -370,7 +419,15 @@ export default function SkillsPage() {
                 onChange={e => {
                   const tpl = SKILL_TEMPLATES.find(t => t.id === e.target.value)
                   if (!tpl) return
-                  setForm({ name: tpl.name, slug: tpl.slug, content: tpl.content })
+                  setForm({
+                    name: tpl.name, slug: tpl.slug, content: tpl.content,
+                    description: tpl.description || '',
+                    default_content: tpl.content,
+                    content_overridden: false,
+                    required_config: tpl.required_config ? tpl.required_config.map(r => ({
+                      label: r.label, description: r.description, type: r.type, value: r.value, critical: r.critical,
+                    })) : null,
+                  })
                   setSlugManuallyEdited(true)
                   // auto-select connector if already installed
                   if (tpl.connector?.slug) {
@@ -404,6 +461,32 @@ export default function SkillsPage() {
           </div>
 
           <div>
+            <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">
+              Description <span className="normal-case text-neutral-700 font-normal">(shown to non-technical users)</span>
+            </label>
+            <input value={form.description} onChange={(e) => setForm(prev => ({ ...prev, description: e.target.value }))}
+              placeholder="e.g. Send and read emails via Gmail"
+              maxLength={300}
+              className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none transition-colors duration-150" />
+          </div>
+
+          {/* Required configuration callout */}
+          {form.required_config && form.required_config.length > 0 && (
+            <div className="border border-amber-900/40 bg-amber-950/10 rounded-xl p-4 space-y-2">
+              <p className="text-xs font-semibold text-amber-400 uppercase tracking-wider">Required setup</p>
+              {form.required_config.map((item, i) => (
+                <div key={i} className="flex items-start gap-3">
+                  <div className={`w-2 h-2 rounded-full mt-1 flex-shrink-0 ${item.critical ? 'bg-amber-400' : 'bg-neutral-500'}`} />
+                  <div>
+                    <p className="text-xs font-medium text-neutral-300">{item.label}</p>
+                    <p className="text-xs text-neutral-500 mt-0.5">{item.description}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div>
             <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-2">
               Connectors <span className="normal-case text-neutral-600 font-normal">(click to link/unlink)</span>
             </label>
@@ -434,9 +517,24 @@ export default function SkillsPage() {
           </div>
 
           <div>
-            <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">
-              Content <span className="normal-case text-neutral-600 font-normal">(markdown — knowledge, procedures, or API documentation)</span>
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs text-neutral-500 uppercase tracking-wider">
+                Content <span className="normal-case text-neutral-600 font-normal">(markdown — knowledge, procedures, or API documentation)</span>
+              </label>
+              {editingId && form.content_overridden && form.default_content && (
+                <button
+                  type="button"
+                  onClick={handleResetToDefault}
+                  disabled={resetting}
+                  className="text-xs text-amber-400 hover:text-amber-300 transition-colors duration-150 disabled:opacity-50 flex items-center gap-1"
+                >
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+                  </svg>
+                  {resetting ? 'Resetting…' : 'Reset to default'}
+                </button>
+              )}
+            </div>
             <textarea value={form.content} onChange={(e) => updateForm('content', e.target.value)}
               placeholder={'# Skill Documentation\n\nDescribe what this skill teaches the agent...'}
               rows={16}

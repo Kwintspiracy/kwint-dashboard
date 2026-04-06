@@ -920,9 +920,23 @@ export async function updateSkillAction(
       })
     }
 
+    // If content is changing and default_content exists, mark as overridden
+    const updateData: typeof skillData & { content_overridden?: boolean } = { ...skillData }
+    if (skillData.content !== undefined && current?.content !== undefined) {
+      const { data: currentFull } = await supabase
+        .from('agent_skills')
+        .select('default_content')
+        .eq('id', id)
+        .eq('entity_id', entityId)
+        .single()
+      if (currentFull?.default_content) {
+        updateData.content_overridden = skillData.content !== currentFull.default_content
+      }
+    }
+
     const { data, error } = await supabase
       .from('agent_skills')
-      .update(skillData)
+      .update(updateData)
       .eq('id', id)
       .eq('entity_id', entityId)
       .select()
@@ -935,6 +949,35 @@ export async function updateSkillAction(
       if (!replaceResult.ok) return replaceResult
     }
 
+    return ok(data)
+  } catch (e) {
+    return dbError(e)
+  }
+}
+
+export async function resetSkillToDefaultAction(id: string): Promise<ActionResult> {
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+
+    const { data: skill } = await supabase
+      .from('agent_skills')
+      .select('default_content, content')
+      .eq('id', id)
+      .eq('entity_id', entityId)
+      .single()
+
+    if (!skill) return fail('Skill not found')
+    if (!skill.default_content) return fail('This skill has no default content to reset to')
+
+    const { data, error } = await supabase
+      .from('agent_skills')
+      .update({ content: skill.default_content, content_overridden: false })
+      .eq('id', id)
+      .eq('entity_id', entityId)
+      .select()
+      .single()
+
+    if (error) return dbFail(error)
     return ok(data)
   } catch (e) {
     return dbError(e)

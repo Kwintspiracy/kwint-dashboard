@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
-import { getAgentsAction, createAgentAction, updateAgentAction, deleteAgentAction, setDefaultAgentAction, activateTelegramAction, deactivateTelegramAction, getLlmKeysAction, getOperatorProvidersAction, getSkillsAction, getAgentSkillAssignmentsAction, setAgentSkillAssignmentsAction, getOrchestratorAssignmentsAction, getOrchestratorAssignmentDetailsAction, setOrchestratorAssignmentsAction, getAgentOrchestratorAction, setAgentOrchestratorAction, getAllAgentAssignmentsAction, getAllSkillAssignmentsAction, previewEffectivePromptAction } from '@/lib/actions'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import { getAgentsAction, createAgentAction, updateAgentAction, deleteAgentAction, setDefaultAgentAction, activateTelegramAction, deactivateTelegramAction, getLlmKeysAction, getOperatorProvidersAction, getSkillsAction, getConnectorsAction, getAgentSkillAssignmentsAction, setAgentSkillAssignmentsAction, getOrchestratorAssignmentsAction, getOrchestratorAssignmentDetailsAction, setOrchestratorAssignmentsAction, getAgentOrchestratorAction, setAgentOrchestratorAction, getAllAgentAssignmentsAction, getAllSkillAssignmentsAction, previewEffectivePromptAction } from '@/lib/actions'
 import { timeAgo } from '@/lib/utils'
 import { toast } from 'sonner'
 import { useData } from '@/hooks/useData'
@@ -176,6 +176,7 @@ export default function AgentsPage() {
   const { data: llmKeysRaw = [] } = useData(['llm-keys', eid], getLlmKeysAction)
   const { data: operatorProvidersRaw = [] } = useData(['operator-providers'], getOperatorProvidersAction)
   const { data: skillsRaw = [] } = useData(['skills', eid], getSkillsAction)
+  const { data: connectorsRaw = [] } = useData(['connectors', eid], getConnectorsAction)
   const { data: allAssignmentsRaw, mutate: mutateAssignments } = useData(['agent-assignments', eid], getAllAgentAssignmentsAction)
   const { data: allSkillAssignmentsRaw, mutate: mutateSkillAssignments } = useData(['all-skill-assignments', eid], getAllSkillAssignmentsAction)
   const configuredProviders = new Set(
@@ -183,8 +184,11 @@ export default function AgentsPage() {
   )
   const operatorProviders = new Set(operatorProvidersRaw as string[])
   const agents = agentsRaw as Agent[]
-  type Skill = { id: string; name: string; slug: string; active: boolean; content: string | null; description: string | null }
+  type RequiredConfigItem = { label: string; description: string; type: 'connector_slug' | 'manual'; value?: string; critical: boolean }
+  type Skill = { id: string; name: string; slug: string; active: boolean; content: string | null; description: string | null; required_config: RequiredConfigItem[] | null; default_content: string | null; content_overridden: boolean }
+  type ConnectorRef = { id: string; name: string; slug: string; active: boolean }
   const skills = skillsRaw as Skill[]
+  const connectors = connectorsRaw as ConnectorRef[]
   type AgentAssignment = { orchestrator_id: string; sub_agent_id: string }
   const allAssignments: AgentAssignment[] = (allAssignmentsRaw as { ok: boolean; data?: AgentAssignment[] } | undefined)?.ok
     ? ((allAssignmentsRaw as { ok: true; data: AgentAssignment[] }).data ?? [])
@@ -201,6 +205,7 @@ export default function AgentsPage() {
 
   const [editingId, setEditingId] = useState<string | null>(null)
   const [assignedSkillIds, setAssignedSkillIds] = useState<string[]>([])
+  const [expandedSkillId, setExpandedSkillId] = useState<string | null>(null)
   const [assignedAgentIds, setAssignedAgentIds] = useState<string[]>([])
   const [agentInstructions, setAgentInstructions] = useState<Record<string, string>>({})
   const [selectedOrchestratorId, setSelectedOrchestratorId] = useState<string | null>(null)
@@ -221,18 +226,32 @@ export default function AgentsPage() {
   const [promptPreview, setPromptPreview] = useState<PromptPreview | null>(null)
   const [promptPreviewLoading, setPromptPreviewLoading] = useState(false)
   const [showPromptPreview, setShowPromptPreview] = useState(false)
+  const [expandedPreviewSections, setExpandedPreviewSections] = useState<Set<string>>(new Set())
 
-  async function loadPromptPreview() {
-    if (!editingId) return
+  const loadPromptPreview = useCallback(async (id?: string) => {
+    const targetId = id ?? editingId
+    if (!targetId) return
     setPromptPreviewLoading(true)
     setShowPromptPreview(true)
     try {
-      const result = await previewEffectivePromptAction(editingId)
+      const result = await previewEffectivePromptAction(targetId)
       if (result.ok) setPromptPreview(result.data)
     } finally {
       setPromptPreviewLoading(false)
     }
-  }
+  }, [editingId])
+
+  // Auto-refresh preview 800ms after skill assignments change
+  const skillDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (!editingId || !showPromptPreview) return
+    if (skillDebounceRef.current) clearTimeout(skillDebounceRef.current)
+    skillDebounceRef.current = setTimeout(() => {
+      loadPromptPreview()
+    }, 800)
+    return () => { if (skillDebounceRef.current) clearTimeout(skillDebounceRef.current) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assignedSkillIds, assignedAgentIds])
 
   function slugify(name: string) {
     return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
@@ -279,7 +298,9 @@ export default function AgentsPage() {
     setLoadingEditId(null)
     setEditingId(a.id); setShowAdd(false); setTelegramStatus('')
     setSlugManuallyEdited(false)
-    setPromptPreview(null); setShowPromptPreview(false)
+    setPromptPreview(null); setShowPromptPreview(true); setExpandedPreviewSections(new Set())
+    // Load preview immediately with known id (editingId state may not be set yet)
+    setTimeout(() => loadPromptPreview(a.id), 0)
     setForm({
       name: a.name, slug: a.slug, personality: a.personality, model: a.model,
       role: a.role || 'agent',
@@ -991,32 +1012,126 @@ export default function AgentsPage() {
                     No skills yet —{' '}
                     <a href="/connectors" className="text-neutral-400 underline hover:text-white transition-colors">install from Marketplace</a>
                   </p>
-                ) : (
-                  <div className="flex flex-col gap-0.5">
-                    {skills.map(skill => {
-                      const checked = assignedSkillIds.includes(skill.id)
-                      return (
-                        <label key={skill.id} className={`flex items-start gap-2.5 px-2 py-2 rounded-lg cursor-pointer transition-colors hover:bg-neutral-800/30 ${checked ? 'bg-neutral-800/20' : ''}`}>
+                ) : (() => {
+                  const assigned = skills.filter(s => assignedSkillIds.includes(s.id))
+                  const available = skills.filter(s => !assignedSkillIds.includes(s.id))
+
+                  function SkillRow({ skill }: { skill: Skill }) {
+                    const checked = assignedSkillIds.includes(skill.id)
+                    const isExpanded = expandedSkillId === skill.id
+                    const requiredItems = skill.required_config ?? []
+                    const missingConnectors = requiredItems.filter(item =>
+                      item.type === 'connector_slug' && item.value &&
+                      !connectors.some(c => c.slug === item.value && c.active)
+                    )
+                    const manualItems = requiredItems.filter(item => item.type === 'manual')
+                    return (
+                      <div className={`rounded-lg border transition-colors ${checked ? 'border-neutral-700/60 bg-neutral-800/20' : 'border-transparent'}`}>
+                        <label className="flex items-start gap-2.5 px-2 py-2 cursor-pointer">
                           <input
                             type="checkbox"
                             checked={checked}
-                            onChange={() => setAssignedSkillIds(prev => checked ? prev.filter(id => id !== skill.id) : [...prev, skill.id])}
+                            onChange={() => {
+                              setAssignedSkillIds(prev => checked ? prev.filter(id => id !== skill.id) : [...prev, skill.id])
+                              if (!checked) setExpandedSkillId(skill.id)
+                              else if (isExpanded) setExpandedSkillId(null)
+                            }}
                             className="rounded border-neutral-700 bg-neutral-800 accent-emerald-500 shrink-0 mt-0.5 cursor-pointer"
                           />
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex items-center gap-1.5 flex-wrap">
                               <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${skill.active ? 'bg-emerald-400' : 'bg-neutral-600'}`} />
                               <span className="text-xs font-medium text-neutral-300">{skill.name}</span>
+                              {checked && missingConnectors.length > 0 && (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs font-medium text-amber-400 bg-amber-950/30 border border-amber-900/40 rounded">
+                                  <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>
+                                  Setup needed
+                                </span>
+                              )}
                             </div>
                             {skill.description && (
                               <p className="text-xs text-neutral-600 mt-0.5 leading-relaxed">{skill.description}</p>
                             )}
                           </div>
+                          {checked && skill.content && (
+                            <button
+                              type="button"
+                              onClick={e => { e.preventDefault(); setExpandedSkillId(isExpanded ? null : skill.id) }}
+                              className="text-neutral-600 hover:text-neutral-400 transition-colors shrink-0 mt-0.5"
+                            >
+                              <svg className={`w-3.5 h-3.5 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                              </svg>
+                            </button>
+                          )}
                         </label>
-                      )
-                    })}
-                  </div>
-                )}
+
+                        {/* Expanded: setup callout + content preview */}
+                        {checked && isExpanded && (
+                          <div className="px-3 pb-3 space-y-2 border-t border-neutral-800/40 pt-2">
+                            {missingConnectors.length > 0 && (
+                              <div className="flex items-start gap-2 px-3 py-2.5 bg-amber-950/10 border border-amber-900/30 rounded-lg">
+                                <svg className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                                </svg>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs font-semibold text-amber-400 mb-1">Setup required:</p>
+                                  {missingConnectors.map((item, i) => (
+                                    <p key={i} className="text-xs text-amber-300/70">
+                                      • {item.label} — {item.description}{' '}
+                                      <a href="/connectors" className="underline hover:text-amber-300 transition-colors">Connect →</a>
+                                    </p>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {manualItems.length > 0 && (
+                              <div className="space-y-1">
+                                {manualItems.map((item, i) => (
+                                  <div key={i} className="flex items-start gap-2 text-xs text-neutral-600">
+                                    <svg className="w-3 h-3 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" /></svg>
+                                    <span>{item.label} — {item.description}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {skill.content && (
+                              <div>
+                                <div className="flex items-center justify-between mb-1.5">
+                                  <p className="text-xs text-neutral-600 font-medium">Instructions preview</p>
+                                  <a href="/skills" className="text-xs text-neutral-600 hover:text-neutral-400 transition-colors">Edit in Skills →</a>
+                                </div>
+                                <pre className="text-xs text-neutral-500 bg-neutral-900/60 border border-neutral-800/40 rounded-lg p-3 max-h-40 overflow-y-auto whitespace-pre-wrap leading-relaxed font-mono">
+                                  {skill.content.slice(0, 600)}{skill.content.length > 600 ? '\n…' : ''}
+                                </pre>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  }
+
+                  return (
+                    <div className="flex flex-col gap-1">
+                      {/* Assigned skills group */}
+                      {assigned.length > 0 && (
+                        <>
+                          <p className="text-xs text-neutral-600 font-medium mb-0.5">Assigned ({assigned.length})</p>
+                          {assigned.map(skill => <SkillRow key={skill.id} skill={skill} />)}
+                        </>
+                      )}
+                      {/* Available skills group */}
+                      {available.length > 0 && (
+                        <>
+                          {assigned.length > 0 && <div className="border-t border-neutral-800/40 my-1.5" />}
+                          {assigned.length > 0 && <p className="text-xs text-neutral-600 font-medium mb-0.5">Available</p>}
+                          {available.map(skill => <SkillRow key={skill.id} skill={skill} />)}
+                        </>
+                      )}
+                    </div>
+                  )
+                })()}
                 {assignedSkillIds.length === 0 && skills.length > 0 && (
                   <p className="text-xs text-neutral-700 mt-1.5">All {skills.length} skills available.</p>
                 )}
@@ -1220,91 +1335,159 @@ export default function AgentsPage() {
             <div className="border-t border-neutral-800/50">
               <button
                 type="button"
-                onClick={showPromptPreview ? () => setShowPromptPreview(false) : loadPromptPreview}
-                className="w-full flex items-center justify-between px-6 py-3 text-xs text-neutral-600 hover:text-neutral-400 hover:bg-neutral-800/20 transition-all duration-150"
+                onClick={() => {
+                  if (showPromptPreview) setShowPromptPreview(false)
+                  else loadPromptPreview()
+                }}
+                className="w-full flex items-center justify-between px-6 py-3 text-xs text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800/20 transition-all duration-150"
               >
-                <span className="font-semibold uppercase tracking-wide">Preview your agent ▾</span>
+                <div className="flex items-center gap-2">
+                  <svg className={`w-3.5 h-3.5 transition-transform ${showPromptPreview ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                  </svg>
+                  <span className="font-semibold uppercase tracking-wide">Effective prompt</span>
+                  {promptPreviewLoading && (
+                    <svg className="animate-spin w-3 h-3 text-neutral-600" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                    </svg>
+                  )}
+                </div>
                 {promptPreview && !promptPreviewLoading && (() => {
                   const total = promptPreview.totalTokens
                   const load = total < 1500 ? { label: 'Light', color: 'text-emerald-500' }
                     : total < 4000 ? { label: 'Medium', color: 'text-amber-500' }
                     : total < 8000 ? { label: 'Heavy', color: 'text-orange-500' }
                     : { label: 'Very heavy', color: 'text-red-500' }
-                  return <span className={`text-xs ${load.color}`}>Context: {load.label}</span>
+                  return <span className={`text-xs ${load.color}`}>{total.toLocaleString()} tokens · {load.label}</span>
                 })()}
               </button>
 
               {showPromptPreview && (
-                <div className="px-6 pb-6 space-y-4">
-                  {promptPreviewLoading ? (
+                <div className="px-6 pb-6 space-y-3">
+                  {promptPreviewLoading && !promptPreview ? (
                     <p className="text-xs text-neutral-600 py-4 text-center">Loading preview…</p>
                   ) : promptPreview ? (
                     <>
                       {promptPreview.sections.map((section) => {
+                        const isExpanded = expandedPreviewSections.has(section.source)
+                        const toggleSection = () => setExpandedPreviewSections(prev => {
+                          const next = new Set(prev)
+                          if (next.has(section.source)) next.delete(section.source)
+                          else next.add(section.source)
+                          return next
+                        })
+
                         if (section.source === 'personality') {
-                          // Show first non-empty, non-header lines as a plain summary
                           const lines = section.content.split('\n')
                             .map(l => l.replace(/^#+\s*/, '').trim())
                             .filter(l => l.length > 20)
                             .slice(0, 3)
                           return (
-                            <div key="personality" className="space-y-1">
-                              <p className="text-xs font-semibold text-neutral-500 uppercase tracking-wide">Role</p>
-                              <div className="space-y-1">
-                                {lines.map((l, i) => (
-                                  <p key={i} className="text-xs text-neutral-400 leading-relaxed">{l.slice(0, 120)}{l.length > 120 ? '…' : ''}</p>
-                                ))}
-                              </div>
+                            <div key="personality" className="border border-neutral-800/40 rounded-lg overflow-hidden">
+                              <button type="button" onClick={toggleSection} className="w-full flex items-center justify-between px-3 py-2 hover:bg-neutral-800/20 transition-colors">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-semibold text-neutral-500 uppercase tracking-wide">Your instructions</span>
+                                  <span className="text-xs text-neutral-700">{section.tokens} tok</span>
+                                </div>
+                                <svg className={`w-3 h-3 text-neutral-700 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
+                              </button>
+                              {!isExpanded && (
+                                <div className="px-3 pb-2 space-y-0.5">
+                                  {lines.map((l, i) => (
+                                    <p key={i} className="text-xs text-neutral-500 leading-relaxed">{l.slice(0, 100)}{l.length > 100 ? '…' : ''}</p>
+                                  ))}
+                                </div>
+                              )}
+                              {isExpanded && (
+                                <pre className="px-3 pb-3 text-xs text-neutral-500 whitespace-pre-wrap leading-relaxed border-t border-neutral-800/40 pt-2 max-h-48 overflow-y-auto font-mono">
+                                  {section.content}
+                                </pre>
+                              )}
                             </div>
                           )
                         }
+
                         if (section.source === 'skills') {
                           const skillNames = section.content
                             .split(/\n---\n/)
                             .map(block => block.match(/^#\s+(.+)/m)?.[1]?.trim())
-                            .filter(Boolean)
+                            .filter(Boolean) as string[]
                           return (
-                            <div key="skills" className="space-y-1.5">
-                              <p className="text-xs font-semibold text-neutral-500 uppercase tracking-wide">Skills</p>
-                              <div className="flex flex-wrap gap-1.5">
+                            <div key="skills" className="border border-neutral-800/40 rounded-lg overflow-hidden">
+                              <button type="button" onClick={toggleSection} className="w-full flex items-center justify-between px-3 py-2 hover:bg-neutral-800/20 transition-colors">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-semibold text-neutral-500 uppercase tracking-wide">Skills</span>
+                                  <span className="text-xs text-neutral-700">{skillNames.length} · {section.tokens} tok</span>
+                                </div>
+                                <svg className={`w-3 h-3 text-neutral-700 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
+                              </button>
+                              <div className="px-3 pb-2 pt-0.5 flex flex-wrap gap-1.5">
                                 {skillNames.map((name, i) => (
                                   <span key={i} className="px-2 py-0.5 bg-emerald-950/40 text-emerald-400 border border-emerald-800/30 rounded-full text-xs">{name}</span>
                                 ))}
                               </div>
+                              {isExpanded && (
+                                <pre className="px-3 pb-3 text-xs text-neutral-500 whitespace-pre-wrap leading-relaxed border-t border-neutral-800/40 pt-2 max-h-48 overflow-y-auto font-mono">
+                                  {section.content}
+                                </pre>
+                              )}
                             </div>
                           )
                         }
+
                         if (section.source === 'team') {
                           const members = section.content
                             .split('\n')
                             .filter(l => l.startsWith('- **'))
                             .map(l => l.match(/\*\*(.+?)\*\*/)?.[1])
-                            .filter(Boolean)
+                            .filter(Boolean) as string[]
                           return (
-                            <div key="team" className="space-y-1.5">
-                              <p className="text-xs font-semibold text-neutral-500 uppercase tracking-wide">Team</p>
-                              <div className="flex flex-wrap gap-1.5">
+                            <div key="team" className="border border-neutral-800/40 rounded-lg overflow-hidden">
+                              <button type="button" onClick={toggleSection} className="w-full flex items-center justify-between px-3 py-2 hover:bg-neutral-800/20 transition-colors">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-semibold text-neutral-500 uppercase tracking-wide">Team</span>
+                                  <span className="text-xs text-neutral-700">{members.length} agents · {section.tokens} tok</span>
+                                </div>
+                                <svg className={`w-3 h-3 text-neutral-700 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
+                              </button>
+                              <div className="px-3 pb-2 pt-0.5 flex flex-wrap gap-1.5">
                                 {members.map((name, i) => (
                                   <span key={i} className="px-2 py-0.5 bg-sky-950/40 text-sky-400 border border-sky-800/30 rounded-full text-xs">{name}</span>
                                 ))}
                               </div>
+                              {isExpanded && (
+                                <pre className="px-3 pb-3 text-xs text-neutral-500 whitespace-pre-wrap leading-relaxed border-t border-neutral-800/40 pt-2 max-h-48 overflow-y-auto font-mono">
+                                  {section.content}
+                                </pre>
+                              )}
                             </div>
                           )
                         }
-                        return null
+
+                        // date / other sections
+                        return (
+                          <div key={section.source} className="border border-neutral-800/40 rounded-lg overflow-hidden">
+                            <button type="button" onClick={toggleSection} className="w-full flex items-center justify-between px-3 py-2 hover:bg-neutral-800/20 transition-colors">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-semibold text-neutral-500 uppercase tracking-wide">{section.label || section.source}</span>
+                                <span className="text-xs text-neutral-700">{section.tokens} tok</span>
+                              </div>
+                              <svg className={`w-3 h-3 text-neutral-700 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
+                            </button>
+                            {isExpanded && (
+                              <pre className="px-3 pb-3 text-xs text-neutral-500 whitespace-pre-wrap leading-relaxed border-t border-neutral-800/40 pt-2 max-h-32 overflow-y-auto font-mono">
+                                {section.content}
+                              </pre>
+                            )}
+                          </div>
+                        )
                       })}
                       {promptPreview.totalTokens >= 8000 && (
                         <p className="text-xs text-orange-500/80 bg-orange-950/20 border border-orange-800/20 rounded-lg px-3 py-2">
-                          Your agent has a lot of instructions and skills. This may slow responses slightly. Consider removing unused skills.
+                          Very large prompt — this may slow responses. Consider removing unused skills.
                         </p>
                       )}
-                      <button
-                        type="button"
-                        onClick={loadPromptPreview}
-                        className="text-xs text-neutral-700 hover:text-neutral-400 transition-colors"
-                      >
-                        ↻ Update preview
-                      </button>
                     </>
                   ) : null}
                 </div>
