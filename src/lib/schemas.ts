@@ -66,6 +66,13 @@ const RequiredConfigItemSchema = z.object({
   critical: z.boolean().default(true),
 })
 
+const OperationItemSchema = z.object({
+  name: z.string(),
+  slug: z.string(),
+  risk: z.enum(['read', 'write', 'destructive']),
+  requires_approval: z.boolean().default(false),
+})
+
 export const CreateSkillSchema = z.object({
   name: z.string().min(1, 'Name is required').max(120),
   slug: SlugSchema,
@@ -74,6 +81,7 @@ export const CreateSkillSchema = z.object({
   default_content: z.string().nullable().optional(),
   content_overridden: z.boolean().optional(),
   required_config: z.array(RequiredConfigItemSchema).nullable().optional(),
+  operations: z.array(OperationItemSchema).nullable().optional(),
   connector_ids: z.array(UuidSchema).optional(),
 })
 
@@ -85,12 +93,20 @@ export const UpdateSkillSchema = z.object({
   default_content: z.string().nullable().optional(),
   content_overridden: z.boolean().optional(),
   required_config: z.array(RequiredConfigItemSchema).nullable().optional(),
+  operations: z.array(OperationItemSchema).nullable().optional(),
   active: z.boolean().optional(),
   connector_ids: z.array(UuidSchema).optional(),
 })
 
 export type CreateSkillInput = z.infer<typeof CreateSkillSchema>
 export type UpdateSkillInput = z.infer<typeof UpdateSkillSchema>
+
+export const SetSkillApprovalsSchema = z.object({
+  agent_id: UuidSchema,
+  skill_id: UuidSchema,
+  approval_overrides: z.record(z.string(), z.boolean()),
+})
+export type SetSkillApprovalsInput = z.infer<typeof SetSkillApprovalsSchema>
 
 // ─── Memory ──────────────────────────────────────────────────────────────────
 

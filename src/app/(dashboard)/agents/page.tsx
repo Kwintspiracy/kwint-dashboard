@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { getAgentsAction, createAgentAction, updateAgentAction, deleteAgentAction, setDefaultAgentAction, activateTelegramAction, deactivateTelegramAction, getLlmKeysAction, getOperatorProvidersAction, getSkillsAction, getConnectorsAction, getAgentSkillAssignmentsAction, setAgentSkillAssignmentsAction, getOrchestratorAssignmentsAction, getOrchestratorAssignmentDetailsAction, setOrchestratorAssignmentsAction, getAgentOrchestratorAction, setAgentOrchestratorAction, getAllAgentAssignmentsAction, getAllSkillAssignmentsAction, previewEffectivePromptAction } from '@/lib/actions'
+import { getAgentsAction, createAgentAction, updateAgentAction, deleteAgentAction, setDefaultAgentAction, activateTelegramAction, deactivateTelegramAction, getLlmKeysAction, getOperatorProvidersAction, getSkillsAction, getConnectorsAction, getAgentSkillAssignmentsAction, setAgentSkillAssignmentsAction, setSkillApprovalsAction, getOrchestratorAssignmentsAction, getOrchestratorAssignmentDetailsAction, setOrchestratorAssignmentsAction, getAgentOrchestratorAction, setAgentOrchestratorAction, getAllAgentAssignmentsAction, getAllSkillAssignmentsAction, previewEffectivePromptAction } from '@/lib/actions'
 import { timeAgo } from '@/lib/utils'
 import { toast } from 'sonner'
 import { useData } from '@/hooks/useData'
@@ -185,7 +185,8 @@ export default function AgentsPage() {
   const operatorProviders = new Set(operatorProvidersRaw as string[])
   const agents = agentsRaw as Agent[]
   type RequiredConfigItem = { label: string; description: string; type: 'connector_slug' | 'manual'; value?: string; critical: boolean }
-  type Skill = { id: string; name: string; slug: string; active: boolean; content: string | null; description: string | null; required_config: RequiredConfigItem[] | null; default_content: string | null; content_overridden: boolean }
+  type OperationItem = { name: string; slug: string; risk: 'read' | 'write' | 'destructive'; requires_approval: boolean }
+  type Skill = { id: string; name: string; slug: string; active: boolean; content: string | null; description: string | null; required_config: RequiredConfigItem[] | null; default_content: string | null; content_overridden: boolean; operations: OperationItem[] | null }
   type ConnectorRef = { id: string; name: string; slug: string; active: boolean }
   const skills = skillsRaw as Skill[]
   const connectors = connectorsRaw as ConnectorRef[]
@@ -206,6 +207,7 @@ export default function AgentsPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [assignedSkillIds, setAssignedSkillIds] = useState<string[]>([])
   const [expandedSkillId, setExpandedSkillId] = useState<string | null>(null)
+  const [skillApprovalOverrides, setSkillApprovalOverrides] = useState<Record<string, Record<string, boolean>>>({})
   const [assignedAgentIds, setAssignedAgentIds] = useState<string[]>([])
   const [agentInstructions, setAgentInstructions] = useState<Record<string, string>>({})
   const [selectedOrchestratorId, setSelectedOrchestratorId] = useState<string | null>(null)
@@ -285,7 +287,10 @@ export default function AgentsPage() {
     ])
     // Filter out orphaned IDs pointing to deleted skills
     const validSkillIds = new Set(skills.map(s => s.id))
-    setAssignedSkillIds(skillsRes.ok ? skillsRes.data.filter(id => validSkillIds.has(id)) : [])
+    const assignedIds = skillsRes.ok ? skillsRes.data.filter(id => validSkillIds.has(id)) : []
+    setAssignedSkillIds(assignedIds)
+    // Load per-skill approval overrides
+    setSkillApprovalOverrides({})
     if (orchDetailsRes.ok) {
       setAssignedAgentIds(orchDetailsRes.data.map(d => d.sub_agent_id))
       const instr: Record<string, string> = {}
@@ -366,6 +371,14 @@ export default function AgentsPage() {
       ])
       if (!skillRes.ok) toast.error('Could not save skill assignments')
       if (!assignRes.ok) toast.error('Could not save team assignments')
+      // Persist per-skill approval overrides
+      await Promise.all(
+        assignedSkillIds.map(skillId => {
+          const overrides = skillApprovalOverrides[skillId]
+          if (!overrides || Object.keys(overrides).length === 0) return Promise.resolve()
+          return setSkillApprovalsAction({ agent_id: editingId, skill_id: skillId, approval_overrides: overrides })
+        })
+      )
       toast.success('Agent updated')
       setEditingId(null)
     } else {
@@ -386,6 +399,14 @@ export default function AgentsPage() {
         ])
         if (!skillRes.ok) toast.error('Could not save skill assignments')
         if (!assignRes.ok) toast.error('Could not save team assignments')
+        // Persist per-skill approval overrides for new agent
+        await Promise.all(
+          assignedSkillIds.map(skillId => {
+            const overrides = skillApprovalOverrides[skillId]
+            if (!overrides || Object.keys(overrides).length === 0) return Promise.resolve()
+            return setSkillApprovalsAction({ agent_id: newId, skill_id: skillId, approval_overrides: overrides })
+          })
+        )
       }
       toast.success(isFirstAgent ? 'Agent created! Now assign it some skills to give it capabilities.' : 'Agent created successfully.')
       setShowAdd(false)
@@ -1066,7 +1087,7 @@ export default function AgentsPage() {
                           )}
                         </label>
 
-                        {/* Expanded: setup callout + content preview */}
+                        {/* Expanded: setup callout + operations + content preview */}
                         {checked && isExpanded && (
                           <div className="px-3 pb-3 space-y-2 border-t border-neutral-800/40 pt-2">
                             {missingConnectors.length > 0 && (
@@ -1093,6 +1114,52 @@ export default function AgentsPage() {
                                     <span>{item.label} — {item.description}</span>
                                   </div>
                                 ))}
+                              </div>
+                            )}
+                            {/* Operations: pills + per-operation approval toggles */}
+                            {(skill.operations ?? []).length > 0 && (
+                              <div className="space-y-2">
+                                <p className="text-xs font-medium text-neutral-600">Operations</p>
+                                <div className="flex flex-wrap gap-1">
+                                  {(skill.operations ?? []).map(op => (
+                                    <span key={op.slug} className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded border ${
+                                      op.risk === 'read' ? 'bg-emerald-950/40 text-emerald-400 border-emerald-900/30' :
+                                      op.risk === 'write' ? 'bg-amber-950/40 text-amber-400 border-amber-900/30' :
+                                      'bg-red-950/40 text-red-400 border-red-900/30'
+                                    }`}>{op.name}</span>
+                                  ))}
+                                </div>
+                                {/* Approval toggles for write/destructive only */}
+                                {(skill.operations ?? []).filter(op => op.risk !== 'read').length > 0 && (
+                                  <div className="space-y-1 pt-1">
+                                    <p className="text-xs text-neutral-600">Require human approval:</p>
+                                    {(skill.operations ?? []).filter(op => op.risk !== 'read').map(op => {
+                                      const override = skillApprovalOverrides[skill.id]?.[op.slug]
+                                      const isChecked = override !== undefined ? override : op.requires_approval
+                                      return (
+                                        <label key={op.slug} className="flex items-center gap-2 cursor-pointer group">
+                                          <input
+                                            type="checkbox"
+                                            checked={isChecked}
+                                            onChange={() => {
+                                              setSkillApprovalOverrides(prev => ({
+                                                ...prev,
+                                                [skill.id]: { ...(prev[skill.id] ?? {}), [op.slug]: !isChecked },
+                                              }))
+                                            }}
+                                            className="rounded border-neutral-700 bg-neutral-800 accent-amber-500 shrink-0 cursor-pointer"
+                                          />
+                                          <span className={`text-xs transition-colors ${isChecked ? 'text-amber-400' : 'text-neutral-600 group-hover:text-neutral-400'}`}>
+                                            {op.name}
+                                          </span>
+                                          {op.risk === 'destructive' && (
+                                            <span className="text-xs text-red-500/60">⚠</span>
+                                          )}
+                                        </label>
+                                      )
+                                    })}
+                                  </div>
+                                )}
                               </div>
                             )}
                             {skill.content && (

@@ -26,12 +26,14 @@ import { SKILL_TEMPLATES } from '@/lib/skill-templates'
 type ConnectorRef = { id: string; name: string; slug: string }
 type Connector = ConnectorRef & { base_url: string | null; has_key: boolean; active: boolean }
 type RequiredConfigItem = { label: string; description: string; type: 'connector_slug' | 'manual'; value?: string; critical: boolean }
+type OperationItem = { name: string; slug: string; risk: 'read' | 'write' | 'destructive'; requires_approval: boolean }
 type Skill = {
   id: string; name: string; slug: string; content: string
   description: string | null
   default_content: string | null
   content_overridden: boolean
   required_config: RequiredConfigItem[] | null
+  operations: OperationItem[] | null
   active: boolean; created_at: string
   skill_connectors: { connector_id: string; connectors: ConnectorRef }[]
 }
@@ -52,7 +54,7 @@ export default function SkillsPage() {
   const [showAdd, setShowAdd] = useState(false)
   const [saving, setSaving] = useState(false)
   const [resetting, setResetting] = useState(false)
-  const [form, setForm] = useState({ name: '', slug: '', content: '', description: '', default_content: '', content_overridden: false, required_config: null as RequiredConfigItem[] | null })
+  const [form, setForm] = useState({ name: '', slug: '', content: '', description: '', default_content: '', content_overridden: false, required_config: null as RequiredConfigItem[] | null, operations: null as OperationItem[] | null })
   const [slugManuallyEdited, setSlugManuallyEdited] = useState(false)
   const [selectedConnectorIds, setSelectedConnectorIds] = useState<string[]>([])
   const [versionCounts, setVersionCounts] = useState<Record<string, number>>({})
@@ -111,6 +113,7 @@ export default function SkillsPage() {
       default_content: s.default_content ?? '',
       content_overridden: s.content_overridden ?? false,
       required_config: s.required_config ?? null,
+      operations: s.operations ?? null,
     })
     setSlugManuallyEdited(false)
     setSelectedConnectorIds((s.skill_connectors || []).map(sc => sc.connector_id))
@@ -121,7 +124,7 @@ export default function SkillsPage() {
 
   function startAdd() {
     setEditingId(null)
-    setForm({ name: '', slug: '', content: '', description: '', default_content: '', content_overridden: false, required_config: null })
+    setForm({ name: '', slug: '', content: '', description: '', default_content: '', content_overridden: false, required_config: null, operations: null })
     setSlugManuallyEdited(false)
     setSelectedConnectorIds([])
     setShowAdd(true)
@@ -166,6 +169,7 @@ export default function SkillsPage() {
           updateSkillAction(editingId, {
             name: form.name, slug: form.slug, content: form.content,
             description: form.description || null,
+            operations: form.operations || null,
           }),
           updateSkillConnectorsAction(editingId, selectedConnectorIds),
         ])
@@ -179,6 +183,7 @@ export default function SkillsPage() {
           description: form.description || null,
           default_content: form.default_content || null,
           required_config: form.required_config || null,
+          operations: form.operations || null,
           connector_ids: selectedConnectorIds,
         })
         if (!result.ok) { toast.error(result.error); return }
@@ -360,6 +365,16 @@ export default function SkillsPage() {
                           Customized
                         </span>
                       )}
+                      {(s.operations ?? []).slice(0, 4).map(op => (
+                        <span key={op.slug} className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-md border ${
+                          op.risk === 'read' ? 'bg-emerald-950/40 text-emerald-400 border-emerald-900/30' :
+                          op.risk === 'write' ? 'bg-amber-950/40 text-amber-400 border-amber-900/30' :
+                          'bg-red-950/40 text-red-400 border-red-900/30'
+                        }`}>{op.name}</span>
+                      ))}
+                      {(s.operations ?? []).length > 4 && (
+                        <span className="text-xs text-neutral-600">+{(s.operations ?? []).length - 4} more</span>
+                      )}
                       {vCount > 0 && (
                         <span className="inline-flex items-center px-2 py-1 text-xs font-semibold text-neutral-500 bg-neutral-800/80 border border-neutral-700/60 rounded-md">
                           v{vCount + 1}
@@ -427,6 +442,9 @@ export default function SkillsPage() {
                     required_config: tpl.required_config ? tpl.required_config.map(r => ({
                       label: r.label, description: r.description, type: r.type, value: r.value, critical: r.critical,
                     })) : null,
+                    operations: tpl.operations ? tpl.operations.map(o => ({
+                      name: o.name, slug: o.slug, risk: o.risk, requires_approval: o.requires_approval,
+                    })) : null,
                   })
                   setSlugManuallyEdited(true)
                   // auto-select connector if already installed
@@ -460,15 +478,14 @@ export default function SkillsPage() {
             </details>
           </div>
 
-          <div>
-            <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">
-              Description <span className="normal-case text-neutral-700 font-normal">(shown to non-technical users)</span>
-            </label>
-            <input value={form.description} onChange={(e) => setForm(prev => ({ ...prev, description: e.target.value }))}
-              placeholder="e.g. Send and read emails via Gmail"
-              maxLength={300}
-              className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none transition-colors duration-150" />
-          </div>
+          {form.description && (
+            <div>
+              <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-1.5">About</label>
+              <p className="text-xs text-neutral-400 bg-neutral-900/40 rounded-lg px-3 py-2.5 border border-neutral-800/40 leading-relaxed">
+                {form.description}
+              </p>
+            </div>
+          )}
 
           {/* Required configuration callout */}
           {form.required_config && form.required_config.length > 0 && (
@@ -483,6 +500,27 @@ export default function SkillsPage() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* Operations pills (read-only) */}
+          {form.operations && form.operations.length > 0 && (
+            <div>
+              <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-2">What this skill can do</label>
+              <div className="flex flex-wrap gap-1.5">
+                {form.operations.map(op => (
+                  <span key={op.slug} className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md border ${
+                    op.risk === 'read' ? 'bg-emerald-950/40 text-emerald-400 border-emerald-900/30' :
+                    op.risk === 'write' ? 'bg-amber-950/40 text-amber-400 border-amber-900/30' :
+                    'bg-red-950/40 text-red-400 border-red-900/30'
+                  }`}>
+                    {op.risk === 'destructive' && <span>⚠</span>}
+                    {op.name}
+                    {op.requires_approval && <span className="opacity-60 text-xs">· approval</span>}
+                  </span>
+                ))}
+              </div>
+              <p className="text-xs text-neutral-700 mt-1.5">Green = read-only · Amber = creates/modifies · Red = irreversible or external action</p>
             </div>
           )}
 

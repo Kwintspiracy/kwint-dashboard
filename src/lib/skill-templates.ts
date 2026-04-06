@@ -11,6 +11,13 @@ export type RequiredConfigItem = {
   critical: boolean
 }
 
+export type OperationItem = {
+  name: string
+  slug: string
+  risk: 'read' | 'write' | 'destructive'
+  requires_approval: boolean
+}
+
 export type SkillTemplate = {
   id: string
   name: string
@@ -39,6 +46,7 @@ export type SkillTemplate = {
   content: string
   capabilities?: string[]
   required_config?: RequiredConfigItem[]
+  operations?: OperationItem[]
 }
 
 /** Maps skill slug → capability tags (auto-derived, no manual input needed). */
@@ -269,6 +277,13 @@ POST /spreadsheets/{spreadsheetId}/values/{range}:clear (no body needed)
     required_config: [
       { label: 'Google Sheets connector', description: 'OAuth2 credentials required to read/write spreadsheets', type: 'connector_slug', value: 'google-sheets', critical: true },
     ],
+    operations: [
+      { name: 'Read cells', slug: 'read_cells', risk: 'read', requires_approval: false },
+      { name: 'Append row', slug: 'append_row', risk: 'write', requires_approval: true },
+      { name: 'Update cells', slug: 'update_cells', risk: 'write', requires_approval: true },
+      { name: 'Clear range', slug: 'clear_range', risk: 'destructive', requires_approval: true },
+      { name: 'Delete rows', slug: 'delete_rows', risk: 'destructive', requires_approval: true },
+    ],
   },
   {
     id: 'gmail', name: 'Gmail', slug: 'gmail',
@@ -379,6 +394,14 @@ System label IDs: INBOX, SENT, DRAFT, TRASH, SPAM, UNREAD, STARRED, IMPORTANT
 **Never summarize or fabricate email content** — always fetch the actual message before reporting on it.`,
     required_config: [
       { label: 'Gmail connector', description: 'Google OAuth2 credentials with gmail.modify scope', type: 'connector_slug', value: 'gmail', critical: true },
+    ],
+    operations: [
+      { name: 'Search emails', slug: 'search_emails', risk: 'read', requires_approval: false },
+      { name: 'Read email', slug: 'read_email', risk: 'read', requires_approval: false },
+      { name: 'Send email', slug: 'send_email', risk: 'destructive', requires_approval: true },
+      { name: 'Reply to email', slug: 'reply_email', risk: 'destructive', requires_approval: true },
+      { name: 'Label email', slug: 'label_email', risk: 'write', requires_approval: false },
+      { name: 'Delete email', slug: 'delete_email', risk: 'destructive', requires_approval: true },
     ],
   },
   {
@@ -545,6 +568,13 @@ amount is in smallest currency unit (cents for USD). Omit amount to refund in fu
     required_config: [
       { label: 'Stripe Secret Key', description: 'Stripe secret key (sk_live_... or sk_test_...) from Stripe Dashboard > Developers', type: 'connector_slug', value: 'stripe', critical: true },
     ],
+    operations: [
+      { name: 'List customers', slug: 'list_customers', risk: 'read', requires_approval: false },
+      { name: 'Create payment link', slug: 'create_payment_link', risk: 'write', requires_approval: true },
+      { name: 'Create invoice', slug: 'create_invoice', risk: 'write', requires_approval: true },
+      { name: 'Refund charge', slug: 'refund_charge', risk: 'destructive', requires_approval: true },
+      { name: 'Cancel subscription', slug: 'cancel_subscription', risk: 'destructive', requires_approval: true },
+    ],
   },
   {
     id: 'lemon-squeezy', name: 'Lemon Squeezy', slug: 'lemon-squeezy',
@@ -642,6 +672,13 @@ GET /blocks/{page_id}/children?page_size=100
     required_config: [
       { label: 'Notion Integration Token', description: 'Internal integration token (ntn_...) with read/write access', type: 'connector_slug', value: 'notion', critical: true },
     ],
+    operations: [
+      { name: 'Search', slug: 'search', risk: 'read', requires_approval: false },
+      { name: 'Read page', slug: 'read_page', risk: 'read', requires_approval: false },
+      { name: 'Create page', slug: 'create_page', risk: 'write', requires_approval: true },
+      { name: 'Update page', slug: 'update_page', risk: 'write', requires_approval: false },
+      { name: 'Delete page', slug: 'delete_page', risk: 'destructive', requires_approval: true },
+    ],
   },
   {
     id: 'trello', name: 'Trello', slug: 'trello',
@@ -728,6 +765,12 @@ Get stateId from: \`{ workflowStates(filter: {team: {id: {eq: "TEAM_ID"}}}) { no
 **Never guess team IDs** — always query teams first and use the real ID.`,
     required_config: [
       { label: 'Linear API Key', description: 'Personal API key (lin_api_...) from Linear Settings > Security', type: 'connector_slug', value: 'linear', critical: true },
+    ],
+    operations: [
+      { name: 'List issues', slug: 'list_issues', risk: 'read', requires_approval: false },
+      { name: 'Create issue', slug: 'create_issue', risk: 'write', requires_approval: true },
+      { name: 'Update status', slug: 'update_status', risk: 'write', requires_approval: false },
+      { name: 'Delete issue', slug: 'delete_issue', risk: 'destructive', requires_approval: true },
     ],
   },
   {
@@ -821,6 +864,12 @@ Returns: user.id — use this as the \`channel\` value to DM someone.
 **Never fabricate messages** — always confirm the exact text with the user before posting.`,
     required_config: [
       { label: 'Slack Bot Token', description: 'Slack app bot token (xoxb-...) with chat:write and channels:read scopes', type: 'connector_slug', value: 'slack', critical: true },
+    ],
+    operations: [
+      { name: 'List channels', slug: 'list_channels', risk: 'read', requires_approval: false },
+      { name: 'Read messages', slug: 'read_messages', risk: 'read', requires_approval: false },
+      { name: 'Send message', slug: 'send_message', risk: 'write', requires_approval: true },
+      { name: 'Delete message', slug: 'delete_message', risk: 'destructive', requires_approval: true },
     ],
   },
   {
@@ -1083,6 +1132,15 @@ POST /repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches
 **Always use the real owner/repo** — never guess. Ask the user if unsure.`,
     required_config: [
       { label: 'GitHub Personal Access Token', description: 'PAT (ghp_...) or fine-grained token with repo read/write scope', type: 'connector_slug', value: 'github', critical: true },
+    ],
+    operations: [
+      { name: 'List repos', slug: 'list_repos', risk: 'read', requires_approval: false },
+      { name: 'List issues', slug: 'list_issues', risk: 'read', requires_approval: false },
+      { name: 'Create issue', slug: 'create_issue', risk: 'write', requires_approval: true },
+      { name: 'Close issue', slug: 'close_issue', risk: 'write', requires_approval: false },
+      { name: 'Create PR', slug: 'create_pr', risk: 'write', requires_approval: true },
+      { name: 'Merge PR', slug: 'merge_pr', risk: 'destructive', requires_approval: true },
+      { name: 'Delete branch', slug: 'delete_branch', risk: 'destructive', requires_approval: true },
     ],
   },
   {
@@ -1646,6 +1704,12 @@ Response: calendars.primary.busy[].{start, end}
     required_config: [
       { label: 'Google Calendar connector', description: 'Google OAuth2 credentials with calendar.events scope', type: 'connector_slug', value: 'google-calendar', critical: true },
     ],
+    operations: [
+      { name: 'List events', slug: 'list_events', risk: 'read', requires_approval: false },
+      { name: 'Create event', slug: 'create_event', risk: 'write', requires_approval: true },
+      { name: 'Update event', slug: 'update_event', risk: 'write', requires_approval: true },
+      { name: 'Delete event', slug: 'delete_event', risk: 'destructive', requires_approval: true },
+    ],
   },
   {
     id: 'google-docs', name: 'Google Docs', slug: 'google-docs',
@@ -1746,6 +1810,10 @@ Response: result[].{update_id, message.{chat.id, text, from.username}}
     required_config: [
       { label: 'Telegram Bot Token', description: 'Bot token from @BotFather (123456:ABC-DEF...)', type: 'connector_slug', value: 'telegram', critical: true },
       { label: 'Chat ID required', description: 'You need the chat_id of the target user or group — ask the user for it or get it from /getUpdates', type: 'manual', critical: false },
+    ],
+    operations: [
+      { name: 'Send message', slug: 'send_message', risk: 'write', requires_approval: true },
+      { name: 'Delete message', slug: 'delete_message', risk: 'destructive', requires_approval: true },
     ],
   },
 
@@ -2481,6 +2549,12 @@ Response:
     required_config: [
       { label: 'APP_URL and WORKER_SECRET', description: 'Platform environment variables required for task creation — already configured if the platform is running', type: 'manual', critical: false },
     ],
+    operations: [
+      { name: 'List tasks', slug: 'list_tasks', risk: 'read', requires_approval: false },
+      { name: 'Create task', slug: 'create_task', risk: 'write', requires_approval: false },
+      { name: 'Update task', slug: 'update_task', risk: 'write', requires_approval: false },
+      { name: 'Delete task', slug: 'delete_task', risk: 'destructive', requires_approval: true },
+    ],
   },
 
   {
@@ -2550,6 +2624,9 @@ Use the \`http_request\` tool with these parameters:
 - On 422: request body validation failed — check required fields
 
 **Never hardcode secrets in the instructions.** Store credentials as connector fields and reference them via connector_slug.`,
+    operations: [
+      { name: 'HTTP request', slug: 'http_request', risk: 'write', requires_approval: true },
+    ],
   },
 
   {
@@ -2604,6 +2681,11 @@ Returns ranked results with content and similarity score.
 3. **Be specific** — vague memories are useless; include names, IDs, dates, and exact values
 4. **One fact per memory** — don't bundle unrelated facts into one entry
 5. **Never fabricate** — only save things actually said by the user or observed during task execution`,
+    operations: [
+      { name: 'Search memory', slug: 'search_memory', risk: 'read', requires_approval: false },
+      { name: 'Save memory', slug: 'save_memory', risk: 'write', requires_approval: false },
+      { name: 'Delete memory', slug: 'delete_memory', risk: 'destructive', requires_approval: true },
+    ],
   },
 
   {

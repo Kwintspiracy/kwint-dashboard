@@ -30,6 +30,7 @@ import {
   ToolCallsPageSchema,
   CreateTaskSchema,
   UpdateTaskSchema,
+  SetSkillApprovalsSchema,
   type JobsPageInput,
   type ToolCallsPageInput,
 } from '@/lib/schemas'
@@ -2149,14 +2150,47 @@ export async function getAgentSkillAssignmentsAction(agentId: string): Promise<A
   }
 }
 
+export async function setSkillApprovalsAction(raw: unknown): Promise<ActionResult<null>> {
+  const parsed = SetSkillApprovalsSchema.safeParse(raw)
+  if (!parsed.success) return fail(parsed.error.message)
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+    const { error } = await supabase
+      .from('agent_skill_assignments')
+      .update({ approval_overrides: parsed.data.approval_overrides })
+      .eq('agent_id', parsed.data.agent_id)
+      .eq('skill_id', parsed.data.skill_id)
+      .eq('entity_id', entityId)
+    if (error) return dbFail(error)
+    return ok(null)
+  } catch (e) {
+    return dbError(e)
+  }
+}
+
 export async function setAgentSkillAssignmentsAction(agentId: string, skillIds: string[]): Promise<ActionResult<null>> {
   try {
     const { supabase, entityId } = await requireAuthWithEntity()
     const { data: agent } = await supabase.from('agents').select('id').eq('id', agentId).eq('entity_id', entityId).single()
     if (!agent) return fail('Agent not found')
+    // Preserve existing approval_overrides before deleting
+    const { data: existing } = await supabase
+      .from('agent_skill_assignments')
+      .select('skill_id, approval_overrides')
+      .eq('agent_id', agentId)
+      .eq('entity_id', entityId)
+    const overridesMap: Record<string, Record<string, boolean>> = {}
+    for (const row of existing ?? []) {
+      if (row.approval_overrides && Object.keys(row.approval_overrides).length > 0) {
+        overridesMap[row.skill_id] = row.approval_overrides
+      }
+    }
     await supabase.from('agent_skill_assignments').delete().eq('agent_id', agentId).eq('entity_id', entityId)
     if (skillIds.length > 0) {
-      const rows = skillIds.map(skill_id => ({ agent_id: agentId, skill_id, entity_id: entityId }))
+      const rows = skillIds.map(skill_id => ({
+        agent_id: agentId, skill_id, entity_id: entityId,
+        approval_overrides: overridesMap[skill_id] ?? {},
+      }))
       const { error } = await supabase.from('agent_skill_assignments').insert(rows)
       if (error) return dbFail(error)
     }
