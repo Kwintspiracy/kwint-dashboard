@@ -2448,6 +2448,40 @@ export async function startTaskAction(id: string): Promise<ActionResult<{ job_id
   } catch (e) { return dbError(e) }
 }
 
+// ─── MCP Token Actions ───────────────────────────────────────────────────────
+
+export async function getMcpTokenAction(): Promise<ActionResult<{ token: string }>> {
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+    const { data, error } = await supabase
+      .from('entities')
+      .select('mcp_token')
+      .eq('id', entityId)
+      .single()
+    if (error || !data) return fail('Could not load MCP token')
+    return ok({ token: data.mcp_token as string })
+  } catch (e) { return dbError(e) }
+}
+
+export async function rotateMcpTokenAction(): Promise<ActionResult<{ token: string }>> {
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+    const { data, error } = await supabase.rpc('rotate_mcp_token', { p_entity_id: entityId })
+    if (error) {
+      // rpc not available — fallback to direct update
+      const { data: updated, error: updateErr } = await supabase
+        .from('entities')
+        .update({ mcp_token: crypto.randomUUID() })
+        .eq('id', entityId)
+        .select('mcp_token')
+        .single()
+      if (updateErr || !updated) return dbFail(updateErr ?? { message: 'Update failed' })
+      return ok({ token: updated.mcp_token as string })
+    }
+    return ok({ token: data as string })
+  } catch (e) { return dbError(e) }
+}
+
 // ─── Billing Actions ─────────────────────────────────────────────────────────
 
 export async function getBillingRunsAction(): Promise<any[]> {

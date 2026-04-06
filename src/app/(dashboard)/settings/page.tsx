@@ -1,13 +1,13 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { getLlmKeysAction, saveLlmKeyAction, deleteLlmKeyAction, getAgentsAction } from '@/lib/actions'
+import { getLlmKeysAction, saveLlmKeyAction, deleteLlmKeyAction, getAgentsAction, getMcpTokenAction, rotateMcpTokenAction } from '@/lib/actions'
 import { LLM_PROVIDERS, getProviderForModel, type LlmProvider } from '@/lib/llm-providers'
 import { useData } from '@/hooks/useData'
 import { useAuth } from '@/components/AuthProvider'
 import PageHeader from '@/components/PageHeader'
 import { toast } from 'sonner'
-import { Trash, Eye, EyeSlash, X, Warning, CheckCircle } from '@phosphor-icons/react'
+import { Trash, Eye, EyeSlash, X, Warning, CheckCircle, ArrowsClockwise, Copy } from '@phosphor-icons/react'
 import { createClient } from '@/lib/supabase'
 
 type LlmKey = {
@@ -53,6 +53,30 @@ export default function SettingsPage() {
       agents.filter((a) => getProviderForModel(a.model)?.id === p.id),
     ]),
   )
+
+  // ── MCP token ────────────────────────────────────────────
+  const [mcpToken, setMcpToken] = useState<string | null>(null)
+  const [showToken, setShowToken] = useState(false)
+  const [rotatingToken, setRotatingToken] = useState(false)
+
+  useEffect(() => {
+    getMcpTokenAction().then(res => { if (res.ok) setMcpToken(res.data.token) })
+  }, [eid])
+
+  async function handleRotateToken() {
+    if (!confirm('Rotate token? Any coding agent using the old token will lose access immediately.')) return
+    setRotatingToken(true)
+    const res = await rotateMcpTokenAction()
+    setRotatingToken(false)
+    if (res.ok) { setMcpToken(res.data.token); toast.success('Token rotated') }
+    else toast.error(res.error)
+  }
+
+  const appUrl = typeof window !== 'undefined' ? window.location.origin : 'https://your-dashboard.com'
+  const mcpUrl = `${appUrl}/api/mcp/tasks`
+  const mcpConfig = mcpToken
+    ? JSON.stringify({ mcpServers: { 'kwint-tasks': { type: 'http', url: mcpUrl, headers: { Authorization: `Bearer ${mcpToken}` } } } }, null, 2)
+    : ''
 
   const [modal, setModal] = useState<LlmProvider | null>(null)
   const [form, setForm] = useState({ api_key: '', base_url: '', nickname: '' })
@@ -313,6 +337,98 @@ export default function SettingsPage() {
             })}
           </div>
         )}
+      </div>
+
+      {/* ── Coding Agent (MCP) ──────────────────────────── */}
+      <div className="mt-8">
+        <h2 className="text-sm font-semibold text-neutral-300 mb-1">Connect your coding agent</h2>
+        <p className="text-xs text-neutral-500 mb-4">
+          Give Claude Code, VS Code Copilot, or any MCP-compatible tool access to your task board.
+          Your agent can list tasks, create new ones, and update progress.
+        </p>
+
+        <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-5 space-y-4">
+          {/* MCP Server URL */}
+          <div>
+            <p className="text-xs font-medium text-neutral-400 mb-1.5">MCP Server URL</p>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 text-xs font-mono bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-neutral-300 truncate">
+                {mcpUrl}
+              </code>
+              <button
+                onClick={() => { navigator.clipboard.writeText(mcpUrl); toast.success('Copied') }}
+                className="shrink-0 p-2 rounded-lg text-neutral-500 hover:text-white hover:bg-neutral-800 transition-all"
+                title="Copy URL"
+              >
+                <Copy size={14} />
+              </button>
+            </div>
+          </div>
+
+          {/* Access Token */}
+          <div>
+            <p className="text-xs font-medium text-neutral-400 mb-1.5">Access Token</p>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 text-xs font-mono bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-neutral-300 truncate">
+                {mcpToken
+                  ? showToken
+                    ? mcpToken
+                    : '••••••••••••••••••••••••••••••••••••'
+                  : 'Loading…'}
+              </code>
+              <button
+                onClick={() => setShowToken(v => !v)}
+                className="shrink-0 p-2 rounded-lg text-neutral-500 hover:text-white hover:bg-neutral-800 transition-all"
+                title={showToken ? 'Hide' : 'Show'}
+              >
+                {showToken ? <EyeSlash size={14} /> : <Eye size={14} />}
+              </button>
+              {mcpToken && (
+                <button
+                  onClick={() => { navigator.clipboard.writeText(mcpToken); toast.success('Token copied') }}
+                  className="shrink-0 p-2 rounded-lg text-neutral-500 hover:text-white hover:bg-neutral-800 transition-all"
+                  title="Copy token"
+                >
+                  <Copy size={14} />
+                </button>
+              )}
+              <button
+                onClick={handleRotateToken}
+                disabled={rotatingToken}
+                className="shrink-0 p-2 rounded-lg text-neutral-500 hover:text-amber-400 hover:bg-neutral-800 transition-all disabled:opacity-40"
+                title="Rotate token (old token becomes invalid)"
+              >
+                <ArrowsClockwise size={14} className={rotatingToken ? 'animate-spin' : ''} />
+              </button>
+            </div>
+            <p className="text-xs text-neutral-600 mt-1.5">
+              Rotating generates a new token — any agent using the old one will need to be updated.
+            </p>
+          </div>
+
+          {/* Config snippet */}
+          {mcpToken && (
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="text-xs font-medium text-neutral-400">Claude Code — <code className="text-neutral-500">.mcp.json</code></p>
+                <button
+                  onClick={() => { navigator.clipboard.writeText(mcpConfig); toast.success('Config copied') }}
+                  className="flex items-center gap-1 text-xs text-neutral-500 hover:text-neutral-300 transition-colors"
+                >
+                  <Copy size={12} />
+                  Copy
+                </button>
+              </div>
+              <pre className="text-xs font-mono bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-3 text-neutral-400 overflow-x-auto whitespace-pre">
+                {mcpConfig}
+              </pre>
+              <p className="text-xs text-neutral-600 mt-1.5">
+                Save this as <code className="text-neutral-500">.mcp.json</code> in your project root.
+                Other MCP clients (VS Code, Gemini CLI) use the same URL and token with their own config format.
+              </p>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Modal */}
