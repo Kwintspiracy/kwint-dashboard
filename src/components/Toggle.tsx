@@ -23,8 +23,8 @@ export default function Toggle({ checked, onChange, color = 'emerald', disabled,
       disabled={disabled}
       onClick={onChange}
       className={[
-        // Fixed dimensions — shrink-0 prevents flex containers from squishing into a circle on mobile
-        'relative inline-flex shrink-0 w-9 h-5 rounded-full transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-neutral-900',
+        // Fixed dimensions — shrink-0 + min-w prevents flex/grid containers from squishing into a circle on mobile
+        'relative inline-flex shrink-0 w-9 min-w-[2.25rem] h-5 rounded-full transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-neutral-900',
         checked ? TRACK[color] : 'bg-neutral-700',
         disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer',
       ].join(' ')}
