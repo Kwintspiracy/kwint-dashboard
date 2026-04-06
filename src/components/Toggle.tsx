@@ -22,7 +22,7 @@ export default function Toggle({ checked, onChange, color = 'emerald', disabled,
       aria-label={ariaLabel}
       disabled={disabled}
       onClick={onChange}
-      style={{ width: '2.25rem', minWidth: '2.25rem', height: '1.25rem' }}
+      style={{ width: '2.25rem', minWidth: '2.25rem', height: '1.25rem', minHeight: '1.25rem' }}
       className={[
         'relative inline-flex shrink-0 rounded-full transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-neutral-900',
         checked ? TRACK[color] : 'bg-neutral-700',
