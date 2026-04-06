@@ -503,24 +503,56 @@ export default function SkillsPage() {
             </div>
           )}
 
-          {/* Operations pills (read-only) */}
+          {/* Operations — pills + approval toggles */}
           {form.operations && form.operations.length > 0 && (
-            <div>
-              <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-2">What this skill can do</label>
-              <div className="flex flex-wrap gap-1.5">
-                {form.operations.map(op => (
-                  <span key={op.slug} className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md border ${
-                    op.risk === 'read' ? 'bg-emerald-950/40 text-emerald-400 border-emerald-900/30' :
-                    op.risk === 'write' ? 'bg-amber-950/40 text-amber-400 border-amber-900/30' :
-                    'bg-red-950/40 text-red-400 border-red-900/30'
-                  }`}>
-                    {op.risk === 'destructive' && <span>⚠</span>}
-                    {op.name}
-                    {op.requires_approval && <span className="opacity-60 text-xs">· approval</span>}
-                  </span>
-                ))}
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs text-neutral-500 uppercase tracking-wider mb-2">What this skill can do</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {form.operations.map(op => (
+                    <span key={op.slug} className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md border ${
+                      op.risk === 'read' ? 'bg-emerald-950/40 text-emerald-400 border-emerald-900/30' :
+                      op.risk === 'write' ? 'bg-amber-950/40 text-amber-400 border-amber-900/30' :
+                      'bg-red-950/40 text-red-400 border-red-900/30'
+                    }`}>
+                      {op.risk === 'destructive' && <span>⚠</span>}
+                      {op.name}
+                    </span>
+                  ))}
+                </div>
+                <p className="text-xs text-neutral-700 mt-1.5">Green = read-only · Amber = creates/modifies · Red = irreversible or external action</p>
               </div>
-              <p className="text-xs text-neutral-700 mt-1.5">Green = read-only · Amber = creates/modifies · Red = irreversible or external action</p>
+              {form.operations.filter(op => op.risk !== 'read').length > 0 && (
+                <div className="border border-neutral-800/60 rounded-xl p-4 space-y-2">
+                  <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">Default approval requirements</p>
+                  <p className="text-xs text-neutral-600">These defaults apply to all agents. You can override them per-agent on the Agents page.</p>
+                  <div className="space-y-1.5 pt-1">
+                    {form.operations.filter(op => op.risk !== 'read').map((op, i) => {
+                      const fullIdx = form.operations!.indexOf(op)
+                      return (
+                        <label key={op.slug} className="flex items-center gap-2.5 cursor-pointer group">
+                          <input
+                            type="checkbox"
+                            checked={op.requires_approval}
+                            onChange={() => {
+                              setForm(prev => {
+                                const ops = [...(prev.operations ?? [])]
+                                ops[fullIdx] = { ...ops[fullIdx], requires_approval: !ops[fullIdx].requires_approval }
+                                return { ...prev, operations: ops }
+                              })
+                            }}
+                            className="rounded border-neutral-700 bg-neutral-800 accent-amber-500 shrink-0 cursor-pointer"
+                          />
+                          <span className={`text-xs transition-colors ${op.requires_approval ? 'text-amber-400' : 'text-neutral-500 group-hover:text-neutral-300'}`}>
+                            Require approval before: <span className="font-medium">{op.name}</span>
+                          </span>
+                          {op.risk === 'destructive' && <span className="text-xs text-red-500/60">⚠</span>}
+                        </label>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

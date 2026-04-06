@@ -1292,6 +1292,9 @@ Parameters:
     required_config: [
       { label: 'Tavily API Key', description: 'API key (tvly-...) from tavily.com > Dashboard', type: 'connector_slug', value: 'tavily', critical: true },
     ],
+    operations: [
+      { name: 'Web search', slug: 'web_search', risk: 'read', requires_approval: false },
+    ],
   },
 
   // ═══════════════════════════════════════════════════
@@ -2751,6 +2754,10 @@ Use the \`save_memory\` tool:
 3. Flag outdated entries: if you find a stored fact is wrong, update it
 4. Never store sensitive secrets in Cortex (passwords, full credit card numbers)
 5. **The goal**: next session should feel like continuing a conversation, not starting over`,
+    operations: [
+      { name: 'Search context', slug: 'search_context', risk: 'read', requires_approval: false },
+      { name: 'Save context', slug: 'save_context', risk: 'write', requires_approval: false },
+    ],
   },
 
 ]
