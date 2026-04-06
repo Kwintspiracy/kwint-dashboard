@@ -2179,6 +2179,8 @@ const SKILL_ADAPTER_TOOLS: Record<string, string[]> = {
   'google-sheets':  ['sheets_read_range', 'sheets_write_range', 'sheets_append_row'],
   'slack':          ['slack_send_message', 'slack_list_channels', 'slack_get_messages'],
   'outlook':        ['outlook_send_email', 'outlook_list_emails'],
+  'google-drive':   ['drive_list_files', 'drive_read_file', 'drive_upload_file'],
+  'google-docs':    ['docs_get', 'docs_replace_text', 'docs_append', 'docs_create'],
 }
 
 async function syncHttpApprovalRule(

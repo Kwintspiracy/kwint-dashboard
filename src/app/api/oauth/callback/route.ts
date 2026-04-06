@@ -39,10 +39,10 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Service role client — callback arrives from provider with no user session
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-    if (!serviceRoleKey) return NextResponse.json({ error: 'Server misconfigured' }, { status: 500 })
-    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, serviceRoleKey)
+    // Use anon key + SECURITY DEFINER RPCs — service role key is not available in Vercel env
+    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    if (!anonKey) return NextResponse.json({ error: 'Server misconfigured: missing anon key' }, { status: 500 })
+    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, anonKey)
 
     // Verify HMAC to ensure state wasn't tampered with
     const workerSecret = process.env.WORKER_SECRET || process.env.API_SECRET_KEY
@@ -76,13 +76,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(connectorsUrl)
     }
 
-    // Load connector
-    const { data: connector } = await supabase
-      .from('connectors')
-      .select('id, slug, oauth_token_url')
-      .eq('id', connector_id)
-      .eq('entity_id', entity_id)
-      .single()
+    // Load connector via SECURITY DEFINER RPC (entity_id is HMAC-verified above)
+    const { data: connectorRows } = await supabase.rpc('get_connector_for_oauth_callback', {
+      p_connector_id: connector_id,
+      p_entity_id: entity_id,
+    })
+    const connector = Array.isArray(connectorRows) ? connectorRows[0] : connectorRows
 
     if (!connector) {
       connectorsUrl.searchParams.set('oauth_error', 'connector_not_found')
@@ -170,15 +169,16 @@ export async function GET(request: NextRequest) {
       } catch {}
     }
 
-    // Persist tokens
-    await supabase.from('connectors').update({
-      auth_type: 'oauth2',
-      oauth_access_token: accessToken,
-      oauth_refresh_token: refreshToken,
-      oauth_token_expires_at: expiresAt,
-      oauth_token_url: connector.oauth_token_url || provider.tokenUrl,
-      oauth_account_name: accountName,
-    }).eq('id', connector_id)
+    // Persist tokens via SECURITY DEFINER RPC
+    await supabase.rpc('store_oauth_tokens', {
+      p_connector_id: connector_id,
+      p_entity_id: entity_id,
+      p_access_token: accessToken,
+      p_refresh_token: refreshToken ?? null,
+      p_expires_at: expiresAt ?? null,
+      p_token_url: connector.oauth_token_url || provider.tokenUrl,
+      p_account_name: accountName ?? null,
+    })
 
     connectorsUrl.searchParams.set('oauth_success', connector.slug)
     return NextResponse.redirect(connectorsUrl)
