@@ -2150,6 +2150,37 @@ export async function getAgentSkillAssignmentsAction(agentId: string): Promise<A
   }
 }
 
+export async function getSkillCustomInstructionsAction(agentId: string): Promise<ActionResult<Record<string, boolean>>> {
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+    const { data, error } = await supabase
+      .from('agent_skill_assignments')
+      .select('skill_id, use_custom_instructions')
+      .eq('agent_id', agentId)
+      .eq('entity_id', entityId)
+    if (error) return dbFail(error)
+    const result: Record<string, boolean> = {}
+    for (const r of data ?? []) {
+      if (r.use_custom_instructions) result[r.skill_id] = true
+    }
+    return ok(result)
+  } catch (e) { return dbError(e) }
+}
+
+export async function setSkillCustomInstructionsAction(agentId: string, skillId: string, useCustomInstructions: boolean): Promise<ActionResult<null>> {
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+    const { error } = await supabase
+      .from('agent_skill_assignments')
+      .update({ use_custom_instructions: useCustomInstructions })
+      .eq('agent_id', agentId)
+      .eq('skill_id', skillId)
+      .eq('entity_id', entityId)
+    if (error) return dbFail(error)
+    return ok(null)
+  } catch (e) { return dbError(e) }
+}
+
 export async function setSkillApprovalsAction(raw: unknown): Promise<ActionResult<null>> {
   const parsed = SetSkillApprovalsSchema.safeParse(raw)
   if (!parsed.success) return fail(parsed.error.message)
@@ -2181,6 +2212,11 @@ const SKILL_ADAPTER_TOOLS: Record<string, string[]> = {
   'outlook':        ['outlook_send_email', 'outlook_list_emails'],
   'google-drive':   ['drive_list_files', 'drive_read_file', 'drive_upload_file'],
   'google-docs':    ['docs_get', 'docs_replace_text', 'docs_append', 'docs_create'],
+  'stripe':         ['stripe_list_customers', 'stripe_create_payment_link', 'stripe_get_balance'],
+  'github':         ['github_list_issues', 'github_create_issue', 'github_list_pull_requests'],
+  'notion':         ['notion_search', 'notion_get_page', 'notion_create_page'],
+  'hubspot':        ['hubspot_list_contacts', 'hubspot_create_contact', 'hubspot_list_deals'],
+  'linear':         ['linear_list_issues', 'linear_create_issue'],
 }
 
 async function syncHttpApprovalRule(
@@ -2287,6 +2323,29 @@ export async function setAgentSkillAssignmentsAction(agentId: string, skillIds: 
   } catch (e) {
     return dbError(e)
   }
+}
+
+// Auto-assign skills to a newly-created agent based on connector slugs (used by templates)
+export async function autoAssignTemplateSkillsAction(agentId: string, connectorSlugs: string[]): Promise<ActionResult<number>> {
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+    if (!connectorSlugs.length) return ok(0)
+
+    // Find skills that have connectors with matching slugs in this entity
+    const { data: linkRows, error } = await supabase
+      .from('skill_connectors')
+      .select('skill_id, connectors!inner(slug)')
+      .eq('connectors.entity_id', entityId)
+      .in('connectors.slug', connectorSlugs)
+
+    if (error) return dbFail(error)
+    const skillIds = [...new Set((linkRows ?? []).map((r: { skill_id: string }) => r.skill_id))]
+    if (!skillIds.length) return ok(0)
+
+    const result = await setAgentSkillAssignmentsAction(agentId, skillIds)
+    if (!result.ok) return result as ActionResult<number>
+    return ok(skillIds.length)
+  } catch (e) { return dbError(e) }
 }
 
 // ─── Agent Assignments (orchestrator → sub-agents) ───────────────────────────

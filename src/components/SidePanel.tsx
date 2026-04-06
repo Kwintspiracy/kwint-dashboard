@@ -9,9 +9,10 @@ type SidePanelProps = {
   subtitle?: string
   children: React.ReactNode
   width?: 'md' | 'lg'   // md = 480px, lg = 600px
+  actions?: React.ReactNode
 }
 
-export default function SidePanel({ open, onClose, title, subtitle, children, width = 'md' }: SidePanelProps) {
+export default function SidePanel({ open, onClose, title, subtitle, children, width = 'md', actions }: SidePanelProps) {
   const panelRef = useRef<HTMLDivElement>(null)
 
   // Close on Escape
@@ -65,11 +66,12 @@ export default function SidePanel({ open, onClose, title, subtitle, children, wi
         ].join(' ')}
       >
         {/* Header */}
-        <div className="flex items-start justify-between gap-4 px-6 py-5 border-b border-neutral-800/60 shrink-0">
-          <div className="min-w-0">
+        <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-neutral-800/60 shrink-0">
+          <div className="min-w-0 flex-1">
             <h2 className="text-sm font-semibold text-white truncate">{title}</h2>
             {subtitle && <p className="text-xs text-neutral-500 mt-0.5 truncate">{subtitle}</p>}
           </div>
+          {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
           <button
             type="button"
             onClick={onClose}

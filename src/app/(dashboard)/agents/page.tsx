@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { getAgentsAction, createAgentAction, updateAgentAction, deleteAgentAction, setDefaultAgentAction, activateTelegramAction, deactivateTelegramAction, getLlmKeysAction, getOperatorProvidersAction, getSkillsAction, getConnectorsAction, getAgentSkillAssignmentsAction, setAgentSkillAssignmentsAction, setSkillApprovalsAction, getOrchestratorAssignmentsAction, getOrchestratorAssignmentDetailsAction, setOrchestratorAssignmentsAction, getAgentOrchestratorAction, setAgentOrchestratorAction, getAllAgentAssignmentsAction, getAllSkillAssignmentsAction, previewEffectivePromptAction } from '@/lib/actions'
+import { getAgentsAction, createAgentAction, updateAgentAction, deleteAgentAction, setDefaultAgentAction, activateTelegramAction, deactivateTelegramAction, getLlmKeysAction, getOperatorProvidersAction, getSkillsAction, getConnectorsAction, getAgentSkillAssignmentsAction, setAgentSkillAssignmentsAction, setSkillApprovalsAction, getOrchestratorAssignmentsAction, getOrchestratorAssignmentDetailsAction, setOrchestratorAssignmentsAction, getAgentOrchestratorAction, setAgentOrchestratorAction, getAllAgentAssignmentsAction, getAllSkillAssignmentsAction, previewEffectivePromptAction, autoAssignTemplateSkillsAction, getSkillCustomInstructionsAction, setSkillCustomInstructionsAction } from '@/lib/actions'
 import { timeAgo } from '@/lib/utils'
 import { toast } from 'sonner'
 import { useData } from '@/hooks/useData'
@@ -23,7 +23,71 @@ type Agent = {
   telegram_webhook_url: string | null
   requires_approval: string[] | null
   capabilities: string[]
+  avatar_url: string | null
   created_at: string; updated_at: string
+}
+
+const AVATAR_COUNT = 42
+const AVATARS = Array.from({ length: AVATAR_COUNT }, (_, i) => `/avatars/avatar-${i}.png`)
+
+function AvatarPicker({ value, onChange }: { value: string | null; onChange: (v: string | null) => void }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        title="Choose avatar"
+        className="w-14 h-14 rounded-full border-2 border-neutral-700 hover:border-neutral-500 transition-colors bg-neutral-800/50 flex items-center justify-center"
+      >
+        {value ? (
+          <img src={value} alt="avatar" className="w-full h-full object-contain" />
+        ) : (
+          <svg className="w-6 h-6 text-neutral-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+          </svg>
+        )}
+      </button>
+      {open && (
+        <div className="absolute z-50 top-full left-0 mt-2 w-72 bg-neutral-950 border border-neutral-800 rounded-xl shadow-2xl p-3">
+          <div className="grid grid-cols-7 gap-1.5 max-h-64 overflow-y-auto">
+            {value && (
+              <button
+                type="button"
+                onClick={() => { onChange(null); setOpen(false) }}
+                className="w-9 h-9 rounded-lg border border-neutral-700 hover:border-red-500/60 bg-neutral-800 flex items-center justify-center transition-colors"
+                title="Remove avatar"
+              >
+                <svg className="w-4 h-4 text-neutral-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+            {AVATARS.map(src => (
+              <button
+                key={src}
+                type="button"
+                onClick={() => { onChange(src); setOpen(false) }}
+                className={`w-9 h-9 rounded-full border-2 transition-colors ${value === src ? 'border-sky-500' : 'border-transparent hover:border-neutral-600'}`}
+              >
+                <img src={src} alt="" className="w-full h-full object-contain" />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
 
 // Flat list for table display (provider: Model label)
@@ -209,17 +273,20 @@ export default function AgentsPage() {
   const [assignedSkillIds, setAssignedSkillIds] = useState<string[]>([])
   const [expandedSkillId, setExpandedSkillId] = useState<string | null>(null)
   const [skillApprovalOverrides, setSkillApprovalOverrides] = useState<Record<string, Record<string, boolean>>>({})
+  const [skillCustomInstructions, setSkillCustomInstructions] = useState<Record<string, boolean>>({})
   const [assignedAgentIds, setAssignedAgentIds] = useState<string[]>([])
   const [agentInstructions, setAgentInstructions] = useState<Record<string, string>>({})
   const [selectedOrchestratorId, setSelectedOrchestratorId] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<'list' | 'hierarchy'>('list')
   const [showAdd, setShowAdd] = useState(false)
   const [showTemplates, setShowTemplates] = useState(false)
+  const [pendingTemplateSlugs, setPendingTemplateSlugs] = useState<string[]>([])
   const [form, setForm] = useState({
     name: '', slug: '', personality: '', model: 'claude-sonnet-4-6',
     role: 'agent', telegram_bot_token: '', telegram_bot_username: '',
     requires_approval: [] as string[],
     capabilities: [] as string[],
+    avatar_url: null as string | null,
   })
   const [slugManuallyEdited, setSlugManuallyEdited] = useState(false)
   const [telegramStatus, setTelegramStatus] = useState('')
@@ -265,6 +332,7 @@ export default function AgentsPage() {
     setEditingId(null)
     setTelegramStatus('')
     setSlugManuallyEdited(false)
+    setPendingTemplateSlugs(template.suggestedSkills ?? [])
     setForm({
       name: template.name,
       slug: slugify(template.name),
@@ -275,23 +343,26 @@ export default function AgentsPage() {
       telegram_bot_username: '',
       requires_approval: template.suggestedApprovalTools,
       capabilities: [],
+      avatar_url: null,
     })
     setShowAdd(true)
   }
 
   async function startEdit(a: Agent) {
     setLoadingEditId(a.id)
-    const [skillsRes, orchDetailsRes, orchParentRes] = await Promise.all([
+    const [skillsRes, orchDetailsRes, orchParentRes, customInstRes] = await Promise.all([
       getAgentSkillAssignmentsAction(a.id),
       getOrchestratorAssignmentDetailsAction(a.id),
       getAgentOrchestratorAction(a.id),
+      getSkillCustomInstructionsAction(a.id),
     ])
     // Filter out orphaned IDs pointing to deleted skills
     const validSkillIds = new Set(skills.map(s => s.id))
     const assignedIds = skillsRes.ok ? skillsRes.data.filter(id => validSkillIds.has(id)) : []
     setAssignedSkillIds(assignedIds)
-    // Load per-skill approval overrides
+    // Load per-skill approval overrides and custom instructions flags
     setSkillApprovalOverrides({})
+    setSkillCustomInstructions(customInstRes.ok ? customInstRes.data : {})
     if (orchDetailsRes.ok) {
       setAssignedAgentIds(orchDetailsRes.data.map(d => d.sub_agent_id))
       const instr: Record<string, string> = {}
@@ -314,6 +385,7 @@ export default function AgentsPage() {
       telegram_bot_username: a.telegram_bot_username || '',
       requires_approval: a.requires_approval || [],
       capabilities: a.capabilities || [],
+      avatar_url: a.avatar_url || null,
     })
   }
 
@@ -325,6 +397,7 @@ export default function AgentsPage() {
       role: 'agent', telegram_bot_token: '', telegram_bot_username: '',
       requires_approval: [],
       capabilities: [],
+      avatar_url: null,
     })
   }
 
@@ -363,6 +436,7 @@ export default function AgentsPage() {
         telegram_bot_token: form.telegram_bot_token || null,
         telegram_bot_username: form.telegram_bot_username || null,
         requires_approval: form.requires_approval,
+        avatar_url: form.avatar_url || null,
       })
       if (!result.ok) { toast.error(result.error); return }
       const orchAssignments = assignedAgentIds.map(id => ({ sub_agent_id: id, instructions: agentInstructions[id] || null }))
@@ -372,14 +446,18 @@ export default function AgentsPage() {
       ])
       if (!skillRes.ok) toast.error('Could not save skill assignments')
       if (!assignRes.ok) toast.error('Could not save team assignments')
-      // Persist per-skill approval overrides
-      await Promise.all(
-        assignedSkillIds.map(skillId => {
+      // Persist per-skill approval overrides and custom instructions flags
+      await Promise.all([
+        ...assignedSkillIds.map(skillId => {
           const overrides = skillApprovalOverrides[skillId]
           if (!overrides || Object.keys(overrides).length === 0) return Promise.resolve()
           return setSkillApprovalsAction({ agent_id: editingId, skill_id: skillId, approval_overrides: overrides })
-        })
-      )
+        }),
+        ...assignedSkillIds.map(skillId => {
+          const useCustom = skillCustomInstructions[skillId] ?? false
+          return setSkillCustomInstructionsAction(editingId, skillId, useCustom)
+        }),
+      ])
       toast.success('Agent updated')
       setEditingId(null)
     } else {
@@ -389,6 +467,7 @@ export default function AgentsPage() {
         telegram_bot_token: form.telegram_bot_token || null,
         telegram_bot_username: form.telegram_bot_username || null,
         requires_approval: form.requires_approval,
+        avatar_url: form.avatar_url || null,
       })
       if (!result.ok) { toast.error(result.error); return }
       const newId = (result as { ok: true; data: { id: string } }).data?.id
@@ -408,6 +487,14 @@ export default function AgentsPage() {
             return setSkillApprovalsAction({ agent_id: newId, skill_id: skillId, approval_overrides: overrides })
           })
         )
+      }
+      // Auto-assign template skills (e.g. Personal Assistant → Gmail, Drive, Docs, Sheets)
+      if (newId && pendingTemplateSlugs.length > 0 && assignedSkillIds.length === 0) {
+        const autoRes = await autoAssignTemplateSkillsAction(newId, pendingTemplateSlugs)
+        if (autoRes.ok && (autoRes as { ok: true; data: number }).data > 0) {
+          toast.success(`Auto-assigned ${(autoRes as { ok: true; data: number }).data} skills from template`)
+        }
+        setPendingTemplateSlugs([])
       }
       toast.success(isFirstAgent ? 'Agent created! Now assign it some skills to give it capabilities.' : 'Agent created successfully.')
       setShowAdd(false)
@@ -484,8 +571,12 @@ export default function AgentsPage() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2 flex-wrap">
-                      {/* Status dot */}
-                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${a.active ? (a.role === 'orchestrator' ? 'bg-sky-400' : 'bg-emerald-400') : 'bg-neutral-600'}`} />
+                      {/* Avatar or status dot */}
+                      {a.avatar_url ? (
+                        <img src={a.avatar_url} alt="" className="w-6 h-6 object-contain shrink-0" />
+                      ) : (
+                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${a.active ? (a.role === 'orchestrator' ? 'bg-sky-400' : 'bg-emerald-400') : 'bg-neutral-600'}`} />
+                      )}
                       <span className="font-medium text-white text-sm leading-none">{a.name}</span>
                       {a.is_default && (
                         <span className="text-xs px-2 py-1 rounded-full bg-emerald-950/60 text-emerald-400 border border-emerald-800/40 leading-tight">default</span>
@@ -781,6 +872,24 @@ export default function AgentsPage() {
         title={editingId ? 'Edit Agent' : 'New Agent'}
         subtitle={editingId ? `/${form.slug}` : undefined}
         width="lg"
+        actions={
+          <>
+            <button
+              onClick={() => { setEditingId(null); setShowAdd(false) }}
+              className="px-3 py-1.5 text-xs font-medium border border-neutral-800 text-neutral-500 rounded-lg hover:text-white hover:border-neutral-700 transition-colors duration-150"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-white text-black rounded-lg hover:bg-neutral-200 active:bg-neutral-300 active:scale-[0.97] transition-all duration-150 disabled:opacity-60 disabled:pointer-events-none"
+            >
+              {saving && <svg className="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>}
+              {saving ? (editingId ? 'Saving…' : 'Creating…') : (editingId ? 'Save' : 'Create')}
+            </button>
+          </>
+        }
       >
 
             {/* Identity + Instructions */}
@@ -789,36 +898,46 @@ export default function AgentsPage() {
               {/* Identity */}
               <fieldset className="space-y-4">
                 <legend className="text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-3">Identity</legend>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="sm:col-span-2">
-                    <label htmlFor="agent-name" className="text-xs text-neutral-500 mb-1.5 block">Name</label>
-                    <input
-                      id="agent-name"
-                      value={form.name} onChange={(e) => updateForm('name', e.target.value)}
-                      placeholder="e.g. Research Assistant"
-                      className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white placeholder-neutral-700 focus:border-neutral-600 focus:outline-none transition-colors duration-150"
-                    />
-                    <p className="text-xs text-[--text-muted] mt-1">ID: {form.slug || '—'}</p>
-                    <details className="mt-1">
-                      <summary className="text-xs text-neutral-500 cursor-pointer select-none">Advanced</summary>
-                      <div className="mt-2">
-                        <label htmlFor="agent-slug" className="text-xs text-neutral-500 mb-1.5 block">Slug</label>
-                        <input
-                          id="agent-slug"
-                          value={form.slug} onChange={(e) => updateForm('slug', e.target.value)}
-                          placeholder="research-assistant"
-                          className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono placeholder-neutral-700 focus:border-neutral-600 focus:outline-none transition-colors duration-150"
-                        />
-                      </div>
-                    </details>
+                <div className="space-y-4">
+                  {/* Row 1: Avatar + Name */}
+                  <div className="flex items-start gap-4">
+                    <div className="shrink-0">
+                      <label className="text-xs text-neutral-500 mb-1.5 block">Avatar</label>
+                      <AvatarPicker value={form.avatar_url} onChange={v => setForm(prev => ({ ...prev, avatar_url: v }))} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <label htmlFor="agent-name" className="text-xs text-neutral-500 mb-1.5 block">Name</label>
+                      <input
+                        id="agent-name"
+                        value={form.name} onChange={(e) => updateForm('name', e.target.value)}
+                        placeholder="e.g. Research Assistant"
+                        className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white placeholder-neutral-700 focus:border-neutral-600 focus:outline-none transition-colors duration-150"
+                      />
+                      <p className="text-xs text-[--text-muted] mt-1">ID: {form.slug || '—'}</p>
+                      <details className="mt-1">
+                        <summary className="text-xs text-neutral-500 cursor-pointer select-none">Advanced</summary>
+                        <div className="mt-2">
+                          <label htmlFor="agent-slug" className="text-xs text-neutral-500 mb-1.5 block">Slug</label>
+                          <input
+                            id="agent-slug"
+                            value={form.slug} onChange={(e) => updateForm('slug', e.target.value)}
+                            placeholder="research-assistant"
+                            className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-4 py-2.5 text-sm text-white font-mono placeholder-neutral-700 focus:border-neutral-600 focus:outline-none transition-colors duration-150"
+                          />
+                        </div>
+                      </details>
+                    </div>
                   </div>
-                  <div>
-                    <label className="text-xs text-neutral-500 mb-1.5 block">Model</label>
-                    <ModelPicker value={form.model} onChange={v => updateForm('model', v)} configuredProviders={configuredProviders} operatorProviders={operatorProviders} />
-                  </div>
-                  <div>
-                    <label className="text-xs text-neutral-500 mb-1.5 block">Role</label>
-                    <RolePicker value={form.role} onChange={v => updateForm('role', v)} />
+                  {/* Row 2: Model + Role */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-xs text-neutral-500 mb-1.5 block">Model</label>
+                      <ModelPicker value={form.model} onChange={v => updateForm('model', v)} configuredProviders={configuredProviders} operatorProviders={operatorProviders} />
+                    </div>
+                    <div>
+                      <label className="text-xs text-neutral-500 mb-1.5 block">Role</label>
+                      <RolePicker value={form.role} onChange={v => updateForm('role', v)} />
+                    </div>
                   </div>
                 </div>
                 {form.role === 'orchestrator' && (
@@ -1047,6 +1166,7 @@ export default function AgentsPage() {
                                 {(skill.operations ?? []).filter(op => op.risk !== 'read').length > 0 && (
                                   <div className="space-y-1 pt-1">
                                     <p className="text-xs text-neutral-600">Require human approval:</p>
+                                    <p className="text-xs text-amber-500/70">Enabling this gates all outbound web requests for this agent.</p>
                                     {(skill.operations ?? []).filter(op => op.risk !== 'read').map(op => {
                                       const override = skillApprovalOverrides[skill.id]?.[op.slug]
                                       const isChecked = override !== undefined ? override : op.requires_approval
@@ -1076,6 +1196,31 @@ export default function AgentsPage() {
                                 )}
                               </div>
                             )}
+                            {/* Adapter mode toggle */}
+                            <div className="pt-1 border-t border-neutral-800/30">
+                              <label className="flex items-start gap-2.5 cursor-pointer group">
+                                <input
+                                  type="checkbox"
+                                  checked={skillCustomInstructions[skill.id] ?? false}
+                                  onChange={() => {
+                                    setSkillCustomInstructions(prev => ({
+                                      ...prev,
+                                      [skill.id]: !(prev[skill.id] ?? false),
+                                    }))
+                                  }}
+                                  className="rounded border-neutral-700 bg-neutral-800 accent-violet-500 shrink-0 mt-0.5 cursor-pointer"
+                                />
+                                <div>
+                                  <p className="text-xs font-medium text-neutral-400 group-hover:text-neutral-300 transition-colors">
+                                    Use custom instructions
+                                  </p>
+                                  <p className="text-xs text-neutral-700 mt-0.5 leading-relaxed">
+                                    When enabled, the agent uses the markdown skill document instead of typed tools. Useful if you&apos;ve customised the skill instructions.
+                                  </p>
+                                </div>
+                              </label>
+                            </div>
+
                             {skill.content && (
                               <div>
                                 <div className="flex items-center justify-between mb-1.5">
@@ -1518,23 +1663,6 @@ export default function AgentsPage() {
             </div>
           )}
 
-          {/* Save / Cancel */}
-          <div className="flex gap-2 pt-1">
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold bg-white text-black rounded-lg hover:bg-neutral-200 active:bg-neutral-300 active:scale-[0.97] transition-all duration-150 disabled:opacity-60 disabled:pointer-events-none"
-            >
-              {saving && <svg className="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>}
-              {saving ? (editingId ? 'Saving…' : 'Creating…') : (editingId ? 'Save changes' : 'Create agent')}
-            </button>
-            <button
-              onClick={() => { setEditingId(null); setShowAdd(false) }}
-              className="px-4 py-2 text-xs font-medium border border-neutral-800 text-neutral-500 rounded-lg hover:text-white hover:border-neutral-700 transition-colors duration-150"
-            >
-              Cancel
-            </button>
-          </div>
       </SidePanel>
     </div>
   )
@@ -1570,8 +1698,12 @@ You have access to all standard tools (web_search, save_memory, http_request, et
 2. When delegating, be explicit and detailed. The sub-agent starts fresh each time
 3. Compile results into a coherent response for the user
 4. If an agent fails, diagnose why before retrying — add missing context, not just rephrase
-5. Save important outcomes and learned rules to memory for future sessions
-6. Be transparent about which agents you consulted
-7. For multi-step tasks, break them down and delegate sequentially, passing results between steps`
+5. When a user corrects a value (email address, URL, ID, name), always re-state the corrected value **verbatim** in your delegation task. Never assume a sub-agent will infer the correction from context.
+6. When a user confirms an action (e.g. "send it", "yes", "go ahead"), include **"The user has already confirmed this action — proceed immediately without asking again"** in your delegation task.
+6. When a user confirms an action (e.g. "send it", "yes", "go ahead"), include **"The user has already confirmed this action — proceed immediately without asking again"** in your delegation task.
+7. If a sub-agent returns a question or asks for confirmation, do NOT relay it to the user verbatim. Resolve it yourself using context from the conversation, or re-delegate with the missing information explicitly included.
+8. Save important outcomes and learned rules to memory for future sessions
+9. Be transparent about which agents you consulted
+10. For multi-step tasks, break them down and delegate sequentially, passing results between steps`
 
 const DEFAULT_PERSONALITY = `You are a helpful assistant. You are thorough, accurate, and concise. When given a task, you break it down into clear steps and execute them carefully.`

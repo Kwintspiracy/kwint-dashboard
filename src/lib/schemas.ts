@@ -22,6 +22,7 @@ export const CreateAgentSchema = z.object({
   telegram_bot_username: z.string().nullable().optional(),
   requires_approval: z.array(z.string()).nullable().optional(),
   task_context_template: z.string().nullable().optional(),
+  avatar_url: z.string().nullable().optional(),
 })
 
 export const UpdateAgentSchema = CreateAgentSchema.partial().extend({

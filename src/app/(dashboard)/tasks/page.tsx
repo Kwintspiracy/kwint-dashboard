@@ -2,6 +2,18 @@
 
 import { useState, useEffect } from 'react'
 import {
+  DndContext,
+  DragOverlay,
+  useDraggable,
+  useDroppable,
+  type DragStartEvent,
+  type DragEndEvent,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core'
+import { CSS } from '@dnd-kit/utilities'
+import {
   getTasksAction,
   createTaskAction,
   updateTaskAction,
@@ -93,6 +105,275 @@ const EMPTY_FORM = {
   priority: 'medium' as Task['priority'],
 }
 
+// ─── TaskCardContent ──────────────────────────────────────────────────────────
+// Shared card body — rendered both on the board and inside the DragOverlay.
+
+interface TaskCardContentProps {
+  task: Task
+  editingId?: string | null
+  starting?: string | null
+  onStart?: (task: Task) => void
+  onEdit?: (task: Task) => void
+  onStatusChange?: (id: string, status: Task['status']) => void
+  onDelete?: (id: string) => void
+  /** When true the action buttons are hidden (overlay use-case). */
+  overlay?: boolean
+}
+
+function TaskCardContent({
+  task,
+  editingId,
+  starting,
+  onStart,
+  onEdit,
+  onStatusChange,
+  onDelete,
+  overlay = false,
+}: TaskCardContentProps) {
+  return (
+    <>
+      {/* Title row */}
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-sm font-medium text-white leading-snug flex-1">{task.title}</p>
+        <Badge label={task.priority} color={PRIORITY_BADGE[task.priority]} className="shrink-0 mt-0.5" />
+      </div>
+
+      {/* Description */}
+      {task.description && (
+        <p className="text-xs text-neutral-500 leading-relaxed line-clamp-2">
+          {task.description}
+        </p>
+      )}
+
+      {/* Job chip */}
+      {task.job_id && (
+        <a
+          href="/jobs"
+          className="self-start text-xs font-mono bg-violet-950/50 text-violet-400 px-2 py-0.5 rounded border border-violet-900/40 hover:bg-violet-900/40 hover:text-violet-300 transition-colors duration-150"
+        >
+          job:{task.job_id.slice(0, 8)}
+        </a>
+      )}
+
+      {/* Actions row — hidden in overlay */}
+      {!overlay && (
+        <div className="flex items-center gap-1 pt-2 border-t border-neutral-800/50 flex-wrap">
+          {task.status === 'todo' && (
+            <button
+              onClick={() => onStart?.(task)}
+              disabled={starting === task.id}
+              className="px-2.5 py-1 text-xs font-semibold text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 rounded-md transition-all duration-150 disabled:opacity-50"
+            >
+              {starting === task.id ? 'Starting…' : 'Start →'}
+            </button>
+          )}
+          {task.status === 'in_progress' && (
+            <button
+              onClick={() => onStatusChange?.(task.id, 'done')}
+              className="px-2.5 py-1 text-xs font-semibold text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 rounded-md transition-all duration-150"
+            >
+              Mark done
+            </button>
+          )}
+          <button
+            onClick={() => onEdit?.(task)}
+            className="px-2.5 py-1 text-xs text-neutral-400 hover:text-white hover:bg-neutral-700/50 rounded-md transition-all duration-150"
+          >
+            Edit
+          </button>
+          {task.status !== 'cancelled' && task.status !== 'done' && (
+            <button
+              onClick={() => onStatusChange?.(task.id, 'cancelled')}
+              className="px-2.5 py-1 text-xs text-neutral-600 hover:text-neutral-400 hover:bg-neutral-800/60 rounded-md transition-all duration-150"
+            >
+              Cancel
+            </button>
+          )}
+          <button
+            onClick={() => onDelete?.(task.id)}
+            className="px-2.5 py-1 text-xs text-neutral-600 hover:text-red-400 hover:bg-red-500/10 rounded-md transition-all duration-150 ml-auto"
+          >
+            Delete
+          </button>
+        </div>
+      )}
+    </>
+  )
+}
+
+// ─── DraggableTaskCard ────────────────────────────────────────────────────────
+
+interface DraggableTaskCardProps extends Omit<TaskCardContentProps, 'overlay'> {
+  task: Task
+}
+
+function DraggableTaskCard(props: DraggableTaskCardProps) {
+  const { task, editingId } = props
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: task.id })
+
+  const style = transform
+    ? { transform: CSS.Translate.toString(transform) }
+    : undefined
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      className={[
+        'group bg-neutral-900 border border-l-4 border-neutral-800/60 rounded-xl p-4 flex flex-col gap-3',
+        'transition-all duration-150 hover:border-neutral-700 hover:bg-neutral-800/30',
+        PRIORITY_STRIP[task.priority],
+        editingId === task.id ? 'ring-1 ring-violet-500/50 border-neutral-700' : '',
+        isDragging ? 'opacity-30 cursor-grabbing' : 'cursor-grab',
+      ].join(' ')}
+    >
+      {/* Drag handle is the whole card header — attach listeners there so buttons still work */}
+      <div {...listeners} className="flex flex-col gap-3 cursor-grab active:cursor-grabbing">
+        <div className="flex items-start justify-between gap-2">
+          <p className="text-sm font-medium text-white leading-snug flex-1">{task.title}</p>
+          <Badge label={task.priority} color={PRIORITY_BADGE[task.priority]} className="shrink-0 mt-0.5" />
+        </div>
+        {task.description && (
+          <p className="text-xs text-neutral-500 leading-relaxed line-clamp-2">
+            {task.description}
+          </p>
+        )}
+        {task.job_id && (
+          <span className="self-start text-xs font-mono bg-violet-950/50 text-violet-400 px-2 py-0.5 rounded border border-violet-900/40">
+            job:{task.job_id.slice(0, 8)}
+          </span>
+        )}
+      </div>
+
+      {/* Actions — not part of drag listeners so clicks still fire */}
+      <div className="flex items-center gap-1 pt-2 border-t border-neutral-800/50 flex-wrap">
+        {task.status === 'todo' && (
+          <button
+            onClick={() => props.onStart?.(task)}
+            disabled={props.starting === task.id}
+            className="px-2.5 py-1 text-xs font-semibold text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 rounded-md transition-all duration-150 disabled:opacity-50"
+          >
+            {props.starting === task.id ? 'Starting…' : 'Start →'}
+          </button>
+        )}
+        {task.status === 'in_progress' && (
+          <button
+            onClick={() => props.onStatusChange?.(task.id, 'done')}
+            className="px-2.5 py-1 text-xs font-semibold text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 rounded-md transition-all duration-150"
+          >
+            Mark done
+          </button>
+        )}
+        <button
+          onClick={() => props.onEdit?.(task)}
+          className="px-2.5 py-1 text-xs text-neutral-400 hover:text-white hover:bg-neutral-700/50 rounded-md transition-all duration-150"
+        >
+          Edit
+        </button>
+        {task.status !== 'cancelled' && task.status !== 'done' && (
+          <button
+            onClick={() => props.onStatusChange?.(task.id, 'cancelled')}
+            className="px-2.5 py-1 text-xs text-neutral-600 hover:text-neutral-400 hover:bg-neutral-800/60 rounded-md transition-all duration-150"
+          >
+            Cancel
+          </button>
+        )}
+        <button
+          onClick={() => props.onDelete?.(task.id)}
+          className="px-2.5 py-1 text-xs text-neutral-600 hover:text-red-400 hover:bg-red-500/10 rounded-md transition-all duration-150 ml-auto"
+        >
+          Delete
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ─── DroppableColumn ──────────────────────────────────────────────────────────
+
+interface DroppableColumnProps {
+  col: (typeof COLUMNS)[number]
+  colTasks: Task[]
+  editingId: string | null
+  starting: string | null
+  onStart: (task: Task) => void
+  onEdit: (task: Task) => void
+  onStatusChange: (id: string, status: Task['status']) => void
+  onDelete: (id: string) => void
+}
+
+function DroppableColumn({
+  col,
+  colTasks,
+  editingId,
+  starting,
+  onStart,
+  onEdit,
+  onStatusChange,
+  onDelete,
+}: DroppableColumnProps) {
+  const { setNodeRef, isOver } = useDroppable({ id: col.key })
+
+  return (
+    <div className="flex flex-col gap-2">
+      {/* Column header */}
+      <div className="flex items-center gap-2 px-1 mb-1">
+        <span className="text-xs uppercase tracking-wide font-semibold text-neutral-400">
+          {col.label}
+        </span>
+        <span
+          className={`ml-1 inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-xs font-bold tabular-nums ${col.pillBg} ${col.pillText}`}
+        >
+          {colTasks.length}
+        </span>
+      </div>
+
+      {/* Column lane */}
+      <div
+        ref={setNodeRef}
+        className={[
+          'flex flex-col gap-2 rounded-xl p-3 min-h-[200px] bg-neutral-950/50 border-t-2 border border-neutral-800/40',
+          col.topBorder,
+          'transition-colors duration-150',
+          isOver ? 'border-neutral-600 bg-neutral-900/60 ring-1 ring-neutral-600/40' : '',
+        ].join(' ')}
+      >
+        {/* Empty state */}
+        {colTasks.length === 0 && (
+          <div className="flex-1 flex items-center justify-center py-8">
+            <div
+              className={[
+                'flex flex-col items-center gap-2 border border-dashed rounded-xl px-5 py-6 w-full transition-colors duration-150',
+                isOver ? 'border-neutral-600' : 'border-neutral-800',
+              ].join(' ')}
+            >
+              <span className={`text-lg leading-none transition-colors duration-150 ${isOver ? 'text-neutral-500' : 'text-neutral-700'}`}>+</span>
+              <p className={`text-xs transition-colors duration-150 ${isOver ? 'text-neutral-500' : 'text-neutral-700'}`}>{col.emptyText}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Task cards */}
+        {colTasks.map(task => (
+          <DraggableTaskCard
+            key={task.id}
+            task={task}
+            editingId={editingId}
+            starting={starting}
+            onStart={onStart}
+            onEdit={onEdit}
+            onStatusChange={onStatusChange}
+            onDelete={onDelete}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
 export default function TasksPage() {
   const { activeEntity } = useAuth()
   const eid = activeEntity?.id
@@ -107,6 +388,18 @@ export default function TasksPage() {
   const [contextTemplate, setContextTemplate] = useState<string>('')
   const [savingContext, setSavingContext] = useState(false)
 
+  // DnD state
+  const [draggedTask, setDraggedTask] = useState<Task | null>(null)
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        // Require a 5px move before activating — avoids swallowing button clicks
+        distance: 5,
+      },
+    }),
+  )
+
   const { data: agentsRaw = [] } = useData(['agents', eid], getAgentsAction)
   const orchestrators = (agentsRaw as Agent[]).filter(a => a.role === 'orchestrator')
 
@@ -117,12 +410,19 @@ export default function TasksPage() {
     }
   }, [orchestrators, orchestratorId])
 
-  // Sync context template when orchestrator changes
+  // Reset editor visibility when the selected orchestrator changes
+  useEffect(() => {
+    setShowContextEditor(false)
+  }, [orchestratorId])
+
+  // Sync context template text whenever orchestrator data or selection changes
   useEffect(() => {
     const orch = orchestrators.find(o => o.id === orchestratorId)
     setContextTemplate(orch?.task_context_template ?? '')
-    setShowContextEditor(false)
-  }, [orchestratorId, orchestrators])
+  // orchestrators is re-created each render; intentionally omit from deps to avoid
+  // overwriting in-flight edits — orchestratorId change above handles reset
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orchestratorId])
 
   const tasksKey = orchestratorId ? (['tasks', orchestratorId] as unknown[]) : ('tasks:none' as string)
   const { data: tasksRaw = [], isLoading, mutate } = useData(
@@ -130,6 +430,37 @@ export default function TasksPage() {
     orchestratorId ? () => getTasksAction(orchestratorId) : async () => [],
   )
   const tasks = tasksRaw as Task[]
+
+  // ── DnD handlers ────────────────────────────────────────────────────────────
+
+  function handleDragStart(event: DragStartEvent) {
+    const task = tasks.find(t => t.id === event.active.id)
+    setDraggedTask(task ?? null)
+  }
+
+  async function handleDragEnd(event: DragEndEvent) {
+    setDraggedTask(null)
+    const { active, over } = event
+    if (!over) return
+
+    const taskId = active.id as string
+    const targetStatus = over.id as Task['status']
+    const task = tasks.find(t => t.id === taskId)
+
+    if (!task || task.status === targetStatus) return
+
+    // Optimistic update — swap status in cached data before the server round-trip
+    mutate(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (prev: any) =>
+        ((prev ?? []) as Task[]).map(t => (t.id === taskId ? { ...t, status: targetStatus } : t)),
+      { revalidate: false },
+    )
+
+    await handleStatusChange(taskId, targetStatus)
+  }
+
+  // ── Task actions ─────────────────────────────────────────────────────────────
 
   async function saveContextTemplate() {
     if (!orchestratorId) return
@@ -329,111 +660,41 @@ export default function TasksPage() {
 
       {/* Kanban board */}
       {orchestratorId && (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-          {COLUMNS.map(col => {
-            const colTasks = tasks.filter(t => t.status === col.key)
-            return (
-              <div key={col.key} className="flex flex-col gap-2">
+        <DndContext
+          sensors={sensors}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+        >
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+            {COLUMNS.map(col => (
+              <DroppableColumn
+                key={col.key}
+                col={col}
+                colTasks={tasks.filter(t => t.status === col.key)}
+                editingId={editingId}
+                starting={starting}
+                onStart={handleStart}
+                onEdit={startEdit}
+                onStatusChange={handleStatusChange}
+                onDelete={handleDelete}
+              />
+            ))}
+          </div>
 
-                {/* Column header */}
-                <div className="flex items-center gap-2 px-1 mb-1">
-                  <span className="text-xs uppercase tracking-wide font-semibold text-neutral-400">
-                    {col.label}
-                  </span>
-                  <span className={`ml-1 inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-xs font-bold tabular-nums ${col.pillBg} ${col.pillText}`}>
-                    {colTasks.length}
-                  </span>
-                </div>
-
-                {/* Column lane */}
-                <div className={`flex flex-col gap-2 rounded-xl p-3 min-h-[200px] bg-neutral-950/50 border-t-2 border border-neutral-800/40 ${col.topBorder} transition-colors duration-150`}>
-
-                  {/* Empty state */}
-                  {colTasks.length === 0 && (
-                    <div className="flex-1 flex items-center justify-center py-8">
-                      <div className="flex flex-col items-center gap-2 border border-dashed border-neutral-800 rounded-xl px-5 py-6 w-full">
-                        <span className="text-neutral-700 text-lg leading-none">+</span>
-                        <p className="text-xs text-neutral-700">{col.emptyText}</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Task cards */}
-                  {colTasks.map(task => (
-                    <div
-                      key={task.id}
-                      className={`group bg-neutral-900 border border-l-4 border-neutral-800/60 rounded-xl p-4 flex flex-col gap-3 transition-all duration-150 hover:border-neutral-700 hover:bg-neutral-800/30 cursor-default ${PRIORITY_STRIP[task.priority]} ${editingId === task.id ? 'ring-1 ring-violet-500/50 border-neutral-700' : ''}`}
-                    >
-                      {/* Title row */}
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="text-sm font-medium text-white leading-snug flex-1">{task.title}</p>
-                        <Badge label={task.priority} color={PRIORITY_BADGE[task.priority]} className="shrink-0 mt-0.5" />
-                      </div>
-
-                      {/* Description */}
-                      {task.description && (
-                        <p className="text-xs text-neutral-500 leading-relaxed line-clamp-2">
-                          {task.description}
-                        </p>
-                      )}
-
-                      {/* Job chip */}
-                      {task.job_id && (
-                        <a
-                          href="/jobs"
-                          className="self-start text-xs font-mono bg-violet-950/50 text-violet-400 px-2 py-0.5 rounded border border-violet-900/40 hover:bg-violet-900/40 hover:text-violet-300 transition-colors duration-150"
-                        >
-                          job:{task.job_id.slice(0, 8)}
-                        </a>
-                      )}
-
-                      {/* Actions row */}
-                      <div className="flex items-center gap-1 pt-2 border-t border-neutral-800/50 flex-wrap">
-                        {task.status === 'todo' && (
-                          <button
-                            onClick={() => handleStart(task)}
-                            disabled={starting === task.id}
-                            className="px-2.5 py-1 text-xs font-semibold text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 rounded-md transition-all duration-150 disabled:opacity-50"
-                          >
-                            {starting === task.id ? 'Starting…' : 'Start →'}
-                          </button>
-                        )}
-                        {task.status === 'in_progress' && (
-                          <button
-                            onClick={() => handleStatusChange(task.id, 'done')}
-                            className="px-2.5 py-1 text-xs font-semibold text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 rounded-md transition-all duration-150"
-                          >
-                            Mark done
-                          </button>
-                        )}
-                        <button
-                          onClick={() => startEdit(task)}
-                          className="px-2.5 py-1 text-xs text-neutral-400 hover:text-white hover:bg-neutral-700/50 rounded-md transition-all duration-150"
-                        >
-                          Edit
-                        </button>
-                        {task.status !== 'cancelled' && task.status !== 'done' && (
-                          <button
-                            onClick={() => handleStatusChange(task.id, 'cancelled')}
-                            className="px-2.5 py-1 text-xs text-neutral-600 hover:text-neutral-400 hover:bg-neutral-800/60 rounded-md transition-all duration-150"
-                          >
-                            Cancel
-                          </button>
-                        )}
-                        <button
-                          onClick={() => handleDelete(task.id)}
-                          className="px-2.5 py-1 text-xs text-neutral-600 hover:text-red-400 hover:bg-red-500/10 rounded-md transition-all duration-150 ml-auto"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+          <DragOverlay dropAnimation={null}>
+            {draggedTask ? (
+              <div
+                className={[
+                  'bg-neutral-900 border border-l-4 border-neutral-700 rounded-xl p-4 flex flex-col gap-3',
+                  'opacity-90 shadow-2xl shadow-black/60 rotate-1',
+                  PRIORITY_STRIP[draggedTask.priority],
+                ].join(' ')}
+              >
+                <TaskCardContent task={draggedTask} overlay />
               </div>
-            )
-          })}
-        </div>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
       )}
 
       {orchestratorId && tasks.length === 0 && !isFormOpen && (
