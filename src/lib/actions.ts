@@ -445,7 +445,7 @@ export async function getJobsAction(input: JobsPageInput) {
   const { supabase, entityId } = await requireAuthWithEntity()
   let query = supabase
     .from('agent_jobs')
-    .select('id, status, channel, task, chat_id, tools_used, turn, result, error, chain_count, agent_id, created_at, completed_at')
+    .select('id, status, channel, task, original_task, chat_id, tools_used, turn, result, error, chain_count, agent_id, created_at, completed_at')
     .eq('entity_id', entityId)
     .order('created_at', { ascending: false })
     .limit(limit + 1)

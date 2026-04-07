@@ -74,9 +74,9 @@ function LiveJobStream({ jobId }: { jobId: string }) {
 }
 
 type Job = {
-  id: string; status: string; channel: string; task: string; chat_id: string | null
-  tools_used: string[] | null; turn: number; result: string | null; error: string | null
-  chain_count: number; agent_id: string | null; created_at: string; completed_at: string | null
+  id: string; status: string; channel: string; task: string; original_task: string | null
+  chat_id: string | null; tools_used: string[] | null; turn: number; result: string | null
+  error: string | null; chain_count: number; agent_id: string | null; created_at: string; completed_at: string | null
 }
 type Agent = { id: string; name: string; is_default: boolean }
 
@@ -349,7 +349,7 @@ export default function JobsPage() {
                       <Badge label={job.channel === 'api' ? 'Dashboard' : job.channel} color="neutral" />
                     </td>
                     <td className="px-5 py-3 max-w-[300px]">
-                      <span className="text-neutral-300 text-sm truncate block" title={job.task}>{truncate(job.task, 60)}</span>
+                      <span className="text-neutral-300 text-sm truncate block" title={job.original_task ?? job.task}>{truncate(job.original_task ?? job.task, 60)}</span>
                     </td>
                     <td className="hidden lg:table-cell px-5 py-3 max-w-[200px]">
                       {job.result
@@ -401,8 +401,8 @@ export default function JobsPage() {
                       )}
                       <Badge label={job.channel} color="neutral" />
                     </div>
-                    <p className="text-sm text-neutral-200 font-medium leading-snug truncate pr-4" title={job.task}>
-                      {truncate(job.task, 80)}
+                    <p className="text-sm text-neutral-200 font-medium leading-snug truncate pr-4" title={job.original_task ?? job.task}>
+                      {truncate(job.original_task ?? job.task, 80)}
                     </p>
                     <p className="text-xs text-neutral-600">{timeAgo(job.created_at)}</p>
                   </div>
@@ -430,7 +430,7 @@ export default function JobsPage() {
                     <>
                       <div>
                         <p className="text-xs text-neutral-500 font-semibold uppercase tracking-wider mb-2">Task</p>
-                        <pre className="text-sm text-neutral-300 whitespace-pre-wrap bg-neutral-900 rounded-lg p-4 border border-neutral-800/60 leading-relaxed">{job.task}</pre>
+                        <pre className="text-sm text-neutral-300 whitespace-pre-wrap bg-neutral-900 rounded-lg p-4 border border-neutral-800/60 leading-relaxed">{job.original_task ?? job.task}</pre>
                       </div>
 
                       {/* Meta info row */}
