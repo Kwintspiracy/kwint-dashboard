@@ -1229,6 +1229,42 @@ export async function deleteScheduleAction(id: string): Promise<ActionResult> {
   }
 }
 
+export async function runScheduleNowAction(id: string): Promise<ActionResult<{ job_id: string | null }>> {
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+
+    const { data: schedule, error } = await supabase
+      .from('agent_schedules')
+      .select('task, objectives, agent_id, agents(slug)')
+      .eq('id', id)
+      .eq('entity_id', entityId)
+      .single()
+
+    if (error || !schedule) return fail('Schedule not found')
+
+    const task = schedule.task || schedule.objectives || 'Run scheduled task'
+    const agentSlug = (schedule.agents as unknown as { slug: string } | null)?.slug
+
+    const agentUrl = process.env.NEXT_PUBLIC_AGENT_API_URL
+    const apiKey = process.env.API_SECRET_KEY || process.env.WORKER_SECRET
+
+    const res = await fetch(`${agentUrl}/api/agent`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+      },
+      body: JSON.stringify({ task, async: true, agent_slug: agentSlug, entity_id: entityId }),
+    })
+
+    if (!res.ok) return fail(`Agent API error: ${res.status}`)
+    const result = await res.json().catch(() => ({}))
+    return ok({ job_id: (result as { job_id?: string }).job_id ?? null })
+  } catch (e) {
+    return dbError(e)
+  }
+}
+
 // ─── Job / Bulk Mutations ─────────────────────────────────────────────────────
 
 export async function cancelPendingJobsAction(): Promise<ActionResult<{ count: number }>> {

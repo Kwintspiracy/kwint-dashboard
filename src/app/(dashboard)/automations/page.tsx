@@ -17,6 +17,7 @@ import {
   updatePluginAction,
   deletePluginAction,
   togglePluginActiveAction,
+  runScheduleNowAction,
 } from '@/lib/actions'
 import { useData } from '@/hooks/useData'
 import { useAuth } from '@/components/AuthProvider'
@@ -235,6 +236,7 @@ export default function AutomationsPage() {
   const [error, setError] = useState('')
   const [selectedPreset, setSelectedPreset] = useState<string | 'custom'>('')
   const [showCustomCron, setShowCustomCron] = useState(false)
+  const [runningId, setRunningId] = useState<string | null>(null)
 
   const [editingTriggerId, setEditingTriggerId] = useState<string | null>(null)
   const [showAddTrigger, setShowAddTrigger] = useState(false)
@@ -348,6 +350,19 @@ export default function AutomationsPage() {
       if (!result.ok) { toast.error(result.error); return }
       toast.success('Automation deleted')
       mutate()
+    }
+  }
+
+  async function handleRunNow(s: Schedule) {
+    setRunningId(s.id)
+    try {
+      const result = await runScheduleNowAction(s.id)
+      if (!result.ok) { toast.error(result.error); return }
+      toast.success(`"${s.name}" triggered — job started`)
+    } catch {
+      toast.error('Failed to trigger automation')
+    } finally {
+      setRunningId(null)
     }
   }
 
@@ -695,6 +710,23 @@ export default function AutomationsPage() {
 
                     <td className="px-5 py-4 text-right">
                       <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => handleRunNow(s)}
+                          disabled={runningId === s.id}
+                          title="Run now"
+                          className="p-2 rounded-lg text-neutral-500 hover:text-emerald-400 hover:bg-neutral-800 transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          {runningId === s.id ? (
+                            <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a10 10 0 100 10h-2a8 8 0 01-8-8z" />
+                            </svg>
+                          ) : (
+                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
+                            </svg>
+                          )}
+                        </button>
                         <button
                           onClick={() => startEdit(s)}
                           title="Edit"

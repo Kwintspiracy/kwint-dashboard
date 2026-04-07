@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { DndContext, DragOverlay, useDraggable, useDroppable, MouseSensor, TouchSensor, useSensor, useSensors, pointerWithin, type DragEndEvent } from '@dnd-kit/core'
 import { getAgentsAction, createAgentAction, updateAgentAction, deleteAgentAction, setDefaultAgentAction, activateTelegramAction, deactivateTelegramAction, getLlmKeysAction, getOperatorProvidersAction, getSkillsAction, getConnectorsAction, getAgentSkillAssignmentsAction, setAgentSkillAssignmentsAction, setSkillApprovalsAction, getOrchestratorAssignmentsAction, getOrchestratorAssignmentDetailsAction, setOrchestratorAssignmentsAction, getAgentOrchestratorAction, setAgentOrchestratorAction, getAllAgentAssignmentsAction, getAllSkillAssignmentsAction, previewEffectivePromptAction, autoAssignTemplateSkillsAction, getSkillCustomInstructionsAction, setSkillCustomInstructionsAction } from '@/lib/actions'
 import { timeAgo } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -235,6 +236,160 @@ function ModelPicker({ value, onChange, configuredProviders, operatorProviders }
   )
 }
 
+// ─── Hierarchy Drag-and-Drop primitives ──────────────────────────────────────
+
+type HierarchyAgentData = { id: string; name: string; slug: string; role: string; active: boolean }
+
+/**
+ * Renders a single agent row (no children). Draggable via grip handle.
+ * Orchestrators are also droppable on hover (drop agent onto them = sub-assign).
+ */
+function AgentHierarchyRow({
+  agent, depth, skills, onEdit, isDraggingAny,
+}: {
+  agent: HierarchyAgentData
+  depth: number       // 0 = root, 1+ = nested, -1 = unassigned
+  skills: string[]
+  onEdit: (id: string) => void
+  isDraggingAny: boolean
+}) {
+  const isOrch = agent.role === 'orchestrator'
+  const isRoot = depth === 0
+  const isUnassigned = depth < 0
+
+  const { attributes, listeners, setNodeRef: setDragRef, isDragging } = useDraggable({ id: agent.id })
+  const { setNodeRef: setDropRef, isOver } = useDroppable({ id: agent.id, disabled: !isOrch })
+  const setRef = useCallback(
+    (node: HTMLElement | null) => { setDragRef(node); setDropRef(node) },
+    [setDragRef, setDropRef],
+  )
+
+  const dragHandle = (
+    <button
+      {...attributes} {...listeners}
+      className="text-neutral-600 hover:text-neutral-400 cursor-grab active:cursor-grabbing shrink-0 touch-none p-0.5"
+      onClick={e => e.stopPropagation()} tabIndex={-1} aria-label="Drag to reassign"
+    >
+      <svg className="w-3 h-3" viewBox="0 0 12 12" fill="currentColor">
+        <circle cx="4" cy="2.5" r="1.2"/><circle cx="8" cy="2.5" r="1.2"/>
+        <circle cx="4" cy="6"   r="1.2"/><circle cx="8" cy="6"   r="1.2"/>
+        <circle cx="4" cy="9.5" r="1.2"/><circle cx="8" cy="9.5" r="1.2"/>
+      </svg>
+    </button>
+  )
+
+  const dot = (
+    <span className={`rounded-full flex-shrink-0 ring-2 ring-offset-1 ring-offset-neutral-900 ${isUnassigned ? 'w-1.5 h-1.5' : 'w-2 h-2'} ${agent.active ? (isOrch ? 'bg-sky-400 ring-sky-700/50' : 'bg-emerald-400 ring-emerald-700/50') : 'bg-neutral-600 ring-neutral-700/50'}`} />
+  )
+
+  if (isUnassigned) {
+    return (
+      <div ref={setDragRef} style={{ opacity: isDragging ? 0.4 : undefined }}>
+        <div className="flex items-center gap-2.5 py-2 px-3 rounded-lg hover:bg-neutral-800/30 transition-all duration-150 cursor-pointer group" onClick={() => onEdit(agent.id)}>
+          {dragHandle}{dot}
+          <span className="text-sm text-neutral-400 group-hover:text-white transition-colors">{agent.name}</span>
+          {skills.map(s => <span key={s} className="text-xs px-2 py-1 rounded bg-neutral-800 border border-neutral-700/50 text-neutral-500 font-mono">{s}</span>)}
+          <span className="text-xs text-neutral-700 font-mono ml-auto group-hover:text-neutral-500 transition-colors">{agent.slug}</span>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ opacity: isDragging ? 0.4 : undefined }}>
+      <div
+        ref={setRef}
+        className={[
+          'flex items-center gap-2.5 rounded-lg transition-all duration-150 group cursor-pointer',
+          isRoot ? 'px-3.5 py-2.5 bg-neutral-800/40 border border-neutral-700/40 hover:border-neutral-600/60 hover:bg-neutral-800/60' : 'px-3.5 py-2.5 hover:bg-neutral-800/30',
+          isOver && isDraggingAny ? 'ring-1 ring-violet-500/50 !bg-violet-950/10 !border-violet-800/40' : '',
+        ].join(' ')}
+        style={!isRoot ? { paddingLeft: `${1.25 + (depth - 1) * 1.5}rem` } : undefined}
+        onClick={() => onEdit(agent.id)}
+      >
+        {depth > 0 && <span className="text-neutral-700 select-none text-xs font-light">└─</span>}
+        {dragHandle}{dot}
+        <span className="text-sm font-medium text-neutral-200 group-hover:text-white transition-colors">{agent.name}</span>
+        {isOrch && <span className="text-xs px-2 py-1 rounded-full bg-sky-950/60 border border-sky-800/40 text-sky-400 font-medium leading-tight">orchestrator</span>}
+        {isOver && isDraggingAny ? (
+          <span className="ml-auto text-xs px-2 py-0.5 rounded bg-violet-900/60 text-violet-300 border border-violet-700/40 font-medium">assign here →</span>
+        ) : (
+          <>
+            {skills.map(s => <span key={s} className="text-xs px-2 py-1 rounded bg-neutral-800 border border-neutral-700/50 text-neutral-500 font-mono">{s}</span>)}
+            <span className="text-xs text-neutral-700 font-mono ml-auto group-hover:text-neutral-500 transition-colors">{agent.slug}</span>
+            <svg className="w-3.5 h-3.5 text-neutral-700 group-hover:text-neutral-500 transition-colors shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+            </svg>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Wraps a set of children at a given indent level.
+ * The left border line IS the drop target — hovering over it highlights it
+ * and dropping assigns the dragged agent to `parentId`.
+ * id = `lvl:${parentId}`
+ */
+function DroppableLevelLine({
+  parentId, isDraggingAny, isRootChild, children,
+}: {
+  parentId: string
+  isDraggingAny: boolean
+  isRootChild: boolean
+  children: React.ReactNode
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: `lvl:${parentId}` })
+  const active = isOver && isDraggingAny
+  return (
+    <div className="relative mt-1 ml-4">
+      {/* Wide invisible hit-zone sitting on top of the left border */}
+      <div
+        ref={setNodeRef}
+        className={`absolute -left-1.5 top-0 bottom-0 w-5 z-10 rounded-sm transition-colors duration-100 ${active ? 'bg-violet-500/20' : ''}`}
+      />
+      <div className={`pl-3 space-y-0.5 border-l-2 transition-colors duration-150 ${active ? 'border-violet-400' : isDraggingAny ? (isRootChild ? 'border-neutral-600/50' : 'border-neutral-600/30') : (isRootChild ? 'border-neutral-800/60' : 'border-neutral-800/40')}`}>
+        {active && <p className="text-xs text-violet-400 font-medium px-1 py-0.5 pointer-events-none">↑ move to this level</p>}
+        {children}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Thin strip on the far left of the hierarchy panel.
+ * Drop here = remove from all hierarchy (become a root/free agent).
+ */
+function DroppableRootZone({ isDraggingAny, children }: { isDraggingAny: boolean; children: React.ReactNode }) {
+  const { setNodeRef, isOver } = useDroppable({ id: 'root' })
+  const active = isOver && isDraggingAny
+  return (
+    <div className="relative">
+      {/* Always mounted — dnd-kit must register this BEFORE the drag starts,
+          not after. Conditional mount means it misses the drag session entirely. */}
+      <div
+        ref={setNodeRef}
+        className={`absolute left-0 top-0 bottom-0 w-8 z-20 rounded-l-xl transition-all duration-150 flex flex-col items-center justify-center ${
+          isDraggingAny
+            ? active
+              ? 'bg-violet-500/25 border-r-2 border-violet-400'
+              : 'border-r border-neutral-700/20'
+            : 'pointer-events-none'
+        }`}
+      >
+        {active && <span className="text-violet-400 text-[10px] font-bold" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>root</span>}
+      </div>
+      <div className={isDraggingAny ? 'pl-8' : ''}>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default function AgentsPage() {
   const { activeEntity } = useAuth()
   const eid = activeEntity?.id
@@ -280,6 +435,12 @@ export default function AgentsPage() {
   const [agentInstructions, setAgentInstructions] = useState<Record<string, string>>({})
   const [selectedOrchestratorId, setSelectedOrchestratorId] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<'list' | 'hierarchy'>('list')
+  const [hierarchyDraggingId, setHierarchyDraggingId] = useState<string | null>(null)
+  const hierarchyLastOverIdRef = useRef<string | null>(null)
+  const hierarchySensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
+  )
   const [showAdd, setShowAdd] = useState(false)
   const [showTemplates, setShowTemplates] = useState(false)
   const [pendingTemplateSlugs, setPendingTemplateSlugs] = useState<string[]>([])
@@ -461,12 +622,15 @@ export default function AgentsPage() {
       })
       if (!result.ok) { toast.error(result.error); return }
       const orchAssignments = assignedAgentIds.map(id => ({ sub_agent_id: id, instructions: agentInstructions[id] || null }))
-      const [skillRes, assignRes] = await Promise.all([
+      const savePromises: Promise<{ ok: boolean; error?: string }>[] = [
         setAgentSkillAssignmentsAction(editingId, assignedSkillIds),
-        form.role === 'orchestrator' ? setOrchestratorAssignmentsAction(editingId, orchAssignments) : setAgentOrchestratorAction(editingId, selectedOrchestratorId),
-      ])
+        setAgentOrchestratorAction(editingId, selectedOrchestratorId),
+        ...(form.role === 'orchestrator' ? [setOrchestratorAssignmentsAction(editingId, orchAssignments)] : []),
+      ]
+      const [skillRes, orchParentRes, orchSubRes] = await Promise.all(savePromises)
       if (!skillRes.ok) toast.error('Could not save skill assignments')
-      if (!assignRes.ok) toast.error('Could not save team assignments')
+      if (!orchParentRes.ok) toast.error('Could not save orchestrator assignment')
+      if (orchSubRes && !orchSubRes.ok) toast.error('Could not save team assignments')
       // Persist per-skill approval overrides and custom instructions flags
       await Promise.all([
         ...assignedSkillIds.map(skillId => {
@@ -739,92 +903,150 @@ export default function AgentsPage() {
 
         const roots = agents.filter(a => a.role === 'orchestrator' && !assignedAsSubIds.has(a.id)).map(a => buildNode(a.id))
         const unassigned = agents.filter(a => !assignedAsSubIds.has(a.id) && a.role !== 'orchestrator')
+        const draggingAgent = hierarchyDraggingId ? agentMap.get(hierarchyDraggingId) : null
 
-        function AgentChip({ slug }: { slug: string }) {
-          return <span className="text-xs px-2 py-1 rounded bg-neutral-800 border border-neutral-700/50 text-neutral-500 font-mono">{slug}</span>
-        }
-
-        function NodeRow({ node, depth }: { node: HNode; depth: number }) {
+        function renderNode(node: HNode, depth: number): React.ReactNode {
           const a = node.agent
-          const agentSkills = skillMap[a.id] ?? []
           const isRoot = depth === 0
           return (
-            <div className={isRoot ? 'p-3' : ''}>
-              <div
-                className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg cursor-pointer group transition-all duration-150 ${isRoot ? 'bg-neutral-800/40 border border-neutral-700/40 hover:border-neutral-600/60 hover:bg-neutral-800/60' : 'hover:bg-neutral-800/30'}`}
-                style={!isRoot ? { paddingLeft: `${1.25 + (depth - 1) * 1.5}rem` } : undefined}
-                onClick={() => { setEditingId(a.id); setShowAdd(false) }}
-              >
-                {depth > 0 && (
-                  <span className="text-neutral-700 select-none text-xs font-light">└─</span>
-                )}
-                <span className={`w-2 h-2 rounded-full flex-shrink-0 ring-2 ring-offset-1 ring-offset-neutral-900 ${a.active ? (a.role === 'orchestrator' ? 'bg-sky-400 ring-sky-700/50' : 'bg-emerald-400 ring-emerald-700/50') : 'bg-neutral-600 ring-neutral-700/50'}`} />
-                <span className="text-sm font-medium text-neutral-200 group-hover:text-white transition-colors">{a.name}</span>
-                {a.role === 'orchestrator' && (
-                  <span className="text-xs px-2 py-1 rounded-full bg-sky-950/60 border border-sky-800/40 text-sky-400 font-medium leading-tight">orchestrator</span>
-                )}
-                {agentSkills.map(s => <AgentChip key={s} slug={s} />)}
-                <span className="text-xs text-neutral-700 font-mono ml-auto group-hover:text-neutral-500 transition-colors">{a.slug}</span>
-                {/* Edit hint */}
-                <svg className="w-3.5 h-3.5 text-neutral-700 group-hover:text-neutral-500 transition-colors shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                </svg>
-              </div>
+            <div key={a.id} className={isRoot ? 'p-3 pb-0 last:pb-3' : ''}>
+              <AgentHierarchyRow
+                agent={a}
+                depth={depth}
+                skills={skillMap[a.id] ?? []}
+                onEdit={(id) => { const ag = agentMap.get(id); if (ag) startEdit(ag) }}
+                isDraggingAny={hierarchyDraggingId !== null}
+              />
               {node.children.length > 0 && (
-                <div className={`mt-1 space-y-0.5 ${isRoot ? 'ml-4 pl-3 border-l border-neutral-800/60' : 'ml-4 pl-3 border-l border-neutral-800/40'}`}>
-                  {node.children.map(child => <NodeRow key={child.agent.id} node={child} depth={depth + 1} />)}
-                </div>
+                <DroppableLevelLine parentId={a.id} isDraggingAny={!!hierarchyDraggingId} isRootChild={isRoot}>
+                  {node.children.map(child => renderNode(child, depth + 1))}
+                </DroppableLevelLine>
               )}
             </div>
           )
         }
 
+        function handleHierarchyDragEnd(event: DragEndEvent) {
+          const { active, over } = event
+          // Fallback to last known over-id to handle cursor micro-drift at mouseup
+          const overId = over ? String(over.id) : hierarchyLastOverIdRef.current
+          hierarchyLastOverIdRef.current = null
+          setHierarchyDraggingId(null)
+          if (!overId) return
+          const agentId = String(active.id)
+
+          // Resolve drop target: level-line drops and root-zone all normalise to an orch ID or 'free'
+          const rawTarget = overId
+          const targetId = rawTarget === 'root'
+            ? 'free'
+            : rawTarget.startsWith('lvl:')
+              ? rawTarget.slice(4)   // lvl:<orchId> → orchId
+              : rawTarget            // direct orchestrator drop
+
+          if (agentId === targetId) return
+
+          const currentOrchId = allAssignments.find(a => a.sub_agent_id === agentId)?.orchestrator_id ?? null
+          const isFree = targetId === 'free'
+
+          if (isFree && !currentOrchId) return  // already free
+          if (!isFree && currentOrchId === targetId) return  // already there
+
+          // Compute optimistic state immediately
+          const nextAssignments: AgentAssignment[] = isFree
+            ? allAssignments.filter(a => a.sub_agent_id !== agentId)
+            : [
+                ...allAssignments.filter(a => a.sub_agent_id !== agentId),
+                { orchestrator_id: targetId, sub_agent_id: agentId },
+              ]
+
+          void mutateAssignments(
+            async () => {
+              try {
+                // Remove from old orchestrator
+                if (currentOrchId) {
+                  const remaining = allAssignments
+                    .filter(a => a.orchestrator_id === currentOrchId && a.sub_agent_id !== agentId)
+                    .map(a => ({ sub_agent_id: a.sub_agent_id, instructions: null }))
+                  const r = await setOrchestratorAssignmentsAction(currentOrchId, remaining)
+                  if (!r.ok) throw new Error(r.error)
+                }
+                // Assign to new orchestrator (if not freeing)
+                if (!isFree) {
+                  const existing = allAssignments
+                    .filter(a => a.orchestrator_id === targetId)
+                    .map(a => ({ sub_agent_id: a.sub_agent_id, instructions: null }))
+                  const r = await setOrchestratorAssignmentsAction(targetId, [...existing, { sub_agent_id: agentId, instructions: null }])
+                  if (!r.ok) throw new Error(r.error)
+                  toast.success(`Moved to ${agentMap.get(targetId)?.name ?? 'orchestrator'}`)
+                } else {
+                  toast.success('Moved to root level')
+                }
+                return { ok: true as const, data: nextAssignments }
+              } catch (e) {
+                toast.error(e instanceof Error ? e.message : 'Failed to update hierarchy')
+                throw e
+              }
+            },
+            { optimisticData: { ok: true as const, data: nextAssignments }, revalidate: true, rollbackOnError: true },
+          )
+        }
+
         return (
-          <div className="bg-neutral-900 border border-neutral-800/60 rounded-xl overflow-hidden">
-            {agents.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
-                <div className="w-12 h-12 rounded-xl bg-neutral-800/80 border border-neutral-700/50 flex items-center justify-center mb-4">
-                  <svg className="w-6 h-6 text-neutral-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.693L5 14.5m14.8.8l1.402 1.402c1 1 .03 2.711-1.379 2.711H4.177c-1.409 0-2.38-1.712-1.379-2.711L4.2 15.3" />
-                  </svg>
-                </div>
-                <p className="text-sm font-medium text-neutral-300 mb-1">No agents yet</p>
-                <p className="text-xs text-neutral-600">Create agents to see the hierarchy here.</p>
-              </div>
-            )}
-            {roots.length > 0 && (
-              <div className="p-3 space-y-2">
-                {roots.map(node => <NodeRow key={node.agent.id} node={node} depth={0} />)}
-              </div>
-            )}
-            {unassigned.length > 0 && (
-              <>
-                {roots.length > 0 && <div className="border-t border-neutral-800/50 mx-4" />}
-                <div className="px-4 py-3">
-                  <p className="text-xs text-neutral-600 font-semibold uppercase tracking-wide mb-2">Unassigned</p>
-                  <div className="space-y-0.5">
-                    {unassigned.map(a => {
-                      const agentSkills = skillMap[a.id] ?? []
-                      return (
-                        <div
-                          key={a.id}
-                          className="flex items-center gap-2.5 py-2 px-3 rounded-lg hover:bg-neutral-800/30 transition-all duration-150 cursor-pointer group"
-                          onClick={() => { setEditingId(a.id); setShowAdd(false) }}
-                        >
-                          <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${a.active ? 'bg-emerald-400' : 'bg-neutral-600'}`} />
-                          <span className="text-sm text-neutral-400 group-hover:text-white transition-colors">{a.name}</span>
-                          {agentSkills.map(s => (
-                            <span key={s} className="text-xs px-2 py-1 rounded bg-neutral-800 border border-neutral-700/50 text-neutral-500 font-mono">{s}</span>
-                          ))}
-                          <span className="text-xs text-neutral-700 font-mono ml-auto group-hover:text-neutral-500 transition-colors">{a.slug}</span>
-                        </div>
-                      )
-                    })}
+          <DndContext
+            sensors={hierarchySensors}
+            collisionDetection={pointerWithin}
+            onDragStart={({ active }) => setHierarchyDraggingId(String(active.id))}
+            onDragMove={({ over }) => { hierarchyLastOverIdRef.current = over ? String(over.id) : null }}
+            onDragEnd={handleHierarchyDragEnd}
+            onDragCancel={() => { hierarchyLastOverIdRef.current = null; setHierarchyDraggingId(null) }}
+          >
+            <div className="bg-neutral-900 border border-neutral-800/60 rounded-xl overflow-hidden">
+              {agents.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
+                  <div className="w-12 h-12 rounded-xl bg-neutral-800/80 border border-neutral-700/50 flex items-center justify-center mb-4">
+                    <svg className="w-6 h-6 text-neutral-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.693L5 14.5m14.8.8l1.402 1.402c1 1 .03 2.711-1.379 2.711H4.177c-1.409 0-2.38-1.712-1.379-2.711L4.2 15.3" />
+                    </svg>
                   </div>
+                  <p className="text-sm font-medium text-neutral-300 mb-1">No agents yet</p>
+                  <p className="text-xs text-neutral-600">Create agents to see the hierarchy here.</p>
                 </div>
-              </>
-            )}
-          </div>
+              )}
+              <DroppableRootZone isDraggingAny={!!hierarchyDraggingId}>
+                {roots.length > 0 && (
+                  <div className="py-3 space-y-1">
+                    {roots.map(node => renderNode(node, 0))}
+                  </div>
+                )}
+                {unassigned.length > 0 && (
+                  <>
+                    {roots.length > 0 && <div className="border-t border-neutral-800/50 mx-4" />}
+                    <div className="px-4 py-3">
+                      <p className="text-xs text-neutral-600 font-semibold uppercase tracking-wide mb-2">Unassigned</p>
+                      <div className="space-y-0.5">
+                        {unassigned.map(a => (
+                          <AgentHierarchyRow
+                            key={a.id} agent={a} depth={-1}
+                            skills={skillMap[a.id] ?? []}
+                            onEdit={(id) => { const ag = agentMap.get(id); if (ag) startEdit(ag) }}
+                            isDraggingAny={!!hierarchyDraggingId}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </DroppableRootZone>
+            </div>
+            <DragOverlay dropAnimation={null}>
+              {draggingAgent ? (
+                <div className="flex items-center gap-2.5 px-4 py-2.5 bg-neutral-800 border border-violet-600/40 rounded-lg shadow-xl rotate-1 opacity-90 pointer-events-none">
+                  <span className={`w-2 h-2 rounded-full ${draggingAgent.active ? 'bg-emerald-400' : 'bg-neutral-600'}`} />
+                  <span className="text-sm font-medium text-neutral-100">{draggingAgent.name}</span>
+                </div>
+              ) : null}
+            </DragOverlay>
+          </DndContext>
         )
       })()}
 
@@ -1348,24 +1570,22 @@ export default function AgentsPage() {
                 )}
               </section>
 
-              {/* Orchestrator (non-orchestrator agents only) */}
-              {form.role !== 'orchestrator' && (
-                <section aria-labelledby="section-orchestrator" className="border-t border-neutral-800/50 pt-5">
-                  <h3 id="section-orchestrator" className="text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-1">Orchestrator</h3>
-                  <p className="text-xs text-neutral-600 mb-2.5">Which orchestrator manages this agent.</p>
-                  <select
-                    value={selectedOrchestratorId ?? ''}
-                    onChange={e => setSelectedOrchestratorId(e.target.value || null)}
-                    aria-label="Select orchestrator"
-                    className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-3 py-2 text-xs text-white focus:border-neutral-600 focus:outline-none transition-colors"
-                  >
-                    <option value="">None (unassigned)</option>
-                    {agents.filter(a => a.role === 'orchestrator' && a.id !== editingId).map(a => (
-                      <option key={a.id} value={a.id}>{a.name}</option>
-                    ))}
-                  </select>
-                </section>
-              )}
+              {/* Orchestrator — available for all roles, including orchestrators (sub-orchestrator support) */}
+              <section aria-labelledby="section-orchestrator" className="border-t border-neutral-800/50 pt-5">
+                <h3 id="section-orchestrator" className="text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-1">Orchestrator</h3>
+                <p className="text-xs text-neutral-600 mb-2.5">Which orchestrator manages this agent.</p>
+                <select
+                  value={selectedOrchestratorId ?? ''}
+                  onChange={e => setSelectedOrchestratorId(e.target.value || null)}
+                  aria-label="Select orchestrator"
+                  className="w-full bg-neutral-800/50 border border-neutral-800 rounded-lg px-3 py-2 text-xs text-white focus:border-neutral-600 focus:outline-none transition-colors"
+                >
+                  <option value="">None (unassigned)</option>
+                  {agents.filter(a => a.role === 'orchestrator' && a.id !== editingId).map(a => (
+                    <option key={a.id} value={a.id}>{a.name}</option>
+                  ))}
+                </select>
+              </section>
 
               {/* Assigned agents (orchestrators only) */}
               {form.role === 'orchestrator' && (

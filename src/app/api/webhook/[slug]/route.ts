@@ -54,7 +54,7 @@ export async function POST(
 
   // Create job via agent API
   const agentUrl = process.env.NEXT_PUBLIC_AGENT_API_URL
-  const apiKey = process.env.API_SECRET_KEY
+  const apiKey = process.env.API_SECRET_KEY || process.env.WORKER_SECRET
 
   const res = await fetch(`${agentUrl}/api/agent`, {
     method: 'POST',
