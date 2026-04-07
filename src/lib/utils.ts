@@ -1,9 +1,25 @@
-// Per-model pricing in USD per 1M tokens (Anthropic, March 2026)
+// Per-model pricing in USD per 1M tokens
 const MODEL_RATES: Record<string, { input: number; output: number }> = {
-  'claude-opus-4-6':           { input: 15,   output: 75   },
-  'claude-sonnet-4-6':         { input: 3,    output: 15   },
-  'claude-haiku-4-5-20251001': { input: 0.80, output: 4    },
-  'claude-haiku-4-5':          { input: 0.80, output: 4    },
+  // Anthropic
+  'claude-opus-4-6':           { input: 15,    output: 75   },
+  'claude-sonnet-4-6':         { input: 3,     output: 15   },
+  'claude-haiku-4-5-20251001': { input: 0.80,  output: 4    },
+  'claude-haiku-4-5':          { input: 0.80,  output: 4    },
+  // OpenAI — GPT-4.1
+  'gpt-4.1':                   { input: 2,     output: 8    },
+  'gpt-4.1-mini':              { input: 0.40,  output: 1.60 },
+  'gpt-4.1-nano':              { input: 0.10,  output: 0.40 },
+  // OpenAI — GPT-4o
+  'gpt-4o':                    { input: 2.50,  output: 10   },
+  'gpt-4o-mini':               { input: 0.15,  output: 0.60 },
+  // OpenAI — o-series
+  'o4-mini':                   { input: 1.10,  output: 4.40 },
+  'o3':                        { input: 10,    output: 40   },
+  'o3-mini':                   { input: 1.10,  output: 4.40 },
+  'o1':                        { input: 15,    output: 60   },
+  'o1-mini':                   { input: 1.10,  output: 4.40 },
+  // OpenAI — legacy
+  'gpt-4-turbo':               { input: 10,    output: 30   },
 }
 
 const FALLBACK_RATE = { input: 3, output: 15 }
