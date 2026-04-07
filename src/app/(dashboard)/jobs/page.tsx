@@ -201,7 +201,7 @@ export default function JobsPage() {
     onUpdate: () => mutate(),
   })
 
-  const stuckCount = jobs.filter(j => j.status === 'pending' || j.status === 'processing').length
+  const stuckCount = jobs.filter(j => ['pending', 'processing', 'awaiting_delegation'].includes(j.status)).length
   const failedCount = jobs.filter(j => j.status === 'failed').length
   const activeFilterCount = [statusFilter, channelFilter, agentFilter].filter(Boolean).length
 

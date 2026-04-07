@@ -1274,7 +1274,7 @@ export async function cancelPendingJobsAction(): Promise<ActionResult<{ count: n
       .from('agent_jobs')
       .update({ status: 'cancelled' })
       .eq('entity_id', entityId)
-      .in('status', ['pending', 'processing'])
+      .in('status', ['pending', 'processing', 'awaiting_delegation'])
       .select('id')
 
     if (error) return dbFail(error)
@@ -1287,15 +1287,29 @@ export async function cancelPendingJobsAction(): Promise<ActionResult<{ count: n
 export async function deleteFailedJobsAction(): Promise<ActionResult<{ count: number }>> {
   try {
     const { supabase, entityId } = await requireAuthWithEntity()
-    const { data, error } = await supabase
+    // Get failed job IDs first
+    const { data: jobs, error: fetchError } = await supabase
       .from('agent_jobs')
-      .delete()
+      .select('id')
       .eq('entity_id', entityId)
       .eq('status', 'failed')
-      .select('id')
+
+    if (fetchError) return dbFail(fetchError)
+    if (!jobs || jobs.length === 0) return ok({ count: 0 })
+
+    const ids = jobs.map(j => j.id)
+
+    // Delete tool_calls first (FK constraint)
+    await supabase.from('tool_calls').delete().in('job_id', ids)
+
+    // Now delete the jobs
+    const { error } = await supabase
+      .from('agent_jobs')
+      .delete()
+      .in('id', ids)
 
     if (error) return dbFail(error)
-    return ok({ count: (data ?? []).length })
+    return ok({ count: ids.length })
   } catch (e) {
     return dbError(e)
   }
