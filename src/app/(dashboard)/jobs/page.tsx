@@ -7,7 +7,7 @@ import { useRealtimeTable } from '@/hooks/useRealtimeTable'
 import { useData } from '@/hooks/useData'
 import { useJobStream } from '@/hooks/useJobStream'
 import { useAuth } from '@/components/AuthProvider'
-import { truncate, timeAgo } from '@/lib/utils'
+import { truncate, timeAgo, estimateCost, formatDuration } from '@/lib/utils'
 import PageHeader from '@/components/PageHeader'
 import Badge from '@/components/Badge'
 import EmptyState from '@/components/EmptyState'
@@ -77,8 +77,9 @@ type Job = {
   id: string; status: string; channel: string; task: string; original_task: string | null
   chat_id: string | null; tools_used: string[] | null; turn: number; result: string | null
   error: string | null; chain_count: number; agent_id: string | null; created_at: string; completed_at: string | null
+  total_duration_ms: number | null; input_tokens: number | null; output_tokens: number | null
 }
-type Agent = { id: string; name: string; is_default: boolean }
+type Agent = { id: string; name: string; model: string; is_default: boolean }
 
 function statusColor(status: string): 'emerald' | 'red' | 'blue' | 'amber' | 'neutral' {
   if (status === 'completed') return 'emerald'
@@ -141,7 +142,8 @@ export default function JobsPage() {
   const { data: agentsData = [], } = useData(['agents', eid], getAgentsAction)
   const agents = agentsData as Agent[]
   const agentMap: Record<string, string> = {}
-  for (const a of agents) agentMap[a.id] = a.name
+  const agentModelMap: Record<string, string> = {}
+  for (const a of agents) { agentMap[a.id] = a.name; agentModelMap[a.id] = a.model }
 
   const { data: jobResult, isLoading: loading, mutate } = useData(
     ['jobs', eid, statusFilter, channelFilter, agentFilter],
@@ -313,14 +315,18 @@ export default function JobsPage() {
                 <th className="text-left px-5 py-3 text-xs text-neutral-500 font-semibold uppercase tracking-wider hidden md:table-cell">Channel</th>
                 <th className="text-left px-5 py-3 text-xs text-neutral-500 font-semibold uppercase tracking-wider">Task</th>
                 <th className="text-left px-5 py-3 text-xs text-neutral-500 font-semibold uppercase tracking-wider hidden lg:table-cell">Result</th>
-                <th className="text-right px-5 py-3 text-xs text-neutral-500 font-semibold uppercase tracking-wider">Actions</th>
+                <th className="text-right px-5 py-3 text-xs text-neutral-500 font-semibold uppercase tracking-wider hidden xl:table-cell">Cost</th>
                 <th className="text-right px-5 py-3 text-xs text-neutral-500 font-semibold uppercase tracking-wider">Duration</th>
               </tr>
             </thead>
             <tbody>
               {jobs.map((job) => {
-                const dur = job.completed_at
-                  ? Math.round((new Date(job.completed_at).getTime() - new Date(job.created_at).getTime()) / 1000)
+                const durMs = job.total_duration_ms ?? (job.completed_at
+                  ? new Date(job.completed_at).getTime() - new Date(job.created_at).getTime()
+                  : null)
+                const jobModel = (job.agent_id && agentModelMap[job.agent_id]) || 'claude-sonnet-4-6'
+                const jobCost = (job.input_tokens || job.output_tokens)
+                  ? estimateCost(job.input_tokens ?? 0, job.output_tokens ?? 0, jobModel)
                   : null
                 const isExpanded = expandedId === job.id
                 return (
@@ -356,12 +362,12 @@ export default function JobsPage() {
                         ? <span className="text-neutral-500 text-xs truncate block" title={job.result}>{job.result.length > 60 ? job.result.slice(0, 60) + '…' : job.result}</span>
                         : <span className="text-neutral-700 text-xs">—</span>}
                     </td>
-                    <td className="px-5 py-3 text-right">
-                      <span className="font-mono text-xs text-neutral-500">{job.tools_used?.length || 0}</span>
+                    <td className="hidden xl:table-cell px-5 py-3 text-right">
+                      <span className="font-mono text-xs text-neutral-500">{jobCost ?? '—'}</span>
                     </td>
                     <td className="px-5 py-3 text-right">
                       <span className="font-mono text-xs text-neutral-500">
-                        {dur ? `${dur}s` : timeAgo(job.created_at)}
+                        {durMs ? formatDuration(durMs) : timeAgo(job.created_at)}
                       </span>
                     </td>
                   </tr>
@@ -434,34 +440,67 @@ export default function JobsPage() {
                       </div>
 
                       {/* Meta info row */}
-                      <div className="grid grid-cols-2 gap-2 text-xs">
-                        <div className="bg-neutral-900 border border-neutral-800/50 rounded-lg px-3 py-2.5">
-                          <p className="text-xs text-neutral-600 uppercase tracking-wider mb-0.5">Job ID</p>
-                          <button
-                            className="font-mono text-neutral-400 hover:text-neutral-200 transition-colors text-left"
-                            title="Click to copy"
-                            onClick={() => { navigator.clipboard.writeText(job.id); toast.success('ID copied') }}
-                          >
-                            {job.id.slice(0, 8)}…
-                          </button>
-                        </div>
-                        <div className="bg-neutral-900 border border-neutral-800/50 rounded-lg px-3 py-2.5">
-                          <p className="text-xs text-neutral-600 uppercase tracking-wider mb-0.5">Turns / Chains</p>
-                          <p className="font-mono text-neutral-400">{job.turn} / {job.chain_count}</p>
-                        </div>
-                        {job.chat_id && (
-                          <div className="bg-neutral-900 border border-neutral-800/50 rounded-lg px-3 py-2.5">
-                            <p className="text-xs text-neutral-600 uppercase tracking-wider mb-0.5">Chat ID</p>
-                            <p className="font-mono text-neutral-400 truncate">{job.chat_id}</p>
+                      {(() => {
+                        const panelModel = (job.agent_id && agentModelMap[job.agent_id]) || 'claude-sonnet-4-6'
+                        const panelCost = (job.input_tokens || job.output_tokens)
+                          ? estimateCost(job.input_tokens ?? 0, job.output_tokens ?? 0, panelModel)
+                          : null
+                        const panelDurMs = job.total_duration_ms ?? (job.completed_at
+                          ? new Date(job.completed_at).getTime() - new Date(job.created_at).getTime()
+                          : null)
+                        return (
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                            <div className="bg-neutral-900 border border-neutral-800/50 rounded-lg px-3 py-2.5">
+                              <p className="text-xs text-neutral-600 uppercase tracking-wider mb-0.5">Job ID</p>
+                              <button
+                                className="font-mono text-neutral-400 hover:text-neutral-200 transition-colors text-left"
+                                title="Click to copy"
+                                onClick={() => { navigator.clipboard.writeText(job.id); toast.success('ID copied') }}
+                              >
+                                {job.id.slice(0, 8)}…
+                              </button>
+                            </div>
+                            <div className="bg-neutral-900 border border-neutral-800/50 rounded-lg px-3 py-2.5">
+                              <p className="text-xs text-neutral-600 uppercase tracking-wider mb-0.5">Turns / Chains</p>
+                              <p className="font-mono text-neutral-400">{job.turn} / {job.chain_count}</p>
+                            </div>
+                            {panelDurMs ? (
+                              <div className="bg-neutral-900 border border-neutral-800/50 rounded-lg px-3 py-2.5">
+                                <p className="text-xs text-neutral-600 uppercase tracking-wider mb-0.5">Duration</p>
+                                <p className="font-mono text-neutral-400">{formatDuration(panelDurMs)}</p>
+                              </div>
+                            ) : null}
+                            {(job.input_tokens || job.output_tokens) ? (
+                              <div className="bg-neutral-900 border border-neutral-800/50 rounded-lg px-3 py-2.5">
+                                <p className="text-xs text-neutral-600 uppercase tracking-wider mb-0.5">Tokens</p>
+                                <p className="font-mono text-neutral-400">
+                                  <span title="input">{(job.input_tokens ?? 0).toLocaleString()}</span>
+                                  <span className="text-neutral-700"> / </span>
+                                  <span title="output">{(job.output_tokens ?? 0).toLocaleString()}</span>
+                                </p>
+                              </div>
+                            ) : null}
+                            {panelCost ? (
+                              <div className="bg-neutral-900 border border-neutral-800/50 rounded-lg px-3 py-2.5">
+                                <p className="text-xs text-neutral-600 uppercase tracking-wider mb-0.5">Cost</p>
+                                <p className="font-mono text-emerald-400 font-semibold">{panelCost}</p>
+                              </div>
+                            ) : null}
+                            {job.chat_id && (
+                              <div className="bg-neutral-900 border border-neutral-800/50 rounded-lg px-3 py-2.5">
+                                <p className="text-xs text-neutral-600 uppercase tracking-wider mb-0.5">Chat ID</p>
+                                <p className="font-mono text-neutral-400 truncate">{job.chat_id}</p>
+                              </div>
+                            )}
+                            {job.tools_used?.length ? (
+                              <div className="bg-neutral-900 border border-neutral-800/50 rounded-lg px-3 py-2.5 col-span-2">
+                                <p className="text-xs text-neutral-600 uppercase tracking-wider mb-0.5">Tools used</p>
+                                <p className="text-neutral-400 font-mono">{job.tools_used.join(', ')}</p>
+                              </div>
+                            ) : null}
                           </div>
-                        )}
-                        {job.tools_used?.length ? (
-                          <div className="bg-neutral-900 border border-neutral-800/50 rounded-lg px-3 py-2.5 col-span-2">
-                            <p className="text-xs text-neutral-600 uppercase tracking-wider mb-0.5">Tools used</p>
-                            <p className="text-neutral-400 font-mono">{job.tools_used.join(', ')}</p>
-                          </div>
-                        ) : null}
-                      </div>
+                        )
+                      })()}
 
                       {job.status === 'processing' && (
                         <div className="border-t border-neutral-800/50 pt-4">
