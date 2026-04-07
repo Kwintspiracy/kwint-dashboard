@@ -1299,14 +1299,25 @@ export async function deleteFailedJobsAction(): Promise<ActionResult<{ count: nu
 
     const ids = jobs.map(j => j.id)
 
-    // Delete all child rows referencing these jobs (FK constraints)
-    await supabase.from('tool_calls').delete().in('job_id', ids)
-    await supabase.from('approval_requests').delete().in('job_id', ids)
-    await supabase.from('agent_tasks').delete().in('job_id', ids)
-    // Cancel child jobs that have parent_job_id pointing to these
-    await supabase.from('agent_jobs').update({ status: 'cancelled' }).in('parent_job_id', ids)
+    // Get child job IDs (parent_job_id references)
+    const { data: childJobs } = await supabase
+      .from('agent_jobs')
+      .select('id')
+      .in('parent_job_id', ids)
+    const childIds = (childJobs ?? []).map((j: { id: string }) => j.id)
+    const allIds = [...ids, ...childIds]
 
-    // Now delete the jobs
+    // Delete all FK children for both parent and child jobs
+    await supabase.from('tool_calls').delete().in('job_id', allIds)
+    await supabase.from('approval_requests').delete().in('job_id', allIds)
+    await supabase.from('agent_tasks').delete().in('job_id', allIds)
+
+    // Delete child jobs first, then parent jobs
+    if (childIds.length > 0) {
+      await supabase.from('agent_jobs').delete().in('id', childIds)
+    }
+
+    // Now delete the failed jobs
     const { error } = await supabase
       .from('agent_jobs')
       .delete()
