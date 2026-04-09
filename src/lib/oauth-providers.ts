@@ -91,6 +91,13 @@ export const CONNECTOR_OAUTH: Record<string, { provider: string; scopes: string[
       'https://www.googleapis.com/auth/userinfo.email',
     ],
   },
+  'google-docs': {
+    provider: 'google',
+    scopes: [
+      'https://www.googleapis.com/auth/documents',
+      'https://www.googleapis.com/auth/userinfo.email',
+    ],
+  },
   slack: {
     provider: 'slack',
     scopes: ['channels:history', 'chat:write', 'users:read', 'channels:read'],
