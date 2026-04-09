@@ -27,11 +27,13 @@ import {
   UpdatePluginSchema,
   SaveLlmKeySchema,
   JobsPageSchema,
+  SessionsPageSchema,
   ToolCallsPageSchema,
   CreateTaskSchema,
   UpdateTaskSchema,
   SetSkillApprovalsSchema,
   type JobsPageInput,
+  type SessionsPageInput,
   type ToolCallsPageInput,
 } from '@/lib/schemas'
 import { SKILL_CAPABILITIES } from '@/lib/skill-templates'
@@ -465,6 +467,34 @@ export async function getJobsAction(input: JobsPageInput) {
   return { items, nextCursor, hasMore }
 }
 
+export async function getSessionsAction(input: SessionsPageInput) {
+  const parsed = SessionsPageSchema.safeParse(input)
+  if (!parsed.success) throw new Error(parsed.error.message)
+  const { cursor, limit, status, channel, agent_id } = parsed.data
+
+  const { supabase, entityId } = await requireAuthWithEntity()
+  let query = supabase
+    .from('session_summary')
+    .select('session_id, entity_id, task, original_task, channel, agent_id, chat_id, root_status, created_at, completed_at, result, error, child_count, total_input_tokens, total_output_tokens, total_duration_ms, session_status, child_agent_ids')
+    .eq('entity_id', entityId)
+    .order('created_at', { ascending: false })
+    .limit(limit + 1)
+
+  if (cursor) query = query.lt('created_at', cursor)
+  if (status) query = query.eq('session_status', status)
+  if (channel) query = query.eq('channel', channel)
+  if (agent_id) query = query.or(`agent_id.eq.${agent_id},child_agent_ids.cs.{${agent_id}}`)
+
+  const { data, error: err } = await query
+  if (err) { console.error('[actions] getSessionsAction', err.message); throw new Error('Failed to load sessions') }
+
+  const rows = data || []
+  const hasMore = rows.length > limit
+  const items = hasMore ? rows.slice(0, limit) : rows
+  const nextCursor = hasMore && items.length > 0 ? items[items.length - 1].created_at : null
+  return { items, nextCursor, hasMore }
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function getConnectorsAction(): Promise<any[]> {
   const { supabase, entityId } = await requireAuthWithEntity()
@@ -570,7 +600,7 @@ export async function getJobTraceAction(jobId: string): Promise<ActionResult<{ c
 
     const { data: childJobs } = await supabase
       .from('agent_jobs')
-      .select('id, task, result, status, total_duration_ms, chain_count, agent_id, agents(name), created_at, completed_at')
+      .select('id, task, result, status, total_duration_ms, chain_count, agent_id, agents(name), created_at, completed_at, input_tokens, output_tokens')
       .eq('parent_job_id', jobId)
       .eq('entity_id', entityId)
 

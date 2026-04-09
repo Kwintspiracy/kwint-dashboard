@@ -43,7 +43,7 @@ const NAV_ITEMS: NavGroup[] = [
   {
     section: 'Data',
     items: [
-      { href: '/jobs', label: 'Jobs', icon: ClipboardText },
+      { href: '/jobs', label: 'Sessions', icon: ClipboardText },
       { href: '/memories', label: 'Memories', icon: Brain },
       { href: '/connectors', label: 'Connectors', icon: Plug },
       { href: '/skills', label: 'Skills', icon: BookOpenText },

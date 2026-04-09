@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { getJobsAction, retryJobAction, cancelPendingJobsAction, deleteFailedJobsAction, deleteJobAction, getAgentsAction, analyzeJobFailureAction, applyPromptSuggestionAction } from '@/lib/actions'
+import { getSessionsAction, retryJobAction, cancelPendingJobsAction, deleteFailedJobsAction, deleteJobAction, getAgentsAction, analyzeJobFailureAction, applyPromptSuggestionAction, getJobTraceAction } from '@/lib/actions'
 import { useRealtimeTable } from '@/hooks/useRealtimeTable'
 import { useData } from '@/hooks/useData'
 import { useJobStream } from '@/hooks/useJobStream'
@@ -73,23 +73,38 @@ function LiveJobStream({ jobId }: { jobId: string }) {
   )
 }
 
-type Job = {
-  id: string; status: string; channel: string; task: string; original_task: string | null
-  chat_id: string | null; tools_used: string[] | null; turn: number; result: string | null
-  error: string | null; chain_count: number; agent_id: string | null; created_at: string; completed_at: string | null
-  total_duration_ms: number | null; input_tokens: number | null; output_tokens: number | null
+type Session = {
+  session_id: string
+  entity_id: string
+  task: string
+  original_task: string | null
+  channel: string
+  agent_id: string | null
+  chat_id: string | null
+  root_status: string
+  created_at: string
+  completed_at: string | null
+  result: string | null
+  error: string | null
+  child_count: number
+  total_input_tokens: number
+  total_output_tokens: number
+  total_duration_ms: number
+  session_status: string
+  child_agent_ids: string[] | null
 }
-type Agent = { id: string; name: string; model: string; is_default: boolean }
 
-function statusColor(status: string): 'emerald' | 'red' | 'blue' | 'amber' | 'neutral' {
-  if (status === 'completed') return 'emerald'
-  if (status === 'failed') return 'red'
-  if (status === 'processing') return 'blue'
-  if (status === 'pending') return 'amber'
-  return 'neutral'
+type Agent = { id: string; name: string; model: string; is_default: boolean; role: string }
+
+type ChildJob = {
+  id: string; task: string; result: string | null; status: string
+  total_duration_ms: number | null; chain_count: number
+  agent_id: string | null; agents: { name: string } | null
+  created_at: string; completed_at: string | null
+  input_tokens: number | null; output_tokens: number | null
 }
 
-// Inline status pill with pulse for running jobs
+// Inline status pill with pulse for running sessions
 function StatusPill({ status }: { status: string }) {
   const configs: Record<string, { bg: string; text: string; border: string; dot: string; pulse: boolean }> = {
     completed: { bg: 'bg-emerald-950/50', text: 'text-emerald-400', border: 'border-emerald-900/50', dot: 'bg-emerald-500', pulse: false },
@@ -106,7 +121,6 @@ function StatusPill({ status }: { status: string }) {
   )
 }
 
-// Panel tab component
 function PanelTab({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (
     <button
@@ -122,15 +136,76 @@ function PanelTab({ label, active, onClick }: { label: string; active: boolean; 
   )
 }
 
-export default function JobsPage() {
+// Agent breakdown for session overview
+function SessionBreakdown({ sessionId, agentMap, agentModelMap }: { sessionId: string; agentMap: Record<string, string>; agentModelMap: Record<string, string> }) {
+  const [children, setChildren] = useState<ChildJob[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    getJobTraceAction(sessionId).then(result => {
+      if (result.ok) setChildren(result.data.children as unknown as ChildJob[])
+      setLoading(false)
+    })
+  }, [sessionId])
+
+  if (loading) return <p className="text-xs text-neutral-600">Loading breakdown...</p>
+  if (children.length === 0) return <p className="text-xs text-neutral-600">No delegations in this session.</p>
+
+  return (
+    <div className="space-y-1">
+      <p className="text-xs text-neutral-500 font-semibold uppercase tracking-wider mb-2">Agent Breakdown</p>
+      <div className="bg-neutral-900 border border-neutral-800/50 rounded-lg overflow-hidden">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b border-neutral-800/50">
+              <th className="text-left px-3 py-2 text-neutral-600 font-medium">Agent</th>
+              <th className="text-right px-3 py-2 text-neutral-600 font-medium">Tokens</th>
+              <th className="text-right px-3 py-2 text-neutral-600 font-medium">Cost</th>
+              <th className="text-right px-3 py-2 text-neutral-600 font-medium">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {children.map(child => {
+              const model = (child.agent_id && agentModelMap[child.agent_id]) || 'claude-sonnet-4-6'
+              const cost = (child.input_tokens || child.output_tokens)
+                ? estimateCost(child.input_tokens ?? 0, child.output_tokens ?? 0, model)
+                : null
+              return (
+                <tr key={child.id} className="border-b border-neutral-800/30 last:border-0">
+                  <td className="px-3 py-2">
+                    <span className="inline-flex items-center gap-1.5 text-neutral-300">
+                      <span className="w-1.5 h-1.5 rounded-full bg-violet-500/60 shrink-0" />
+                      {child.agents?.name || (child.agent_id ? agentMap[child.agent_id] || child.agent_id.slice(0, 8) : '?')}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-right font-mono text-neutral-500">
+                    {(child.input_tokens || child.output_tokens)
+                      ? `${(child.input_tokens ?? 0).toLocaleString()} / ${(child.output_tokens ?? 0).toLocaleString()}`
+                      : '—'}
+                  </td>
+                  <td className="px-3 py-2 text-right font-mono text-emerald-400">{cost ?? '—'}</td>
+                  <td className="px-3 py-2 text-right">
+                    <StatusPill status={child.status} />
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+export default function SessionsPage() {
   const { activeEntity } = useAuth()
   const eid = activeEntity?.id
 
   const [cursor, setCursor] = useState<string | null>(null)
   const [hasMore, setHasMore] = useState(false)
-  const [extraJobs, setExtraJobs] = useState<Job[]>([])
+  const [extraSessions, setExtraSessions] = useState<Session[]>([])
   const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [panelTab, setPanelTab] = useState<'task' | 'result' | 'trace'>('task')
+  const [panelTab, setPanelTab] = useState<'overview' | 'flow' | 'result'>('overview')
   const [statusFilter, setStatusFilter] = useState('')
   const [channelFilter, setChannelFilter] = useState('')
   const [agentFilter, setAgentFilter] = useState('')
@@ -139,41 +214,41 @@ export default function JobsPage() {
   const [analyzing, setAnalyzing] = useState(false)
   const [applying, setApplying] = useState(false)
 
-  const { data: agentsData = [], } = useData(['agents', eid], getAgentsAction)
+  const { data: agentsData = [] } = useData(['agents', eid], getAgentsAction)
   const agents = agentsData as Agent[]
   const agentMap: Record<string, string> = {}
   const agentModelMap: Record<string, string> = {}
   for (const a of agents) { agentMap[a.id] = a.name; agentModelMap[a.id] = a.model }
 
-  const { data: jobResult, isLoading: loading, mutate } = useData(
-    ['jobs', eid, statusFilter, channelFilter, agentFilter],
+  const { data: sessionResult, isLoading: loading, mutate } = useData(
+    ['sessions', eid, statusFilter, channelFilter, agentFilter],
     () => {
       const params: { cursor: string | null; limit: number; status?: string; channel?: string; agent_id?: string } = {
         cursor: null,
-        limit: 50,
+        limit: 30,
       }
       if (statusFilter) params.status = statusFilter
       if (channelFilter) params.channel = channelFilter
       if (agentFilter) params.agent_id = agentFilter
-      return getJobsAction(params)
+      return getSessionsAction(params)
     }
   )
 
   useEffect(() => {
-    setExtraJobs([])
+    setExtraSessions([])
     setCursor(null)
     setHasMore(false)
   }, [statusFilter, channelFilter, agentFilter])
 
   useEffect(() => {
-    if (jobResult) {
-      setCursor(jobResult.nextCursor ?? null)
-      setHasMore(jobResult.hasMore ?? false)
+    if (sessionResult) {
+      setCursor(sessionResult.nextCursor ?? null)
+      setHasMore(sessionResult.hasMore ?? false)
     }
-  }, [jobResult])
+  }, [sessionResult])
 
-  const baseJobs = jobResult?.items ?? []
-  const jobs = [...baseJobs, ...extraJobs]
+  const baseSessions = sessionResult?.items ?? []
+  const sessions = [...baseSessions, ...extraSessions] as Session[]
 
   async function loadMore() {
     if (!cursor) return
@@ -181,17 +256,17 @@ export default function JobsPage() {
     try {
       const params: { cursor: string | null; limit: number; status?: string; channel?: string; agent_id?: string } = {
         cursor,
-        limit: 50,
+        limit: 30,
       }
       if (statusFilter) params.status = statusFilter
       if (channelFilter) params.channel = channelFilter
       if (agentFilter) params.agent_id = agentFilter
-      const result = await getJobsAction(params)
-      setExtraJobs(prev => [...prev, ...result.items])
+      const result = await getSessionsAction(params)
+      setExtraSessions(prev => [...prev, ...result.items as Session[]])
       setCursor(result.nextCursor ?? null)
       setHasMore(result.hasMore ?? false)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to load more jobs')
+      toast.error(err instanceof Error ? err.message : 'Failed to load more sessions')
     } finally {
       setBusy(false)
     }
@@ -203,8 +278,8 @@ export default function JobsPage() {
     onUpdate: () => mutate(),
   })
 
-  const stuckCount = jobs.filter(j => ['pending', 'processing', 'awaiting_delegation'].includes(j.status)).length
-  const failedCount = jobs.filter(j => j.status === 'failed').length
+  const stuckCount = sessions.filter(s => ['pending', 'processing'].includes(s.session_status)).length
+  const failedCount = sessions.filter(s => s.session_status === 'failed').length
   const activeFilterCount = [statusFilter, channelFilter, agentFilter].filter(Boolean).length
 
   async function act(fn: () => Promise<void>) {
@@ -214,23 +289,23 @@ export default function JobsPage() {
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Action failed')
     } finally {
-      setExtraJobs([])
+      setExtraSessions([])
       mutate()
       setBusy(false)
     }
   }
 
-  function openPanel(jobId: string) {
+  function openPanel(sessionId: string) {
     setSuggestion(null)
-    setPanelTab('task')
-    setExpandedId(jobId)
+    setPanelTab('overview')
+    setExpandedId(sessionId)
   }
 
   if (loading) return <TableSkeleton rows={8} cols={7} />
 
   return (
     <div className="space-y-5 max-w-7xl">
-      <PageHeader title="Jobs" count={jobs.length}>
+      <PageHeader title="Sessions" count={sessions.length}>
         {stuckCount > 0 && (
           <button
             disabled={busy}
@@ -268,7 +343,7 @@ export default function JobsPage() {
           className="bg-neutral-900 border border-neutral-800/60 rounded-lg px-3 py-1.5 text-xs text-neutral-300 focus:border-neutral-600 focus:outline-none transition-colors duration-150 cursor-pointer hover:border-neutral-700"
         >
           <option value="">All agents</option>
-          {agents.map(a => (
+          {agents.filter(a => a.role !== 'system').map(a => (
             <option key={a.id} value={a.id}>{a.name}{a.is_default ? ' (default)' : ''}</option>
           ))}
         </select>
@@ -304,7 +379,7 @@ export default function JobsPage() {
         )}
       </div>
 
-      {/* Jobs table */}
+      {/* Sessions table */}
       <div className="bg-neutral-900 border border-neutral-800/60 rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -313,61 +388,64 @@ export default function JobsPage() {
                 <th className="text-left px-5 py-3 text-xs text-neutral-500 font-semibold uppercase tracking-wider">Status</th>
                 <th className="text-left px-5 py-3 text-xs text-neutral-500 font-semibold uppercase tracking-wider hidden md:table-cell">Agent</th>
                 <th className="text-left px-5 py-3 text-xs text-neutral-500 font-semibold uppercase tracking-wider hidden md:table-cell">Channel</th>
-                <th className="text-left px-5 py-3 text-xs text-neutral-500 font-semibold uppercase tracking-wider">Task</th>
-                <th className="text-left px-5 py-3 text-xs text-neutral-500 font-semibold uppercase tracking-wider hidden lg:table-cell">Result</th>
+                <th className="text-left px-5 py-3 text-xs text-neutral-500 font-semibold uppercase tracking-wider">Request</th>
+                <th className="text-center px-5 py-3 text-xs text-neutral-500 font-semibold uppercase tracking-wider hidden lg:table-cell">Jobs</th>
                 <th className="text-right px-5 py-3 text-xs text-neutral-500 font-semibold uppercase tracking-wider hidden xl:table-cell">Cost</th>
                 <th className="text-right px-5 py-3 text-xs text-neutral-500 font-semibold uppercase tracking-wider">Duration</th>
               </tr>
             </thead>
             <tbody>
-              {jobs.map((job) => {
-                const durMs = job.total_duration_ms ?? (job.completed_at
-                  ? new Date(job.completed_at).getTime() - new Date(job.created_at).getTime()
-                  : null)
-                const jobModel = (job.agent_id && agentModelMap[job.agent_id]) || 'claude-sonnet-4-6'
-                const jobCost = (job.input_tokens || job.output_tokens)
-                  ? estimateCost(job.input_tokens ?? 0, job.output_tokens ?? 0, jobModel)
+              {sessions.map((session) => {
+                const durMs = session.total_duration_ms || null
+                const sessionModel = (session.agent_id && agentModelMap[session.agent_id]) || 'claude-sonnet-4-6'
+                const sessionCost = (session.total_input_tokens || session.total_output_tokens)
+                  ? estimateCost(session.total_input_tokens ?? 0, session.total_output_tokens ?? 0, sessionModel)
                   : null
-                const isExpanded = expandedId === job.id
+                const isExpanded = expandedId === session.session_id
+                const jobCount = (session.child_count ?? 0) + 1
                 return (
                   <tr
-                    key={job.id}
+                    key={session.session_id}
                     role="button"
                     tabIndex={0}
                     className={`border-b border-neutral-800/40 transition-colors duration-150 cursor-pointer focus:outline-none focus:ring-1 focus:ring-violet-500/30 ${
                       isExpanded ? 'bg-neutral-800/40' : 'hover:bg-neutral-800/25'
                     }`}
-                    onClick={() => openPanel(job.id)}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPanel(job.id) } }}
+                    onClick={() => openPanel(session.session_id)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPanel(session.session_id) } }}
                   >
                     <td className="px-5 py-3">
-                      <StatusPill status={job.status} />
+                      <StatusPill status={session.session_status} />
                     </td>
                     <td className="hidden md:table-cell px-5 py-3">
-                      {job.agent_id ? (
+                      {session.agent_id ? (
                         <span className="inline-flex items-center gap-1.5 text-xs text-neutral-400">
                           <span className="w-1.5 h-1.5 rounded-full bg-violet-500/60 shrink-0" />
-                          {agentMap[job.agent_id] || job.agent_id.slice(0, 8)}
+                          {agentMap[session.agent_id] || session.agent_id.slice(0, 8)}
                         </span>
                       ) : <span className="text-neutral-600 text-xs">—</span>}
                     </td>
                     <td className="hidden md:table-cell px-5 py-3">
-                      <Badge label={job.channel === 'api' ? 'Dashboard' : job.channel} color="neutral" />
+                      <Badge label={session.channel === 'api' ? 'Dashboard' : session.channel} color="neutral" />
                     </td>
                     <td className="px-5 py-3 max-w-[300px]">
-                      <span className="text-neutral-300 text-sm truncate block" title={job.original_task ?? job.task}>{truncate(job.original_task ?? job.task, 60)}</span>
+                      <span className="text-neutral-300 text-sm truncate block" title={session.original_task ?? session.task}>{truncate(session.original_task ?? session.task, 60)}</span>
                     </td>
-                    <td className="hidden lg:table-cell px-5 py-3 max-w-[200px]">
-                      {job.result
-                        ? <span className="text-neutral-500 text-xs truncate block" title={job.result}>{job.result.length > 60 ? job.result.slice(0, 60) + '…' : job.result}</span>
-                        : <span className="text-neutral-700 text-xs">—</span>}
+                    <td className="hidden lg:table-cell px-5 py-3 text-center">
+                      {jobCount > 1 ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-violet-950/40 border border-violet-900/30 text-xs font-medium text-violet-400">
+                          {jobCount}
+                        </span>
+                      ) : (
+                        <span className="text-neutral-700 text-xs">1</span>
+                      )}
                     </td>
                     <td className="hidden xl:table-cell px-5 py-3 text-right">
-                      <span className="font-mono text-xs text-neutral-500">{jobCost ?? '—'}</span>
+                      <span className="font-mono text-xs text-neutral-500">{sessionCost ?? '—'}</span>
                     </td>
                     <td className="px-5 py-3 text-right">
                       <span className="font-mono text-xs text-neutral-500">
-                        {durMs ? formatDuration(durMs) : timeAgo(job.created_at)}
+                        {durMs ? formatDuration(durMs) : timeAgo(session.created_at)}
                       </span>
                     </td>
                   </tr>
@@ -376,7 +454,7 @@ export default function JobsPage() {
             </tbody>
           </table>
         </div>
-        {jobs.length === 0 && <EmptyState message="No jobs found" />}
+        {sessions.length === 0 && <EmptyState message="No sessions found" />}
       </div>
 
       {/* Side panel backdrop */}
@@ -389,28 +467,33 @@ export default function JobsPage() {
 
       {/* Side panel */}
       {(() => {
-        const job = jobs.find(j => j.id === expandedId) ?? null
+        const session = sessions.find(s => s.session_id === expandedId) ?? null
         return (
           <div className={`fixed top-0 right-0 h-full w-[520px] max-w-[calc(100vw-2rem)] z-50 flex flex-col bg-[#0f0f0f] border-l border-neutral-800/80 shadow-2xl transition-transform duration-300 ease-in-out ${expandedId ? 'translate-x-0' : 'translate-x-full'}`}>
-            {job && (
+            {session && (
               <>
                 {/* Header */}
                 <div className="flex items-start justify-between px-5 pt-5 pb-4 border-b border-neutral-800/60 shrink-0">
                   <div className="flex-1 min-w-0 space-y-2">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <StatusPill status={job.status} />
-                      {job.agent_id && (
+                      <StatusPill status={session.session_status} />
+                      {session.agent_id && (
                         <span className="inline-flex items-center gap-1.5 text-xs text-neutral-500">
                           <span className="w-1.5 h-1.5 rounded-full bg-violet-500/60" />
-                          {agentMap[job.agent_id] || job.agent_id.slice(0, 8)}
+                          {agentMap[session.agent_id] || session.agent_id.slice(0, 8)}
                         </span>
                       )}
-                      <Badge label={job.channel} color="neutral" />
+                      <Badge label={session.channel} color="neutral" />
+                      {(session.child_count ?? 0) > 0 && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-violet-950/40 border border-violet-900/30 text-xs font-medium text-violet-400">
+                          {(session.child_count ?? 0) + 1} jobs
+                        </span>
+                      )}
                     </div>
-                    <p className="text-sm text-neutral-200 font-medium leading-snug truncate pr-4" title={job.original_task ?? job.task}>
-                      {truncate(job.original_task ?? job.task, 80)}
+                    <p className="text-sm text-neutral-200 font-medium leading-snug truncate pr-4" title={session.original_task ?? session.task}>
+                      {truncate(session.original_task ?? session.task, 80)}
                     </p>
-                    <p className="text-xs text-neutral-600">{timeAgo(job.created_at)}</p>
+                    <p className="text-xs text-neutral-600">{timeAgo(session.created_at)}</p>
                   </div>
                   <button
                     onClick={() => { setExpandedId(null); setSuggestion(null) }}
@@ -423,46 +506,45 @@ export default function JobsPage() {
 
                 {/* Tab bar */}
                 <div className="flex border-b border-neutral-800/60 shrink-0 px-1">
-                  <PanelTab label="Task" active={panelTab === 'task'} onClick={() => setPanelTab('task')} />
+                  <PanelTab label="Overview" active={panelTab === 'overview'} onClick={() => setPanelTab('overview')} />
+                  <PanelTab label="Flow" active={panelTab === 'flow'} onClick={() => setPanelTab('flow')} />
                   <PanelTab label="Result" active={panelTab === 'result'} onClick={() => setPanelTab('result')} />
-                  <PanelTab label="Trace" active={panelTab === 'trace'} onClick={() => setPanelTab('trace')} />
                 </div>
 
                 {/* Scrollable content */}
                 <div className="flex-1 overflow-y-auto px-5 py-5 space-y-5">
 
-                  {/* Task tab */}
-                  {panelTab === 'task' && (
+                  {/* Overview tab */}
+                  {panelTab === 'overview' && (
                     <>
                       <div>
-                        <p className="text-xs text-neutral-500 font-semibold uppercase tracking-wider mb-2">Task</p>
-                        <pre className="text-sm text-neutral-300 whitespace-pre-wrap bg-neutral-900 rounded-lg p-4 border border-neutral-800/60 leading-relaxed">{job.original_task ?? job.task}</pre>
+                        <p className="text-xs text-neutral-500 font-semibold uppercase tracking-wider mb-2">Request</p>
+                        <pre className="text-sm text-neutral-300 whitespace-pre-wrap bg-neutral-900 rounded-lg p-4 border border-neutral-800/60 leading-relaxed">{session.original_task ?? session.task}</pre>
                       </div>
 
-                      {/* Meta info row */}
+                      {/* Session stats grid */}
                       {(() => {
-                        const panelModel = (job.agent_id && agentModelMap[job.agent_id]) || 'claude-sonnet-4-6'
-                        const panelCost = (job.input_tokens || job.output_tokens)
-                          ? estimateCost(job.input_tokens ?? 0, job.output_tokens ?? 0, panelModel)
+                        const panelModel = (session.agent_id && agentModelMap[session.agent_id]) || 'claude-sonnet-4-6'
+                        const panelCost = (session.total_input_tokens || session.total_output_tokens)
+                          ? estimateCost(session.total_input_tokens ?? 0, session.total_output_tokens ?? 0, panelModel)
                           : null
-                        const panelDurMs = job.total_duration_ms ?? (job.completed_at
-                          ? new Date(job.completed_at).getTime() - new Date(job.created_at).getTime()
-                          : null)
+                        const panelDurMs = session.total_duration_ms || null
+                        const jobCount = (session.child_count ?? 0) + 1
                         return (
                           <div className="grid grid-cols-2 gap-2 text-xs">
                             <div className="bg-neutral-900 border border-neutral-800/50 rounded-lg px-3 py-2.5">
-                              <p className="text-xs text-neutral-600 uppercase tracking-wider mb-0.5">Job ID</p>
+                              <p className="text-xs text-neutral-600 uppercase tracking-wider mb-0.5">Session ID</p>
                               <button
                                 className="font-mono text-neutral-400 hover:text-neutral-200 transition-colors text-left"
                                 title="Click to copy"
-                                onClick={() => { navigator.clipboard.writeText(job.id); toast.success('ID copied') }}
+                                onClick={() => { navigator.clipboard.writeText(session.session_id); toast.success('ID copied') }}
                               >
-                                {job.id.slice(0, 8)}…
+                                {session.session_id.slice(0, 8)}…
                               </button>
                             </div>
                             <div className="bg-neutral-900 border border-neutral-800/50 rounded-lg px-3 py-2.5">
-                              <p className="text-xs text-neutral-600 uppercase tracking-wider mb-0.5">Turns / Chains</p>
-                              <p className="font-mono text-neutral-400">{job.turn} / {job.chain_count}</p>
+                              <p className="text-xs text-neutral-600 uppercase tracking-wider mb-0.5">Jobs</p>
+                              <p className="font-mono text-neutral-400">{jobCount} job{jobCount > 1 ? 's' : ''}</p>
                             </div>
                             {panelDurMs ? (
                               <div className="bg-neutral-900 border border-neutral-800/50 rounded-lg px-3 py-2.5">
@@ -470,54 +552,61 @@ export default function JobsPage() {
                                 <p className="font-mono text-neutral-400">{formatDuration(panelDurMs)}</p>
                               </div>
                             ) : null}
-                            {(job.input_tokens || job.output_tokens) ? (
+                            {(session.total_input_tokens || session.total_output_tokens) ? (
                               <div className="bg-neutral-900 border border-neutral-800/50 rounded-lg px-3 py-2.5">
-                                <p className="text-xs text-neutral-600 uppercase tracking-wider mb-0.5">Tokens</p>
+                                <p className="text-xs text-neutral-600 uppercase tracking-wider mb-0.5">Total Tokens</p>
                                 <p className="font-mono text-neutral-400">
-                                  <span title="input">{(job.input_tokens ?? 0).toLocaleString()}</span>
+                                  <span title="input">{(session.total_input_tokens ?? 0).toLocaleString()}</span>
                                   <span className="text-neutral-700"> / </span>
-                                  <span title="output">{(job.output_tokens ?? 0).toLocaleString()}</span>
+                                  <span title="output">{(session.total_output_tokens ?? 0).toLocaleString()}</span>
                                 </p>
                               </div>
                             ) : null}
                             {panelCost ? (
                               <div className="bg-neutral-900 border border-neutral-800/50 rounded-lg px-3 py-2.5">
-                                <p className="text-xs text-neutral-600 uppercase tracking-wider mb-0.5">Cost</p>
+                                <p className="text-xs text-neutral-600 uppercase tracking-wider mb-0.5">Total Cost</p>
                                 <p className="font-mono text-emerald-400 font-semibold">{panelCost}</p>
                               </div>
                             ) : null}
-                            {job.chat_id && (
+                            {session.chat_id && (
                               <div className="bg-neutral-900 border border-neutral-800/50 rounded-lg px-3 py-2.5">
                                 <p className="text-xs text-neutral-600 uppercase tracking-wider mb-0.5">Chat ID</p>
-                                <p className="font-mono text-neutral-400 truncate">{job.chat_id}</p>
+                                <p className="font-mono text-neutral-400 truncate">{session.chat_id}</p>
                               </div>
                             )}
-                            {job.tools_used?.length ? (
-                              <div className="bg-neutral-900 border border-neutral-800/50 rounded-lg px-3 py-2.5 col-span-2">
-                                <p className="text-xs text-neutral-600 uppercase tracking-wider mb-0.5">Tools used</p>
-                                <p className="text-neutral-400 font-mono">{job.tools_used.join(', ')}</p>
-                              </div>
-                            ) : null}
                           </div>
                         )
                       })()}
 
-                      {job.status === 'processing' && (
+                      {/* Agent breakdown */}
+                      {(session.child_count ?? 0) > 0 && (
+                        <SessionBreakdown sessionId={session.session_id} agentMap={agentMap} agentModelMap={agentModelMap} />
+                      )}
+
+                      {session.session_status === 'processing' && (
                         <div className="border-t border-neutral-800/50 pt-4">
                           <p className="text-xs text-neutral-500 font-semibold uppercase tracking-wider mb-3">Live Progress</p>
-                          <LiveJobStream jobId={job.id} />
+                          <LiveJobStream jobId={session.session_id} />
                         </div>
                       )}
                     </>
                   )}
 
+                  {/* Flow tab */}
+                  {panelTab === 'flow' && (
+                    <div>
+                      <p className="text-xs text-neutral-500 font-semibold uppercase tracking-wider mb-3">Execution Flow</p>
+                      <TraceTree jobId={session.session_id} />
+                    </div>
+                  )}
+
                   {/* Result tab */}
                   {panelTab === 'result' && (
                     <>
-                      {job.result ? (
+                      {session.result ? (
                         <div>
                           <p className="text-xs text-neutral-500 font-semibold uppercase tracking-wider mb-2">Result</p>
-                          <pre className="text-sm text-neutral-300 whitespace-pre-wrap bg-neutral-900 rounded-lg p-4 border border-neutral-800/60 max-h-96 overflow-auto leading-relaxed">{job.result}</pre>
+                          <pre className="text-sm text-neutral-300 whitespace-pre-wrap bg-neutral-900 rounded-lg p-4 border border-neutral-800/60 max-h-96 overflow-auto leading-relaxed">{session.result}</pre>
                         </div>
                       ) : (
                         <div className="flex items-center justify-center py-12 text-neutral-600 text-sm">
@@ -525,10 +614,10 @@ export default function JobsPage() {
                         </div>
                       )}
 
-                      {job.error && (
+                      {session.error && (
                         <div>
                           <p className="text-xs text-red-400 font-semibold uppercase tracking-wider mb-2">Error</p>
-                          <pre className="text-sm text-red-300 whitespace-pre-wrap bg-red-950/20 rounded-lg p-4 border border-red-900/40 leading-relaxed">{job.error}</pre>
+                          <pre className="text-sm text-red-300 whitespace-pre-wrap bg-red-950/20 rounded-lg p-4 border border-red-900/40 leading-relaxed">{session.error}</pre>
                         </div>
                       )}
 
@@ -547,9 +636,9 @@ export default function JobsPage() {
                             <button
                               disabled={applying}
                               onClick={async () => {
-                                if (!job.agent_id) return
+                                if (!session.agent_id) return
                                 setApplying(true)
-                                const result = await applyPromptSuggestionAction(job.agent_id, suggestion.suggestion)
+                                const result = await applyPromptSuggestionAction(session.agent_id, suggestion.suggestion)
                                 setApplying(false)
                                 if (!result.ok) toast.error(result.error ?? 'Failed to apply suggestion')
                                 else { toast.success('Prompt updated'); setSuggestion(null) }
@@ -569,38 +658,30 @@ export default function JobsPage() {
                       )}
                     </>
                   )}
-
-                  {/* Trace tab */}
-                  {panelTab === 'trace' && (
-                    <div>
-                      <p className="text-xs text-neutral-500 font-semibold uppercase tracking-wider mb-3">Execution Trace</p>
-                      <TraceTree jobId={job.id} />
-                    </div>
-                  )}
                 </div>
 
                 {/* Footer actions */}
                 <div className="flex gap-2 px-5 py-4 border-t border-neutral-800/60 shrink-0">
-                  {job.status === 'failed' && (
+                  {session.session_status === 'failed' && (
                     <>
                       <button
                         disabled={busy}
                         onClick={() => act(async () => {
-                          const result = await retryJobAction(job.task)
-                          if (!result.ok) toast.error(result.error ?? 'Failed to retry job')
-                          else toast.success('Job retried')
+                          const result = await retryJobAction(session.task)
+                          if (!result.ok) toast.error(result.error ?? 'Failed to retry')
+                          else toast.success('Session retried')
                         })}
                         className="px-4 py-2 text-xs font-semibold bg-white text-black rounded-lg hover:bg-neutral-200 active:bg-neutral-300 active:scale-[0.97] transition-all duration-150 disabled:opacity-50"
                       >
                         Retry
                       </button>
                       <button
-                        disabled={analyzing || !job.agent_id}
+                        disabled={analyzing || !session.agent_id}
                         onClick={async () => {
                           setSuggestion(null)
                           setAnalyzing(true)
                           setPanelTab('result')
-                          const result = await analyzeJobFailureAction(job.id)
+                          const result = await analyzeJobFailureAction(session.session_id)
                           setAnalyzing(false)
                           if (!result.ok) toast.error(result.error ?? 'Analysis failed')
                           else setSuggestion(result.data)
@@ -613,10 +694,10 @@ export default function JobsPage() {
                   )}
                   <button
                     onClick={() => act(async () => {
-                      if (confirm('Delete?')) {
-                        const result = await deleteJobAction(job.id)
-                        if (!result.ok) toast.error(result.error ?? 'Failed to delete job')
-                        else { toast.success('Job deleted'); setExpandedId(null) }
+                      if (confirm('Delete this session and all its jobs?')) {
+                        const result = await deleteJobAction(session.session_id)
+                        if (!result.ok) toast.error(result.error ?? 'Failed to delete')
+                        else { toast.success('Session deleted'); setExpandedId(null) }
                       }
                     })}
                     className="ml-auto px-4 py-2 text-xs font-medium border border-neutral-800 text-neutral-500 rounded-lg hover:border-red-800/60 hover:text-red-400 transition-colors duration-150"

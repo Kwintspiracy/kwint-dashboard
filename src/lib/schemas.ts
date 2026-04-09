@@ -165,6 +165,16 @@ export const JobsPageSchema = z.object({
 
 export type JobsPageInput = z.infer<typeof JobsPageSchema>
 
+export const SessionsPageSchema = z.object({
+  cursor: z.string().nullable().optional(),
+  limit: z.number().int().min(1).max(200).default(30),
+  status: z.string().nullable().optional(),
+  channel: z.string().nullable().optional(),
+  agent_id: z.string().nullable().optional(),
+})
+
+export type SessionsPageInput = z.infer<typeof SessionsPageSchema>
+
 export const ToolCallsPageSchema = z.object({
   cursor: z.string().nullable().optional(),
   limit: z.number().int().min(1).max(200).default(100),

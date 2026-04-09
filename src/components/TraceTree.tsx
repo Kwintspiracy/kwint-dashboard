@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { getJobTraceAction } from '@/lib/actions'
+import { estimateCost } from '@/lib/utils'
 import Badge from '@/components/Badge'
 
 type ToolCall = {
@@ -14,6 +15,7 @@ type ChildJob = {
   total_duration_ms: number | null; chain_count: number
   agent_id: string | null; agents: { name: string } | null
   created_at: string; completed_at: string | null
+  input_tokens: number | null; output_tokens: number | null
 }
 
 // Recursive: renders one job's tool calls + its delegated children
@@ -120,6 +122,11 @@ function JobTrace({ jobId, depth = 0 }: { jobId: string; depth?: number }) {
                           color={matchedChild.status === 'completed' ? 'emerald' : matchedChild.status === 'failed' ? 'red' : 'amber'}
                         />
                       )}
+                      {isDelegation && matchedChild && (matchedChild.input_tokens || matchedChild.output_tokens) ? (
+                        <span className="text-xs font-mono text-emerald-600">
+                          {estimateCost(matchedChild.input_tokens ?? 0, matchedChild.output_tokens ?? 0)}
+                        </span>
+                      ) : null}
                     </div>
                     {/* Duration bar */}
                     <div className="mt-1 h-1 bg-neutral-800 rounded-full overflow-hidden">
@@ -189,6 +196,11 @@ function JobTrace({ jobId, depth = 0 }: { jobId: string; depth?: number }) {
                   {child.total_duration_ms != null && child.total_duration_ms > 0 && (
                     <span className="text-xs text-neutral-600">{child.total_duration_ms}ms</span>
                   )}
+                  {(child.input_tokens || child.output_tokens) ? (
+                    <span className="text-xs font-mono text-emerald-600">
+                      {estimateCost(child.input_tokens ?? 0, child.output_tokens ?? 0)}
+                    </span>
+                  ) : null}
                   {child.chain_count > 0 && (
                     <span className="text-xs text-neutral-600">{child.chain_count + 1} chains</span>
                   )}
