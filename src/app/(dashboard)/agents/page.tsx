@@ -1461,8 +1461,8 @@ export default function AgentsPage() {
                   className="w-full bg-neutral-950/60 border border-neutral-800 rounded-lg px-4 py-3 text-sm text-neutral-200 leading-relaxed focus:border-neutral-600 focus:outline-none transition-colors resize-y"
                 />
 
-                {/* Team block preview */}
-                {form.role === 'orchestrator' && (() => {
+                {/* Team block preview — only after assignments loaded */}
+                {form.role === 'orchestrator' && !loadingEditId && (() => {
                   const teamAgents = agents.filter(a => {
                     if (a.id === editingId) return false
                     if (assignedAgentIds.length > 0) return assignedAgentIds.includes(a.id)
@@ -1512,15 +1512,11 @@ export default function AgentsPage() {
 
             {/* Loading skeleton for all assignment sections */}
             {loadingEditId && (
-              <div className="space-y-5 pt-2">
-                {['Skills', 'Orchestrator', 'Team'].map(label => (
-                  <div key={label}>
-                    <div className="h-3 w-16 bg-neutral-800/60 rounded animate-pulse mb-3" />
-                    <div className="space-y-2">
-                      {[1,2,3].map(i => (
-                        <div key={i} className="h-8 bg-neutral-800/40 rounded-lg animate-pulse" />
-                      ))}
-                    </div>
+              <div className="space-y-4 pt-2">
+                {[1,2,3,4,5].map(i => (
+                  <div key={i} className="space-y-2">
+                    <div className="h-3 rounded animate-pulse bg-neutral-800/60" style={{ width: `${50 + i * 10}px` }} />
+                    <div className="h-9 bg-neutral-800/40 rounded-lg animate-pulse" />
                   </div>
                 ))}
               </div>
