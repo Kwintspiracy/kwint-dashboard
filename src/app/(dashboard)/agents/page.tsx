@@ -280,7 +280,7 @@ function AgentHierarchyRow({
   )
 
   const dot = (
-    <span className={`rounded-full flex-shrink-0 ring-2 ring-offset-1 ring-offset-neutral-900 ${isUnassigned ? 'w-1.5 h-1.5' : 'w-2 h-2'} ${agent.active ? (isOrch ? 'bg-sky-400 ring-sky-700/50' : 'bg-emerald-400 ring-emerald-700/50') : 'bg-neutral-600 ring-neutral-700/50'}`} />
+    <span className={`rounded-full flex-shrink-0 ring-2 ring-offset-1 ring-offset-neutral-900 ${isUnassigned ? 'w-1.5 h-1.5' : 'w-2 h-2'} ${agent.active ? (agent.role === 'system' ? 'bg-amber-400 ring-amber-700/50' : isOrch ? 'bg-sky-400 ring-sky-700/50' : 'bg-emerald-400 ring-emerald-700/50') : 'bg-neutral-600 ring-neutral-700/50'}`} />
   )
 
   if (isUnassigned) {
@@ -312,6 +312,7 @@ function AgentHierarchyRow({
         {dragHandle}{dot}
         <span className="text-sm font-medium text-neutral-200 group-hover:text-white transition-colors">{agent.name}</span>
         {isOrch && <span className="text-xs px-2 py-1 rounded-full bg-sky-950/60 border border-sky-800/40 text-sky-400 font-medium leading-tight">orchestrator</span>}
+        {agent.role === 'system' && <span className="text-xs px-2 py-1 rounded-full bg-amber-950/60 border border-amber-800/40 text-amber-400 font-medium leading-tight">system</span>}
         {isOver && isDraggingAny ? (
           <span className="ml-auto text-xs px-2 py-0.5 rounded bg-violet-900/60 text-violet-300 border border-violet-700/40 font-medium">assign here →</span>
         ) : (
@@ -903,8 +904,8 @@ export default function AgentsPage() {
         }
 
         const roots = agents.filter(a => a.role === 'orchestrator' && !assignedAsSubIds.has(a.id)).map(a => buildNode(a.id))
+        const systemRoots = agents.filter(a => a.role === 'system').map(a => buildNode(a.id))
         const unassigned = agents.filter(a => !assignedAsSubIds.has(a.id) && a.role !== 'orchestrator' && a.role !== 'system')
-        const systemAgents = agents.filter(a => a.role === 'system')
         const draggingAgent = hierarchyDraggingId ? agentMap.get(hierarchyDraggingId) : null
 
         function renderNode(node: HNode, depth: number): React.ReactNode {
@@ -1018,6 +1019,7 @@ export default function AgentsPage() {
                 {roots.length > 0 && (
                   <div className="py-3 space-y-1">
                     {roots.map(node => renderNode(node, 0))}
+                    {systemRoots.map(node => renderNode(node, 0))}
                   </div>
                 )}
                 {unassigned.length > 0 && (
@@ -1036,32 +1038,6 @@ export default function AgentsPage() {
                         ))}
                       </div>
                     </div>
-                    {systemAgents.length > 0 && (
-                      <>
-                        <div className="border-t border-neutral-800/50 mx-4" />
-                        <div className="px-4 py-3">
-                          <p className="text-xs text-amber-600/80 font-semibold uppercase tracking-wide mb-2">System</p>
-                          <div className="space-y-0.5">
-                            {systemAgents.map(a => (
-                              <div key={a.id} className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-amber-900/5 border border-amber-900/20">
-                                <span className="w-2 h-2 rounded-full bg-amber-400 ring-2 ring-amber-700/50 ring-offset-1 ring-offset-neutral-900" />
-                                <span className="text-sm font-medium text-neutral-200 flex-1">{a.name}</span>
-                                <span className="text-xs text-amber-600/60 font-mono">system</span>
-                                <button
-                                  onClick={() => startEdit(a)}
-                                  className="p-1 rounded text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800 transition-colors"
-                                  title="Edit instructions"
-                                >
-                                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                  </svg>
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </>
-                    )}
                   </>
                 )}
               </DroppableRootZone>
