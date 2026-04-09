@@ -98,6 +98,12 @@ function modelDisplayLabel(value: string): string {
   const provider = getProviderForModel(value)
   const model = provider?.models.find((m) => m.value === value)
   if (!model) return value
+  return model.label
+}
+function modelFullLabel(value: string): string {
+  const provider = getProviderForModel(value)
+  const model = provider?.models.find((m) => m.value === value)
+  if (!model) return value
   return `${provider!.name} — ${model.label}`
 }
 
@@ -758,30 +764,27 @@ export default function AgentsPage() {
                     />
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex items-center gap-2 min-w-0">
                       {/* Avatar or status dot */}
                       {a.avatar_url ? (
                         <img src={a.avatar_url} alt="" className="w-6 h-6 object-contain shrink-0" />
                       ) : (
                         <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${a.active ? (a.role === 'orchestrator' ? 'bg-sky-400' : 'bg-emerald-400') : 'bg-neutral-600'}`} />
                       )}
-                      <span className="font-medium text-white text-sm leading-none">{a.name}</span>
+                      <span className="font-medium text-white text-sm leading-none truncate">{a.name}</span>
                       {a.is_default && (
-                        <span className="text-xs px-2 py-1 rounded-full bg-emerald-950/60 text-emerald-400 border border-emerald-800/40 leading-tight">default</span>
+                        <span className="text-xs px-1.5 py-0.5 rounded-full bg-emerald-950/60 text-emerald-400 border border-emerald-800/40 leading-tight shrink-0">default</span>
                       )}
                       {(() => {
-                        // Derive live skill names from current assignments (avoids stale capabilities field)
                         const assignedSlugs = skillMap[a.id] ?? []
                         const assignedSkills = skills.filter(s => assignedSlugs.includes(s.slug))
                         if (assignedSkills.length === 0) return null
-                        return <>
-                          {assignedSkills.slice(0, 2).map(s => (
-                            <span key={s.id} className="px-1.5 py-0.5 text-xs font-medium bg-violet-950/60 text-violet-400 border border-violet-800/40 rounded leading-tight">{s.name}</span>
-                          ))}
-                          {assignedSkills.length > 2 && (
-                            <span className="text-xs text-neutral-600" title={assignedSkills.slice(2).map(s => s.name).join(', ')}>+{assignedSkills.length - 2}</span>
-                          )}
-                        </>
+                        const allNames = assignedSkills.map(s => s.name).join(', ')
+                        return (
+                          <span className="text-xs text-violet-500 shrink-0" title={allNames}>
+                            {assignedSkills.length} skill{assignedSkills.length > 1 ? 's' : ''}
+                          </span>
+                        )
                       })()}
                     </div>
                   </td>
@@ -789,7 +792,7 @@ export default function AgentsPage() {
                     <span className="text-xs text-neutral-500 font-mono bg-neutral-800/50 px-2 py-0.5 rounded">{a.slug}</span>
                   </td>
                   <td className="px-4 py-3">
-                    <span className="text-xs text-neutral-500 font-mono">{modelDisplayLabel(a.model)}</span>
+                    <span className="text-xs text-neutral-500 font-mono" title={modelFullLabel(a.model)}>{modelDisplayLabel(a.model)}</span>
                   </td>
                   <td className="px-4 py-3">
                     {a.role === 'orchestrator' ? (
@@ -803,7 +806,11 @@ export default function AgentsPage() {
                   </td>
                   <td className="px-4 py-3 hidden xl:table-cell">
                     {a.telegram_bot_username ? (
-                      <Badge label={`@${a.telegram_bot_username}`} color="emerald" dot />
+                      <button
+                        title={`@${a.telegram_bot_username} — click to copy`}
+                        onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(`@${a.telegram_bot_username}`); toast.success('Copied') }}
+                        className="w-2.5 h-2.5 rounded-full bg-emerald-500 hover:ring-2 hover:ring-emerald-500/30 transition-all cursor-pointer"
+                      />
                     ) : (
                       <span className="text-neutral-700 text-xs">—</span>
                     )}
