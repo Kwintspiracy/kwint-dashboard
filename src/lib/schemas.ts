@@ -17,7 +17,7 @@ export const CreateAgentSchema = z.object({
   slug: SlugSchema,
   personality: z.string().min(1, 'Personality is required'),
   model: z.string().min(1, 'Model is required'),
-  role: z.enum(['agent', 'orchestrator']).default('agent'),
+  role: z.enum(['agent', 'orchestrator', 'system']).default('agent'),
   telegram_bot_token: z.string().nullable().optional(),
   telegram_bot_username: z.string().nullable().optional(),
   requires_approval: z.array(z.string()).nullable().optional(),
