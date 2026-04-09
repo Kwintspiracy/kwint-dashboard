@@ -755,12 +755,22 @@ export async function deleteAgentAction(id: string): Promise<ActionResult> {
   try {
     const { supabase, entityId } = await requireAuthWithEntity()
 
-    const [{ count: jobCount }, { count: memCount }] = await Promise.all([
-      supabase.from('agent_jobs').select('id', { count: 'exact', head: true }).eq('agent_id', id).eq('entity_id', entityId),
-      supabase.from('agent_memory').select('id', { count: 'exact', head: true }).eq('agent_id', id).eq('entity_id', entityId),
+    // Prevent deleting system agents
+    const { data: agent } = await supabase.from('agents').select('system_agent').eq('id', id).eq('entity_id', entityId).single()
+    if (agent?.system_agent) return fail('Cannot delete system agents')
+
+    // Cascade delete all related data
+    await Promise.all([
+      supabase.from('agent_memory').delete().eq('agent_id', id).eq('entity_id', entityId),
+      supabase.from('agent_skill_assignments').delete().eq('agent_id', id),
+      supabase.from('agent_assignments').delete().or(`orchestrator_id.eq.${id},sub_agent_id.eq.${id}`),
+      supabase.from('agent_schedules').delete().eq('agent_id', id).eq('entity_id', entityId),
+      supabase.from('agent_budgets').delete().eq('agent_id', id),
+      supabase.from('approval_rules').delete().eq('agent_id', id),
     ])
-    if ((jobCount ?? 0) > 0) return fail(`Cannot delete agent — it has ${jobCount} job(s). Delete them first.`)
-    if ((memCount ?? 0) > 0) return fail(`Cannot delete agent — it has ${memCount} memor${memCount === 1 ? 'y' : 'ies'}. Clear them first.`)
+
+    // Nullify agent_id on jobs (keep job history, just unlink)
+    await supabase.from('agent_jobs').update({ agent_id: null }).eq('agent_id', id).eq('entity_id', entityId)
 
     const { error } = await supabase.from('agents').delete().eq('id', id).eq('entity_id', entityId)
     if (error) return dbFail(error)
