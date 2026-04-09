@@ -36,11 +36,16 @@ type Agent = { id: string; name: string; slug: string; role: string; task_contex
 type Task = {
   id: string
   orchestrator_id: string
+  created_by_agent_id: string | null
+  assigned_agent_id: string | null
   title: string
   description: string | null
   status: 'todo' | 'in_progress' | 'done' | 'cancelled'
   priority: 'low' | 'medium' | 'high'
   job_id: string | null
+  input_tokens: number | null
+  output_tokens: number | null
+  cost_usd: number | null
   created_at: string
 }
 
@@ -110,6 +115,7 @@ const EMPTY_FORM = {
 
 interface TaskCardContentProps {
   task: Task
+  agentMap?: Map<string, Agent>
   editingId?: string | null
   starting?: string | null
   onStart?: (task: Task) => void
@@ -122,6 +128,7 @@ interface TaskCardContentProps {
 
 function TaskCardContent({
   task,
+  agentMap,
   editingId,
   starting,
   onStart,
@@ -130,6 +137,9 @@ function TaskCardContent({
   onDelete,
   overlay = false,
 }: TaskCardContentProps) {
+  const creatorName = task.created_by_agent_id && agentMap?.get(task.created_by_agent_id)?.name
+  const assigneeName = task.assigned_agent_id && agentMap?.get(task.assigned_agent_id)?.name
+
   return (
     <>
       {/* Title row */}
@@ -143,6 +153,30 @@ function TaskCardContent({
         <p className="text-xs text-neutral-500 leading-relaxed line-clamp-2">
           {task.description}
         </p>
+      )}
+
+      {/* Agent info row */}
+      {(creatorName || assigneeName) && (
+        <div className="flex items-center gap-2 flex-wrap">
+          {creatorName && (
+            <span className="text-xs px-1.5 py-0.5 rounded bg-sky-950/50 border border-sky-900/30 text-sky-400 font-mono">
+              by {creatorName}
+            </span>
+          )}
+          {assigneeName && (
+            <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-950/50 border border-emerald-900/30 text-emerald-400 font-mono">
+              {assigneeName}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Token/cost info for completed tasks */}
+      {task.status === 'done' && (task.input_tokens || task.output_tokens) && (
+        <div className="flex items-center gap-2 text-xs text-neutral-600 font-mono">
+          <span>{((task.input_tokens || 0) + (task.output_tokens || 0)).toLocaleString()} tokens</span>
+          {task.cost_usd && task.cost_usd > 0 && <span>${task.cost_usd.toFixed(4)}</span>}
+        </div>
       )}
 
       {/* Job chip */}
@@ -205,6 +239,7 @@ function TaskCardContent({
 
 interface DraggableTaskCardProps extends Omit<TaskCardContentProps, 'overlay'> {
   task: Task
+  agentMap?: Map<string, Agent>
 }
 
 function DraggableTaskCard(props: DraggableTaskCardProps) {
@@ -239,6 +274,24 @@ function DraggableTaskCard(props: DraggableTaskCardProps) {
             {task.description}
           </p>
         )}
+        {/* Agent info */}
+        {(() => {
+          const creator = task.created_by_agent_id && props.agentMap?.get(task.created_by_agent_id)
+          const assignee = task.assigned_agent_id && props.agentMap?.get(task.assigned_agent_id)
+          return (creator || assignee) ? (
+            <div className="flex items-center gap-2 flex-wrap">
+              {creator && <span className="text-xs px-1.5 py-0.5 rounded bg-sky-950/50 border border-sky-900/30 text-sky-400 font-mono">by {creator.name}</span>}
+              {assignee && <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-950/50 border border-emerald-900/30 text-emerald-400 font-mono">{assignee.name}</span>}
+            </div>
+          ) : null
+        })()}
+        {/* Token/cost for done tasks */}
+        {task.status === 'done' && (task.input_tokens || task.output_tokens) ? (
+          <div className="flex items-center gap-2 text-xs text-neutral-600 font-mono">
+            <span>{((task.input_tokens || 0) + (task.output_tokens || 0)).toLocaleString()} tokens</span>
+            {task.cost_usd && task.cost_usd > 0 && <span>${Number(task.cost_usd).toFixed(4)}</span>}
+          </div>
+        ) : null}
         {task.job_id && (
           <span className="self-start text-xs font-mono bg-violet-950/50 text-violet-400 px-2 py-0.5 rounded border border-violet-900/40">
             job:{task.job_id.slice(0, 8)}
@@ -295,6 +348,7 @@ function DraggableTaskCard(props: DraggableTaskCardProps) {
 interface DroppableColumnProps {
   col: (typeof COLUMNS)[number]
   colTasks: Task[]
+  agentMap: Map<string, Agent>
   editingId: string | null
   starting: string | null
   onStart: (task: Task) => void
@@ -306,6 +360,7 @@ interface DroppableColumnProps {
 function DroppableColumn({
   col,
   colTasks,
+  agentMap,
   editingId,
   starting,
   onStart,
@@ -359,6 +414,7 @@ function DroppableColumn({
           <DraggableTaskCard
             key={task.id}
             task={task}
+            agentMap={agentMap}
             editingId={editingId}
             starting={starting}
             onStart={onStart}
@@ -401,12 +457,14 @@ export default function TasksPage() {
   )
 
   const { data: agentsRaw = [] } = useData(['agents', eid], getAgentsAction)
-  const orchestrators = (agentsRaw as Agent[]).filter(a => a.role === 'orchestrator')
+  const allAgents = agentsRaw as Agent[]
+  const orchestrators = allAgents.filter(a => a.role === 'orchestrator')
+  const agentMap = new Map(allAgents.map(a => [a.id, a]))
 
-  // Auto-select first orchestrator
+  // Auto-select "all" (no filter) by default
   useEffect(() => {
     if (!orchestratorId && orchestrators.length > 0) {
-      setOrchestratorId(orchestrators[0].id)
+      setOrchestratorId('__all__')
     }
   }, [orchestrators, orchestratorId])
 
@@ -427,7 +485,7 @@ export default function TasksPage() {
   const tasksKey = orchestratorId ? (['tasks', orchestratorId] as unknown[]) : ('tasks:none' as string)
   const { data: tasksRaw = [], isLoading, mutate } = useData(
     tasksKey,
-    orchestratorId ? () => getTasksAction(orchestratorId) : async () => [],
+    orchestratorId ? () => getTasksAction(orchestratorId === '__all__' ? undefined : orchestratorId) : async () => [],
   )
   const tasks = tasksRaw as Task[]
 
@@ -593,6 +651,7 @@ export default function TasksPage() {
             onChange={e => { setOrchestratorId(e.target.value); setShowAdd(false); setEditingId(null) }}
             className="bg-neutral-900 border border-neutral-800/60 rounded-lg px-3 py-2 text-sm text-white focus:border-violet-500/50 focus:outline-none focus:ring-1 focus:ring-violet-500/30 transition-all duration-150 cursor-pointer"
           >
+            <option value="__all__">All orchestrators</option>
             {orchestrators.map(o => (
               <option key={o.id} value={o.id}>{o.name}</option>
             ))}
@@ -671,6 +730,7 @@ export default function TasksPage() {
                 key={col.key}
                 col={col}
                 colTasks={tasks.filter(t => t.status === col.key)}
+                agentMap={agentMap}
                 editingId={editingId}
                 starting={starting}
                 onStart={handleStart}

@@ -2525,14 +2525,16 @@ export async function getAllSkillAssignmentsAction(): Promise<ActionResult<{ age
 
 // ─── Task Board Actions ───────────────────────────────────────────────────────
 
-export async function getTasksAction(orchestratorId: string): Promise<unknown[]> {
+export async function getTasksAction(orchestratorId?: string): Promise<unknown[]> {
   const { supabase, entityId } = await requireAuthWithEntity()
-  const { data, error } = await supabase
+  let q = supabase
     .from('agent_tasks')
     .select('*, agents!agent_tasks_orchestrator_id_fkey(name, slug)')
     .eq('entity_id', entityId)
-    .eq('orchestrator_id', orchestratorId)
-    .order('created_at', { ascending: false })
+  if (orchestratorId) {
+    q = q.eq('orchestrator_id', orchestratorId)
+  }
+  const { data, error } = await q.order('created_at', { ascending: false })
   if (error) throw new Error(error.message)
   return data ?? []
 }
