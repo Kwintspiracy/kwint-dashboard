@@ -2,15 +2,14 @@
 
 An open-source, multi-tenant platform for building and managing teams of AI agents. Create agents with distinct personalities, connect them to 60+ services, organize them into orchestrator hierarchies, and let them learn from every task through persistent memory.
 
-## What makes it different
+## Why Kwint Agents
 
-- **Orchestrator hierarchies** — Agents delegate work to specialists. An orchestrator like "Ender" assigns tasks to "Pavel" (Job Hunt Orchestrator), who in turn delegates to "Resume Optimizer" and "Cover Letter Writer". Hierarchies are visual and drag-and-drop in the UI.
-- **Layered memory (L1-L3)** — Agents boot with ~2K tokens of context instead of dumping everything. Critical memories load first (L1), task-relevant memories on demand (L2), deep semantic search when needed (L3). Memories expire with configurable TTLs and are deduplicated automatically.
-- **Context compression** — Long conversations are compressed in-flight. A 180K-token context gets trimmed to ~10K without losing key information. Sub-agents receive zero-context delegations: just the task + structured variables, no parent history pollution.
-- **System agents** — Automated maintenance agents (Memory Guardian) run daily via cron to deduplicate memories, expire stale facts, and detect contradictions. Visible in the UI, customizable instructions, non-deletable.
-- **60+ connectors** — One-click OAuth for Google (Gmail, Sheets, Drive, Docs, Calendar), Slack, GitHub, Notion, Linear, HubSpot, Microsoft. API-key connectors for Stripe, Twilio, Tavily, and dozens more via the skill marketplace.
-- **11 LLM providers** — Anthropic (native), OpenAI, Google AI, Mistral, Groq, Cohere, DeepSeek, Together AI, OpenRouter, Ollama, Mammoth AI. Users bring their own keys or fall back to the operator's.
-- **Kanban task board** — Orchestrators create tasks on a shared board. Cards show creator agent, assignee, token usage, and cost. Tasks auto-update when jobs complete or fail.
+- **Real team dynamics, not isolated bots.** Agents work in orchestrator hierarchies — a lead delegates to specialists, who can delegate further. Drag-and-drop team building in the UI. Your AI workforce mirrors how real teams operate.
+- **Memory that actually works.** Three-layer retrieval (always-on, task-relevant, deep search) keeps context under 2K tokens per turn. Memories self-expire, auto-deduplicate, and a built-in Memory Guardian cleans up stale facts daily. No more 180K-token prompts or duplicate "lessons learned."
+- **Token costs under control.** Context compression kicks in automatically on long conversations. Sub-agents start clean with zero parent history — just the task and the variables they need. Your bill stays predictable.
+- **60+ connectors, one click.** OAuth for Google (Gmail, Sheets, Drive, Docs, Calendar), Slack, GitHub, Notion, Linear, HubSpot, Microsoft. API-key connectors for Stripe, Twilio, Tavily, and dozens more. Agents use real APIs, not fragile web scraping.
+- **Any LLM, any provider.** 11 providers supported out of the box — Anthropic, OpenAI, Google AI, Mistral, Groq, DeepSeek, and more. Users bring their own keys. No vendor lock-in.
+- **Visible, trackable work.** A shared Kanban board shows every task across all orchestrators — who created it, who's working on it, how many tokens it cost. Jobs auto-update the board on completion or failure. Nothing gets lost in agent memory.
 
 ## Architecture
 
