@@ -388,7 +388,7 @@ function DroppableRootZone({ isDraggingAny, children }: { isDraggingAny: boolean
             : 'pointer-events-none'
         }`}
       >
-        {active && <span className="text-violet-400 text-[10px] font-bold" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>root</span>}
+        {active && <span className="text-violet-400 text-xs font-bold" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>root</span>}
       </div>
       <div className={isDraggingAny ? 'pl-8' : ''}>
         {children}
@@ -772,7 +772,7 @@ export default function AgentsPage() {
                       <div className="flex items-center gap-1.5">
                         <span className="font-medium text-white text-sm truncate">{a.name}</span>
                         {a.is_default && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-950/60 text-emerald-400 border border-emerald-800/40 leading-tight shrink-0">default</span>
+                          <span className="text-xs px-1.5 py-0.5 rounded-full bg-emerald-950/60 text-emerald-400 border border-emerald-800/40 leading-tight shrink-0">default</span>
                         )}
                       </div>
                       <span className="text-xs text-neutral-600 font-mono">{a.slug}</span>
@@ -780,10 +780,10 @@ export default function AgentsPage() {
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
                     {a.role === 'orchestrator' && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-sky-950/60 text-sky-400 border border-sky-800/40 font-medium">orch</span>
+                      <span className="text-xs px-1.5 py-0.5 rounded-full bg-sky-950/60 text-sky-400 border border-sky-800/40 font-medium">orch</span>
                     )}
                     {a.role === 'system' && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-950/60 text-amber-400 border border-amber-800/40 font-medium">system</span>
+                      <span className="text-xs px-1.5 py-0.5 rounded-full bg-amber-950/60 text-amber-400 border border-amber-800/40 font-medium">system</span>
                     )}
                     <div onClick={(e) => e.stopPropagation()}>
                       <Toggle
@@ -817,7 +817,7 @@ export default function AgentsPage() {
                 {assignedSkills.length > 0 && (
                   <div className="flex flex-wrap gap-1">
                     {assignedSkills.map(s => (
-                      <span key={s.id} className="px-1.5 py-0.5 text-[10px] font-medium bg-violet-950/60 text-violet-400 border border-violet-800/40 rounded leading-tight">{s.name}</span>
+                      <span key={s.id} className="px-1.5 py-0.5 text-xs font-medium bg-violet-950/60 text-violet-400 border border-violet-800/40 rounded leading-tight">{s.name}</span>
                     ))}
                   </div>
                 )}
@@ -826,17 +826,17 @@ export default function AgentsPage() {
                 {(a.capabilities?.length > 0 && assignedSkills.length === 0) && (
                   <div className="flex flex-wrap gap-1">
                     {a.capabilities.slice(0, 4).map(c => (
-                      <span key={c} className="px-1.5 py-0.5 text-[10px] font-medium bg-neutral-800 text-neutral-500 border border-neutral-700/40 rounded leading-tight">{c}</span>
+                      <span key={c} className="px-1.5 py-0.5 text-xs font-medium bg-neutral-800 text-neutral-500 border border-neutral-700/40 rounded leading-tight">{c}</span>
                     ))}
                     {a.capabilities.length > 4 && (
-                      <span className="text-[10px] text-neutral-600">+{a.capabilities.length - 4}</span>
+                      <span className="text-xs text-neutral-600">+{a.capabilities.length - 4}</span>
                     )}
                   </div>
                 )}
 
                 {/* Footer */}
                 <div className="flex items-center justify-between pt-1 border-t border-neutral-800/40">
-                  <span className="text-[10px] text-neutral-700">{timeAgo(a.updated_at)}</span>
+                  <span className="text-xs text-neutral-700">{timeAgo(a.updated_at)}</span>
                   <div className="flex items-center gap-1">
                     {!a.is_default && (
                       <button
