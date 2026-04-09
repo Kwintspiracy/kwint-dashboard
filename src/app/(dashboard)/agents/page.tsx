@@ -443,7 +443,7 @@ export default function AgentsPage() {
   const [assignedAgentIds, setAssignedAgentIds] = useState<string[]>([])
   const [agentInstructions, setAgentInstructions] = useState<Record<string, string>>({})
   const [selectedOrchestratorId, setSelectedOrchestratorId] = useState<string | null>(null)
-  const [viewMode, setViewMode] = useState<'list' | 'hierarchy'>('list')
+  const [viewMode, setViewMode] = useState<'cards' | 'list' | 'hierarchy'>('cards')
   const [hierarchyDraggingId, setHierarchyDraggingId] = useState<string | null>(null)
   const hierarchyLastOverIdRef = useRef<string | null>(null)
   const hierarchySensors = useSensors(
@@ -709,6 +709,12 @@ export default function AgentsPage() {
         {/* View toggle — pill style */}
         <div className="flex items-center gap-0.5 bg-neutral-800 border border-neutral-700/50 rounded-lg p-1">
           <button
+            onClick={() => setViewMode('cards')}
+            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-150 ${viewMode === 'cards' ? 'bg-neutral-700 text-white shadow-sm' : 'text-neutral-500 hover:text-neutral-300'}`}
+          >
+            Cards
+          </button>
+          <button
             onClick={() => setViewMode('list')}
             className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-150 ${viewMode === 'list' ? 'bg-neutral-700 text-white shadow-sm' : 'text-neutral-500 hover:text-neutral-300'}`}
           >
@@ -734,6 +740,147 @@ export default function AgentsPage() {
           + Create agent
         </button>
       </PageHeader>
+
+      {viewMode === 'cards' && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {agents.map((a) => {
+            const assignedSlugs = skillMap[a.id] ?? []
+            const assignedSkills = skills.filter(s => assignedSlugs.includes(s.slug))
+            return (
+              <div
+                key={a.id}
+                className={`bg-neutral-900 border rounded-xl p-4 space-y-3 transition-all duration-150 cursor-pointer hover:border-neutral-600 ${
+                  a.active ? 'border-neutral-800/60' : 'border-neutral-800/30 opacity-50'
+                }`}
+                onClick={() => startEdit(a)}
+              >
+                {/* Header: avatar + name + role */}
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    {a.avatar_url ? (
+                      <img src={a.avatar_url} alt="" className="w-8 h-8 object-contain shrink-0" />
+                    ) : (
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${
+                        a.role === 'orchestrator' ? 'bg-sky-950/60 text-sky-400 border border-sky-800/40' :
+                        a.role === 'system' ? 'bg-amber-950/60 text-amber-400 border border-amber-800/40' :
+                        'bg-neutral-800 text-neutral-400 border border-neutral-700/40'
+                      }`}>
+                        {a.name.charAt(0)}
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-medium text-white text-sm truncate">{a.name}</span>
+                        {a.is_default && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-950/60 text-emerald-400 border border-emerald-800/40 leading-tight shrink-0">default</span>
+                        )}
+                      </div>
+                      <span className="text-xs text-neutral-600 font-mono">{a.slug}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {a.role === 'orchestrator' && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-sky-950/60 text-sky-400 border border-sky-800/40 font-medium">orch</span>
+                    )}
+                    {a.role === 'system' && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-950/60 text-amber-400 border border-amber-800/40 font-medium">system</span>
+                    )}
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <Toggle
+                        checked={a.active}
+                        aria-label={`Toggle ${a.name}`}
+                        onChange={async () => {
+                          const result = await updateAgentAction(a.id, { active: !a.active })
+                          if (!result.ok) { toast.error(result.error) } else { mutate() }
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Model + Telegram */}
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-neutral-500 font-mono" title={modelFullLabel(a.model)}>{modelDisplayLabel(a.model)}</span>
+                  {a.telegram_bot_username && (
+                    <button
+                      title={`@${a.telegram_bot_username} — click to copy`}
+                      onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(`@${a.telegram_bot_username}`); toast.success('Copied') }}
+                      className="inline-flex items-center gap-1 text-emerald-500 hover:text-emerald-400 transition-colors"
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                      <span className="font-mono">@{a.telegram_bot_username}</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Skills pills */}
+                {assignedSkills.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {assignedSkills.map(s => (
+                      <span key={s.id} className="px-1.5 py-0.5 text-[10px] font-medium bg-violet-950/60 text-violet-400 border border-violet-800/40 rounded leading-tight">{s.name}</span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Capabilities */}
+                {(a.capabilities?.length > 0 && assignedSkills.length === 0) && (
+                  <div className="flex flex-wrap gap-1">
+                    {a.capabilities.slice(0, 4).map(c => (
+                      <span key={c} className="px-1.5 py-0.5 text-[10px] font-medium bg-neutral-800 text-neutral-500 border border-neutral-700/40 rounded leading-tight">{c}</span>
+                    ))}
+                    {a.capabilities.length > 4 && (
+                      <span className="text-[10px] text-neutral-600">+{a.capabilities.length - 4}</span>
+                    )}
+                  </div>
+                )}
+
+                {/* Footer */}
+                <div className="flex items-center justify-between pt-1 border-t border-neutral-800/40">
+                  <span className="text-[10px] text-neutral-700">{timeAgo(a.updated_at)}</span>
+                  <div className="flex items-center gap-1">
+                    {!a.is_default && (
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation()
+                          const result = await setDefaultAgentAction(a.id)
+                          if (!result.ok) { toast.error(result.error) } else { toast.success('Default agent updated'); mutate() }
+                        }}
+                        title="Set as default"
+                        className="p-1 rounded text-neutral-600 hover:text-emerald-400 transition-colors"
+                      >
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                        </svg>
+                      </button>
+                    )}
+                    {!a.is_default && !a.system_agent && (
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation()
+                          if (!confirm('Delete this agent?')) return
+                          const result = await deleteAgentAction(a.id)
+                          if (!result.ok) { toast.error(result.error) } else { toast.success('Agent deleted'); mutate() }
+                        }}
+                        title="Delete"
+                        className="p-1 rounded text-neutral-600 hover:text-red-400 transition-colors"
+                      >
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+          {agents.length === 0 && (
+            <div className="col-span-full">
+              <EmptyState message="No agents yet" />
+            </div>
+          )}
+        </div>
+      )}
 
       {viewMode === 'list' && (
         <div className="bg-neutral-900 border border-neutral-800/60 rounded-xl overflow-x-auto">
