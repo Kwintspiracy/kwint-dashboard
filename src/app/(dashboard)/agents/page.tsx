@@ -1510,17 +1510,28 @@ export default function AgentsPage() {
               </fieldset>
             </div>
 
-            {/* Skills */}
+            {/* Loading skeleton for all assignment sections */}
+            {loadingEditId && (
+              <div className="space-y-5 pt-2">
+                {['Skills', 'Orchestrator', 'Team'].map(label => (
+                  <div key={label}>
+                    <div className="h-3 w-16 bg-neutral-800/60 rounded animate-pulse mb-3" />
+                    <div className="space-y-2">
+                      {[1,2,3].map(i => (
+                        <div key={i} className="h-8 bg-neutral-800/40 rounded-lg animate-pulse" />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Skills, Orchestrator, Team, Capabilities, Approval — all depend on loaded data */}
+            {!loadingEditId && (<>
               <section aria-labelledby="section-skills">
                 <h3 id="section-skills" className="text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-1">Skills</h3>
                 <p className="text-xs text-neutral-600 mb-2.5">Leave unchecked to allow all workspace skills.</p>
-                {loadingEditId ? (
-                  <div className="space-y-2">
-                    {[1,2,3].map(i => (
-                      <div key={i} className="h-8 bg-neutral-800/60 rounded-lg animate-pulse" />
-                    ))}
-                  </div>
-                ) : skills.length === 0 ? (
+                {skills.length === 0 ? (
                   <p className="text-xs text-neutral-600">
                     No skills yet —{' '}
                     <a href="/connectors" className="text-neutral-400 underline hover:text-white transition-colors">install from Marketplace</a>
@@ -1849,6 +1860,7 @@ export default function AgentsPage() {
                   })}
                 </div>
               </section>
+            </>)}
 
               {/* Channels */}
               <section aria-labelledby="section-channels" className="border-t border-neutral-800/50 pt-5">
