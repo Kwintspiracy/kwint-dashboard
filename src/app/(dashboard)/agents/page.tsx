@@ -749,9 +749,9 @@ export default function AgentsPage() {
             return (
               <div
                 key={a.id}
-                className={`bg-neutral-900 border rounded-xl p-4 space-y-3 transition-all duration-150 cursor-pointer hover:border-neutral-600 ${
+                className={`bg-neutral-900 border rounded-xl p-4 space-y-3 transition-all duration-150 cursor-pointer hover:border-neutral-600 relative ${
                   a.active ? 'border-neutral-800/60' : 'border-neutral-800/30 opacity-50'
-                }`}
+                } ${loadingEditId === a.id ? 'border-violet-800/60 animate-pulse' : ''}`}
                 onClick={() => startEdit(a)}
               >
                 {/* Header: avatar + name + role */}
