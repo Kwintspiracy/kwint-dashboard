@@ -371,14 +371,14 @@ function DroppableColumn({
   const { setNodeRef, isOver } = useDroppable({ id: col.key })
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col">
       {/* Column header */}
-      <div className="flex items-center gap-2 px-1 mb-1">
-        <span className="text-xs uppercase tracking-wide font-semibold text-neutral-400">
+      <div className={`flex items-center justify-between px-3 py-2.5 rounded-t-xl border-t-2 border-x border-neutral-800/40 bg-neutral-900/80 ${col.topBorder}`}>
+        <span className="text-xs uppercase tracking-wider font-semibold text-neutral-400">
           {col.label}
         </span>
         <span
-          className={`ml-1 inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-xs font-bold tabular-nums ${col.pillBg} ${col.pillText}`}
+          className={`inline-flex items-center justify-center min-w-[22px] h-5 px-1.5 rounded-full text-xs font-bold tabular-nums ${col.pillBg} ${col.pillText}`}
         >
           {colTasks.length}
         </span>
@@ -388,10 +388,9 @@ function DroppableColumn({
       <div
         ref={setNodeRef}
         className={[
-          'flex flex-col gap-2 rounded-xl p-3 min-h-[200px] bg-neutral-950/50 border-t-2 border border-neutral-800/40',
-          col.topBorder,
+          'flex flex-col gap-2.5 rounded-b-xl p-3 min-h-[280px] bg-neutral-950/30 border-x border-b border-neutral-800/40',
           'transition-colors duration-150',
-          isOver ? 'border-neutral-600 bg-neutral-900/60 ring-1 ring-neutral-600/40' : '',
+          isOver ? 'bg-neutral-900/50 ring-1 ring-neutral-600/30' : '',
         ].join(' ')}
       >
         {/* Empty state */}
@@ -456,17 +455,17 @@ export default function TasksPage() {
     }),
   )
 
-  const { data: agentsRaw = [] } = useData(['agents', eid], getAgentsAction)
-  const allAgents = agentsRaw as Agent[]
+  const { data: agentsRaw, isLoading: agentsLoading } = useData(['agents', eid], getAgentsAction)
+  const allAgents = (agentsRaw ?? []) as Agent[]
   const orchestrators = allAgents.filter(a => a.role === 'orchestrator')
   const agentMap = new Map(allAgents.map(a => [a.id, a]))
 
-  // Auto-select "all" (no filter) by default
+  // Auto-select "all" by default
   useEffect(() => {
-    if (!orchestratorId && orchestrators.length > 0) {
+    if (!orchestratorId && !agentsLoading) {
       setOrchestratorId('__all__')
     }
-  }, [orchestrators, orchestratorId])
+  }, [orchestratorId, agentsLoading])
 
   // Reset editor visibility when the selected orchestrator changes
   useEffect(() => {
@@ -616,7 +615,7 @@ export default function TasksPage() {
   const isFormOpen = showAdd || editingId !== null
   const totalCount = tasks.length
 
-  if (isLoading && orchestratorId) return <CardSkeleton />
+  if (agentsLoading || (isLoading && orchestratorId)) return <CardSkeleton />
 
   return (
     <div className="space-y-5 max-w-7xl">
@@ -630,24 +629,11 @@ export default function TasksPage() {
         </button>
       </PageHeader>
 
-      <p className="text-xs text-neutral-500">
-        Orchestrator-owned task board. Humans add tasks; the orchestrator executes them.
-      </p>
-
-      {/* Orchestrator selector */}
-      {orchestrators.length === 0 ? (
-        <div className="flex items-start gap-3 bg-amber-950/20 border border-amber-800/30 rounded-xl px-4 py-3.5">
-          <span className="text-amber-500 mt-0.5 text-base leading-none">⚠</span>
-          <div>
-            <p className="text-xs font-semibold text-amber-400 mb-0.5">No orchestrators found</p>
-            <p className="text-xs text-amber-600/80">Create an agent with role = Orchestrator to unlock the task board.</p>
-          </div>
-        </div>
-      ) : (
+      {/* Filter bar */}
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <span className="text-xs font-semibold text-neutral-500 uppercase tracking-wide shrink-0">Board</span>
           <select
-            value={orchestratorId ?? ''}
+            value={orchestratorId ?? '__all__'}
             onChange={e => { setOrchestratorId(e.target.value); setShowAdd(false); setEditingId(null) }}
             className="bg-neutral-900 border border-neutral-800/60 rounded-lg px-3 py-2 text-sm text-white focus:border-violet-500/50 focus:outline-none focus:ring-1 focus:ring-violet-500/30 transition-all duration-150 cursor-pointer"
           >
@@ -656,8 +642,13 @@ export default function TasksPage() {
               <option key={o.id} value={o.id}>{o.name}</option>
             ))}
           </select>
+          {tasks.length > 0 && (
+            <span className="text-xs text-neutral-600 font-mono">
+              {tasks.filter(t => t.status === 'done').length}/{tasks.length} done
+            </span>
+          )}
         </div>
-      )}
+      </div>
 
       {/* Task context template — what the orchestrator receives with every task */}
       {orchestratorId && (
