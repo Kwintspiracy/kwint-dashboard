@@ -759,18 +759,19 @@ export async function deleteAgentAction(id: string): Promise<ActionResult> {
     const { data: agent } = await supabase.from('agents').select('system_agent').eq('id', id).eq('entity_id', entityId).single()
     if (agent?.system_agent) return fail('Cannot delete system agents')
 
-    // Cascade delete all related data
+    // Nullify FK references that use NO ACTION (keep data, just unlink)
     await Promise.all([
-      supabase.from('agent_memory').delete().eq('agent_id', id).eq('entity_id', entityId),
-      supabase.from('agent_skill_assignments').delete().eq('agent_id', id),
-      supabase.from('agent_assignments').delete().or(`orchestrator_id.eq.${id},sub_agent_id.eq.${id}`),
-      supabase.from('agent_schedules').delete().eq('agent_id', id).eq('entity_id', entityId),
-      supabase.from('agent_budgets').delete().eq('agent_id', id),
-      supabase.from('approval_rules').delete().eq('agent_id', id),
+      supabase.from('agent_jobs').update({ agent_id: null }).eq('agent_id', id).eq('entity_id', entityId),
+      supabase.from('agent_runs').update({ agent_id: null }).eq('agent_id', id),
+      supabase.from('agent_tasks').update({ assigned_agent_id: null }).eq('assigned_agent_id', id),
+      supabase.from('agent_tasks').update({ created_by_agent_id: null }).eq('created_by_agent_id', id),
+      supabase.from('approval_requests').update({ agent_id: null }).eq('agent_id', id),
     ])
 
-    // Nullify agent_id on jobs (keep job history, just unlink)
-    await supabase.from('agent_jobs').update({ agent_id: null }).eq('agent_id', id).eq('entity_id', entityId)
+    // Delete child records (these have CASCADE or we delete explicitly)
+    await Promise.all([
+      supabase.from('agent_memory').delete().eq('agent_id', id),
+    ])
 
     const { error } = await supabase.from('agents').delete().eq('id', id).eq('entity_id', entityId)
     if (error) return dbFail(error)
