@@ -780,7 +780,7 @@ export default function AgentsPage() {
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
                     {a.role === 'orchestrator' && (
-                      <span className="text-xs px-1.5 py-0.5 rounded-full bg-sky-950/60 text-sky-400 border border-sky-800/40 font-medium">orch</span>
+                      <span className="text-xs px-1.5 py-0.5 rounded-full bg-sky-950/60 text-sky-400 border border-sky-800/40 font-medium">orchestrator</span>
                     )}
                     {a.role === 'system' && (
                       <span className="text-xs px-1.5 py-0.5 rounded-full bg-amber-950/60 text-amber-400 border border-amber-800/40 font-medium">system</span>
