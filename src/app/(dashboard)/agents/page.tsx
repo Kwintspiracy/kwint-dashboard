@@ -255,11 +255,12 @@ function AgentHierarchyRow({
   isDraggingAny: boolean
 }) {
   const isOrch = agent.role === 'orchestrator'
+  const isSystem = agent.role === 'system'
   const isRoot = depth === 0
   const isUnassigned = depth < 0
 
-  const { attributes, listeners, setNodeRef: setDragRef, isDragging } = useDraggable({ id: agent.id })
-  const { setNodeRef: setDropRef, isOver } = useDroppable({ id: agent.id, disabled: !isOrch })
+  const { attributes, listeners, setNodeRef: setDragRef, isDragging } = useDraggable({ id: agent.id, disabled: isSystem })
+  const { setNodeRef: setDropRef, isOver } = useDroppable({ id: agent.id, disabled: !isOrch || isSystem })
   const setRef = useCallback(
     (node: HTMLElement | null) => { setDragRef(node); setDropRef(node) },
     [setDragRef, setDropRef],
@@ -309,7 +310,7 @@ function AgentHierarchyRow({
         onClick={() => onEdit(agent.id)}
       >
         {depth > 0 && <span className="text-neutral-700 select-none text-xs font-light">└─</span>}
-        {dragHandle}{dot}
+        {!isSystem && dragHandle}{dot}
         <span className="text-sm font-medium text-neutral-200 group-hover:text-white transition-colors">{agent.name}</span>
         {isOrch && <span className="text-xs px-2 py-1 rounded-full bg-sky-950/60 border border-sky-800/40 text-sky-400 font-medium leading-tight">orchestrator</span>}
         {agent.role === 'system' && <span className="text-xs px-2 py-1 rounded-full bg-amber-950/60 border border-amber-800/40 text-amber-400 font-medium leading-tight">system</span>}
@@ -1018,8 +1019,8 @@ export default function AgentsPage() {
               <DroppableRootZone isDraggingAny={!!hierarchyDraggingId}>
                 {roots.length > 0 && (
                   <div className="py-3 space-y-1">
-                    {roots.map(node => renderNode(node, 0))}
                     {systemRoots.map(node => renderNode(node, 0))}
+                    {roots.map(node => renderNode(node, 0))}
                   </div>
                 )}
                 {unassigned.length > 0 && (
