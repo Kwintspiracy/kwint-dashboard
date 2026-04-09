@@ -21,7 +21,7 @@ import SidePanel from '@/components/SidePanel'
 
 type Agent = {
   id: string; name: string; slug: string; personality: string
-  model: string; active: boolean; is_default: boolean; role: string
+  model: string; active: boolean; is_default: boolean; system_agent: boolean; role: string
   telegram_bot_token: string | null; telegram_bot_username: string | null
   telegram_webhook_url: string | null
   requires_approval: string[] | null
@@ -104,6 +104,7 @@ function modelDisplayLabel(value: string): string {
 const ROLES = [
   { value: 'agent', label: 'Agent', description: 'Executes tasks independently', color: 'text-neutral-300' },
   { value: 'orchestrator', label: 'Orchestrator', description: 'Delegates to other agents', color: 'text-blue-300' },
+  { value: 'system', label: 'System', description: 'Automated maintenance agent', color: 'text-amber-300' },
 ]
 
 function RolePicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
@@ -833,7 +834,7 @@ export default function AgentsPage() {
                           : <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
                         }
                       </button>
-                      {!a.is_default && (
+                      {!a.is_default && !a.system_agent && (
                         <button
                           onClick={async () => {
                             if (!confirm('Delete this agent?')) return
@@ -902,7 +903,8 @@ export default function AgentsPage() {
         }
 
         const roots = agents.filter(a => a.role === 'orchestrator' && !assignedAsSubIds.has(a.id)).map(a => buildNode(a.id))
-        const unassigned = agents.filter(a => !assignedAsSubIds.has(a.id) && a.role !== 'orchestrator')
+        const unassigned = agents.filter(a => !assignedAsSubIds.has(a.id) && a.role !== 'orchestrator' && a.role !== 'system')
+        const systemAgents = agents.filter(a => a.role === 'system')
         const draggingAgent = hierarchyDraggingId ? agentMap.get(hierarchyDraggingId) : null
 
         function renderNode(node: HNode, depth: number): React.ReactNode {
@@ -1034,6 +1036,32 @@ export default function AgentsPage() {
                         ))}
                       </div>
                     </div>
+                    {systemAgents.length > 0 && (
+                      <>
+                        <div className="border-t border-neutral-800/50 mx-4" />
+                        <div className="px-4 py-3">
+                          <p className="text-xs text-amber-600/80 font-semibold uppercase tracking-wide mb-2">System</p>
+                          <div className="space-y-0.5">
+                            {systemAgents.map(a => (
+                              <div key={a.id} className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-amber-900/5 border border-amber-900/20">
+                                <span className="w-2 h-2 rounded-full bg-amber-400 ring-2 ring-amber-700/50 ring-offset-1 ring-offset-neutral-900" />
+                                <span className="text-sm font-medium text-neutral-200 flex-1">{a.name}</span>
+                                <span className="text-xs text-amber-600/60 font-mono">system</span>
+                                <button
+                                  onClick={() => startEdit(a)}
+                                  className="p-1 rounded text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800 transition-colors"
+                                  title="Edit instructions"
+                                >
+                                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                  </svg>
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </>
                 )}
               </DroppableRootZone>
@@ -1596,7 +1624,7 @@ export default function AgentsPage() {
                     <p className="text-xs text-neutral-600">No other agents yet.</p>
                   ) : (
                     <div className="flex flex-col gap-1.5">
-                      {agents.filter(a => a.id !== editingId).map(a => {
+                      {agents.filter(a => a.id !== editingId && a.role !== 'system').map(a => {
                         const checked = assignedAgentIds.includes(a.id)
                         const agentSkills = skillMap[a.id] ?? []
                         return (
