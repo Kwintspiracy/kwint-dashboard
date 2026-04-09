@@ -166,6 +166,7 @@ export const SKILL_CAPABILITIES: Record<string, string[]> = {
   // Search / Research
   'serper':           ['web-search', 'research'],
   'tavily':           ['web-search', 'research'],
+  'firecrawl':        ['web-scraping', 'research'],
   'algolia':          ['search'],
   // HR / Recruitment
   'bamboohr':         ['hr'],
@@ -1302,6 +1303,91 @@ Parameters:
     ],
     operations: [
       { name: 'Web search', slug: 'web_search', risk: 'read', requires_approval: false },
+    ],
+  },
+
+  // ═══════════════════════════════════════════════════
+  // WEB SCRAPING
+  // ═══════════════════════════════════════════════════
+
+  {
+    id: 'firecrawl', name: 'Firecrawl', slug: 'firecrawl',
+    description: 'Scrape and crawl websites — handles JS rendering, rate limits, and anti-bot protection',
+    category: 'search', color: '#F97316',
+    icon: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z',
+    connector: { slug: 'firecrawl', base_url: 'https://api.firecrawl.dev' },
+    fields: [{ key: 'api_key', label: 'API Key', type: 'password', placeholder: 'fc-...', required: true, help: 'From firecrawl.dev > Dashboard > API Keys' }],
+    content: `# Firecrawl API
+
+Use this skill to scrape web pages, even those with JavaScript rendering and anti-bot protection (LinkedIn, Indeed, etc.). Use connector_slug="firecrawl" for auth.
+
+Base URL: https://api.firecrawl.dev
+
+## When to use
+Use when you need to read the full content of a web page — job postings, articles, product pages. Firecrawl handles JavaScript-heavy sites, rate limiting, and anti-bot measures automatically. Prefer this over fetch_page for sites that block scrapers.
+
+## Scrape a single page
+POST /v1/scrape
+\`\`\`json
+{
+  "url": "https://linkedin.com/jobs/view/123456",
+  "formats": ["markdown"]
+}
+\`\`\`
+Response: \`data.markdown\` — clean readable text content of the page.
+
+Options:
+- formats: ["markdown"] (default) | ["html"] | ["markdown", "html"]
+- waitFor: 2000 — wait N ms for JS to render before scraping
+- timeout: 30000 — max wait time in ms
+
+## Batch scrape (multiple pages)
+POST /v1/batch/scrape
+\`\`\`json
+{
+  "urls": ["https://example.com/page1", "https://example.com/page2"],
+  "formats": ["markdown"]
+}
+\`\`\`
+Response: \`id\` — a batch job ID. Poll status with:
+
+GET /v1/batch/scrape/{id}
+Response: \`status\` ("completed" | "in_progress"), \`data[]\` — array of scraped results.
+
+## Crawl a website
+POST /v1/crawl
+\`\`\`json
+{
+  "url": "https://example.com",
+  "limit": 10,
+  "maxDepth": 2
+}
+\`\`\`
+Crawls the site following links. Returns a crawl job ID. Poll with GET /v1/crawl/{id}.
+
+## Error handling
+- 401: invalid API key — check connector has correct fc-... key
+- 402: insufficient credits — upgrade plan or wait for monthly reset
+- 429: rate limited — Firecrawl handles retries internally, but wait 2s if you get this
+
+## Working example
+To check if a LinkedIn job is still active:
+\`\`\`json
+{
+  "url": "https://www.linkedin.com/jobs/view/4210559986",
+  "formats": ["markdown"]
+}
+\`\`\`
+Then check the returned markdown for "No longer accepting applications" or similar.
+
+**Free plan: 500 pages/month.** Use batch scrape for multiple URLs — it's more efficient than individual scrapes.`,
+    required_config: [
+      { label: 'Firecrawl API Key', description: 'API key (fc-...) from firecrawl.dev > Dashboard', type: 'connector_slug', value: 'firecrawl', critical: true },
+    ],
+    operations: [
+      { name: 'Scrape page', slug: 'scrape_page', risk: 'read', requires_approval: false },
+      { name: 'Batch scrape', slug: 'batch_scrape', risk: 'read', requires_approval: false },
+      { name: 'Crawl website', slug: 'crawl_site', risk: 'read', requires_approval: false },
     ],
   },
 
