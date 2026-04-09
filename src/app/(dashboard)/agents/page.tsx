@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { DndContext, DragOverlay, useDraggable, useDroppable, MouseSensor, TouchSensor, useSensor, useSensors, pointerWithin, type DragEndEvent } from '@dnd-kit/core'
-import { getAgentsAction, createAgentAction, updateAgentAction, deleteAgentAction, setDefaultAgentAction, activateTelegramAction, deactivateTelegramAction, getLlmKeysAction, getOperatorProvidersAction, getSkillsAction, getConnectorsAction, getAgentSkillAssignmentsAction, setAgentSkillAssignmentsAction, setSkillApprovalsAction, getOrchestratorAssignmentsAction, getOrchestratorAssignmentDetailsAction, setOrchestratorAssignmentsAction, getAgentOrchestratorAction, setAgentOrchestratorAction, getAllAgentAssignmentsAction, getAllSkillAssignmentsAction, previewEffectivePromptAction, autoAssignTemplateSkillsAction, getSkillCustomInstructionsAction, setSkillCustomInstructionsAction } from '@/lib/actions'
+import { getAgentsAction, createAgentAction, updateAgentAction, deleteAgentAction, setDefaultAgentAction, activateTelegramAction, deactivateTelegramAction, getLlmKeysAction, getOperatorProvidersAction, getSkillsAction, getConnectorsAction, getAgentSkillAssignmentsAction, setAgentSkillAssignmentsAction, setSkillApprovalsAction, getOrchestratorAssignmentsAction, getOrchestratorAssignmentDetailsAction, setOrchestratorAssignmentsAction, getAgentOrchestratorAction, setAgentOrchestratorAction, getAllAgentAssignmentsAction, getAllSkillAssignmentsAction, previewEffectivePromptAction, autoAssignTemplateSkillsAction, getSkillCustomInstructionsAction, setSkillCustomInstructionsAction, getAgentEditDataAction } from '@/lib/actions'
 import { timeAgo } from '@/lib/utils'
 import { toast } from 'sonner'
 import { useData } from '@/hooks/useData'
@@ -556,24 +556,19 @@ export default function AgentsPage() {
       avatar_url: a.avatar_url || null,
     })
 
-    // Load details in background
+    // Single fetch for all edit data (1 server action, 3 parallel DB queries)
     setLoadingEditId(a.id)
-    const [skillsRes, orchDetailsRes, orchParentRes, customInstRes] = await Promise.all([
-      getAgentSkillAssignmentsAction(a.id),
-      getOrchestratorAssignmentDetailsAction(a.id),
-      getAgentOrchestratorAction(a.id),
-      getSkillCustomInstructionsAction(a.id),
-    ])
-    const validSkillIds = new Set(skills.map(s => s.id))
-    setAssignedSkillIds(skillsRes.ok ? skillsRes.data.filter(id => validSkillIds.has(id)) : [])
-    setSkillCustomInstructions(customInstRes.ok ? customInstRes.data : {})
-    if (orchDetailsRes.ok) {
-      setAssignedAgentIds(orchDetailsRes.data.map(d => d.sub_agent_id))
+    const res = await getAgentEditDataAction(a.id)
+    if (res.ok) {
+      const validSkillIds = new Set(skills.map(s => s.id))
+      setAssignedSkillIds(res.data.skillIds.filter(id => validSkillIds.has(id)))
+      setSkillCustomInstructions(res.data.customInstructions)
+      setAssignedAgentIds(res.data.subAgents.map(d => d.sub_agent_id))
       const instr: Record<string, string> = {}
-      for (const d of orchDetailsRes.data) { if (d.instructions) instr[d.sub_agent_id] = d.instructions }
+      for (const d of res.data.subAgents) { if (d.instructions) instr[d.sub_agent_id] = d.instructions }
       setAgentInstructions(instr)
+      setSelectedOrchestratorId(res.data.orchestratorId)
     }
-    setSelectedOrchestratorId(orchParentRes.ok ? orchParentRes.data : null)
     setLoadingEditId(null)
     loadPromptPreview(a.id)
   }
@@ -1519,7 +1514,13 @@ export default function AgentsPage() {
               <section aria-labelledby="section-skills">
                 <h3 id="section-skills" className="text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-1">Skills</h3>
                 <p className="text-xs text-neutral-600 mb-2.5">Leave unchecked to allow all workspace skills.</p>
-                {skills.length === 0 ? (
+                {loadingEditId ? (
+                  <div className="space-y-2">
+                    {[1,2,3].map(i => (
+                      <div key={i} className="h-8 bg-neutral-800/60 rounded-lg animate-pulse" />
+                    ))}
+                  </div>
+                ) : skills.length === 0 ? (
                   <p className="text-xs text-neutral-600">
                     No skills yet —{' '}
                     <a href="/connectors" className="text-neutral-400 underline hover:text-white transition-colors">install from Marketplace</a>

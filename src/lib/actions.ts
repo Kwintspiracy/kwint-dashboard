@@ -2241,6 +2241,31 @@ export async function getOperatorProvidersAction(): Promise<string[]> {
 
 // ─── Agent Skill Assignments ─────────────────────────────────────────────────
 
+export async function getAgentEditDataAction(agentId: string): Promise<ActionResult<{
+  skillIds: string[]
+  customInstructions: Record<string, boolean>
+  subAgents: { sub_agent_id: string; instructions: string | null }[]
+  orchestratorId: string | null
+}>> {
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+    const [skillsRes, assignmentsRes, orchParentRes] = await Promise.all([
+      supabase.from('agent_skill_assignments').select('skill_id, use_custom_instructions').eq('agent_id', agentId).eq('entity_id', entityId),
+      supabase.from('agent_assignments').select('sub_agent_id, instructions').eq('orchestrator_id', agentId).eq('entity_id', entityId),
+      supabase.from('agent_assignments').select('orchestrator_id').eq('sub_agent_id', agentId).eq('entity_id', entityId).limit(1).maybeSingle(),
+    ])
+    const skillRows = skillsRes.data ?? []
+    const customInstructions: Record<string, boolean> = {}
+    for (const r of skillRows) { if (r.use_custom_instructions) customInstructions[r.skill_id] = true }
+    return ok({
+      skillIds: skillRows.map(r => r.skill_id),
+      customInstructions,
+      subAgents: assignmentsRes.data ?? [],
+      orchestratorId: orchParentRes.data?.orchestrator_id ?? null,
+    })
+  } catch (e) { return dbError(e) }
+}
+
 export async function getAgentSkillAssignmentsAction(agentId: string): Promise<ActionResult<string[]>> {
   try {
     const { supabase, entityId } = await requireAuthWithEntity()
