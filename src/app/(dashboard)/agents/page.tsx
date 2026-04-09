@@ -540,35 +540,12 @@ export default function AgentsPage() {
   }
 
   async function startEdit(a: Agent) {
-    setLoadingEditId(a.id)
-    const [skillsRes, orchDetailsRes, orchParentRes, customInstRes] = await Promise.all([
-      getAgentSkillAssignmentsAction(a.id),
-      getOrchestratorAssignmentDetailsAction(a.id),
-      getAgentOrchestratorAction(a.id),
-      getSkillCustomInstructionsAction(a.id),
-    ])
-    // Filter out orphaned IDs pointing to deleted skills
-    const validSkillIds = new Set(skills.map(s => s.id))
-    const assignedIds = skillsRes.ok ? skillsRes.data.filter(id => validSkillIds.has(id)) : []
-    setAssignedSkillIds(assignedIds)
-    // Load per-skill approval overrides and custom instructions flags
-    setSkillApprovalOverrides({})
-    setSkillCustomInstructions(customInstRes.ok ? customInstRes.data : {})
-    if (orchDetailsRes.ok) {
-      setAssignedAgentIds(orchDetailsRes.data.map(d => d.sub_agent_id))
-      const instr: Record<string, string> = {}
-      for (const d of orchDetailsRes.data) { if (d.instructions) instr[d.sub_agent_id] = d.instructions }
-      setAgentInstructions(instr)
-    } else {
-      setAssignedAgentIds([]); setAgentInstructions({})
-    }
-    setSelectedOrchestratorId(orchParentRes.ok ? orchParentRes.data : null)
-    setLoadingEditId(null)
+    // Open panel immediately with known data
     setEditingId(a.id); setShowAdd(false); setTelegramStatus('')
     setSlugManuallyEdited(false)
     setPromptPreview(null); setShowPromptPreview(true); setExpandedPreviewSections(new Set())
-    // Load preview immediately with known id (editingId state may not be set yet)
-    setTimeout(() => loadPromptPreview(a.id), 0)
+    setAssignedSkillIds([]); setSkillApprovalOverrides({}); setSkillCustomInstructions({})
+    setAssignedAgentIds([]); setAgentInstructions({}); setSelectedOrchestratorId(null)
     setForm({
       name: a.name, slug: a.slug, personality: a.personality, model: a.model,
       role: a.role || 'agent',
@@ -578,6 +555,27 @@ export default function AgentsPage() {
       capabilities: a.capabilities || [],
       avatar_url: a.avatar_url || null,
     })
+
+    // Load details in background
+    setLoadingEditId(a.id)
+    const [skillsRes, orchDetailsRes, orchParentRes, customInstRes] = await Promise.all([
+      getAgentSkillAssignmentsAction(a.id),
+      getOrchestratorAssignmentDetailsAction(a.id),
+      getAgentOrchestratorAction(a.id),
+      getSkillCustomInstructionsAction(a.id),
+    ])
+    const validSkillIds = new Set(skills.map(s => s.id))
+    setAssignedSkillIds(skillsRes.ok ? skillsRes.data.filter(id => validSkillIds.has(id)) : [])
+    setSkillCustomInstructions(customInstRes.ok ? customInstRes.data : {})
+    if (orchDetailsRes.ok) {
+      setAssignedAgentIds(orchDetailsRes.data.map(d => d.sub_agent_id))
+      const instr: Record<string, string> = {}
+      for (const d of orchDetailsRes.data) { if (d.instructions) instr[d.sub_agent_id] = d.instructions }
+      setAgentInstructions(instr)
+    }
+    setSelectedOrchestratorId(orchParentRes.ok ? orchParentRes.data : null)
+    setLoadingEditId(null)
+    loadPromptPreview(a.id)
   }
 
   function startAdd() {
@@ -631,27 +629,21 @@ export default function AgentsPage() {
       })
       if (!result.ok) { toast.error(result.error); return }
       const orchAssignments = assignedAgentIds.map(id => ({ sub_agent_id: id, instructions: agentInstructions[id] || null }))
+      // Save all assignments in parallel (single batch)
       const savePromises: Promise<{ ok: boolean; error?: string }>[] = [
         setAgentSkillAssignmentsAction(editingId, assignedSkillIds),
         setAgentOrchestratorAction(editingId, selectedOrchestratorId),
         ...(form.role === 'orchestrator' ? [setOrchestratorAssignmentsAction(editingId, orchAssignments)] : []),
+        // Approval overrides (only changed ones)
+        ...assignedSkillIds
+          .filter(skillId => skillApprovalOverrides[skillId] && Object.keys(skillApprovalOverrides[skillId]).length > 0)
+          .map(skillId => setSkillApprovalsAction({ agent_id: editingId, skill_id: skillId, approval_overrides: skillApprovalOverrides[skillId] })),
+        // Custom instructions flags
+        ...assignedSkillIds.map(skillId => setSkillCustomInstructionsAction(editingId, skillId, skillCustomInstructions[skillId] ?? false)),
       ]
-      const [skillRes, orchParentRes, orchSubRes] = await Promise.all(savePromises)
-      if (!skillRes.ok) toast.error('Could not save skill assignments')
-      if (!orchParentRes.ok) toast.error('Could not save orchestrator assignment')
-      if (orchSubRes && !orchSubRes.ok) toast.error('Could not save team assignments')
-      // Persist per-skill approval overrides and custom instructions flags
-      await Promise.all([
-        ...assignedSkillIds.map(skillId => {
-          const overrides = skillApprovalOverrides[skillId]
-          if (!overrides || Object.keys(overrides).length === 0) return Promise.resolve()
-          return setSkillApprovalsAction({ agent_id: editingId, skill_id: skillId, approval_overrides: overrides })
-        }),
-        ...assignedSkillIds.map(skillId => {
-          const useCustom = skillCustomInstructions[skillId] ?? false
-          return setSkillCustomInstructionsAction(editingId, skillId, useCustom)
-        }),
-      ])
+      const results = await Promise.all(savePromises)
+      const failed = results.filter(r => !r.ok)
+      if (failed.length > 0) toast.error(`${failed.length} save(s) failed`)
       toast.success('Agent updated')
       setEditingId(null)
     } else {
