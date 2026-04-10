@@ -725,7 +725,7 @@ export default function TasksPage() {
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
             {COLUMNS.map(col => (
               <DroppableColumn
                 key={col.key}
