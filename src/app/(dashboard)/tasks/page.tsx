@@ -21,6 +21,7 @@ import {
   startTaskAction,
   getAgentsAction,
   updateAgentAction,
+  getSchedulesAction,
 } from '@/lib/actions'
 import { TASK_TEMPLATES, TASK_TEMPLATE_CATEGORIES } from '@/lib/task-templates'
 import { useData } from '@/hooks/useData'
@@ -90,14 +91,6 @@ const COLUMNS: {
     pillBg: 'bg-emerald-500/15',
     pillText: 'text-emerald-400',
     emptyText: 'Nothing completed yet',
-  },
-  {
-    key: 'cancelled',
-    label: 'Cancelled',
-    topBorder: 'border-t-neutral-800',
-    pillBg: 'bg-neutral-900',
-    pillText: 'text-neutral-600',
-    emptyText: 'No cancelled tasks',
   },
 ]
 
@@ -470,6 +463,11 @@ export default function TasksPage() {
   const orchestrators = allAgents.filter(a => a.role === 'orchestrator')
   const agentMap = new Map(allAgents.map(a => [a.id, a]))
 
+  // System schedules
+  const { data: schedulesRaw } = useData(['schedules', eid], getSchedulesAction)
+  type Schedule = { id: string; name: string; type: string; cron_expr: string; active: boolean; agent_id: string; agents: { name: string } | null; last_run: string | null; last_status: string | null }
+  const schedules = (schedulesRaw ?? []) as Schedule[]
+
   // Auto-select "all" by default
   useEffect(() => {
     if (!orchestratorId && !agentsLoading) {
@@ -725,7 +723,7 @@ export default function TasksPage() {
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
             {COLUMNS.map(col => (
               <DroppableColumn
                 key={col.key}
@@ -760,6 +758,47 @@ export default function TasksPage() {
 
       {orchestratorId && tasks.length === 0 && !isFormOpen && (
         <EmptyState message="No tasks yet — create one to get started" />
+      )}
+
+      {/* System section — recurring agent schedules */}
+      {schedules.length > 0 && (
+        <div className="mt-6">
+          <h2 className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-3">System</h2>
+          <div className="bg-neutral-900 border border-neutral-800/60 rounded-xl overflow-hidden">
+            <div className="divide-y divide-neutral-800/40">
+              {schedules.map(s => (
+                <div key={s.id} className="flex items-center justify-between px-4 py-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${s.active ? 'bg-emerald-500' : 'bg-neutral-600'}`} />
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-white font-medium truncate">{s.name}</span>
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-amber-950/50 border border-amber-900/30 text-amber-400 font-mono shrink-0">
+                          {s.type === 'heartbeat' ? 'heartbeat' : 'cron'}
+                        </span>
+                      </div>
+                      <span className="text-xs text-neutral-600">
+                        {s.agents?.name ?? 'Unknown agent'} · <span className="font-mono">{s.cron_expr}</span>
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    {s.last_status && (
+                      <span className={`text-xs ${s.last_status === 'completed' ? 'text-emerald-600' : 'text-red-600'}`}>
+                        {s.last_status}
+                      </span>
+                    )}
+                    {s.last_run && (
+                      <span className="text-xs text-neutral-700 font-mono">
+                        {new Date(s.last_run).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Add / Edit modal */}
