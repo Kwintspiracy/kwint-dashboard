@@ -311,7 +311,7 @@ export const UpdateTaskSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   description: z.string().max(2000).nullable().optional(),
   priority: z.enum(['low', 'medium', 'high']).optional(),
-  status: z.enum(['todo', 'in_progress', 'done', 'cancelled']).optional(),
+  status: z.enum(['todo', 'in_progress', 'done', 'cancelled', 'blocked']).optional(),
   job_id: z.string().uuid().nullable().optional(),
   result: z.string().max(5000).nullable().optional(),
 })

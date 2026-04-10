@@ -40,7 +40,9 @@ type Task = {
   assigned_agent_id: string | null
   title: string
   description: string | null
-  status: 'todo' | 'in_progress' | 'done' | 'cancelled'
+  status: 'todo' | 'in_progress' | 'done' | 'cancelled' | 'blocked'
+  depends_on: string[] | null
+  result: string | null
   priority: 'low' | 'medium' | 'high'
   job_id: string | null
   input_tokens: number | null
@@ -57,6 +59,14 @@ const COLUMNS: {
   pillText: string
   emptyText: string
 }[] = [
+  {
+    key: 'blocked',
+    label: 'Blocked',
+    topBorder: 'border-t-neutral-800',
+    pillBg: 'bg-neutral-900',
+    pillText: 'text-neutral-600',
+    emptyText: 'No blocked tasks',
+  },
   {
     key: 'todo',
     label: 'To Do',
