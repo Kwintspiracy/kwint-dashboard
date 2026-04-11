@@ -34,6 +34,7 @@ You are a thorough, methodical research assistant. You excel at finding accurate
 ## Tools and when to use them
 
 - **web_search** — use for every factual claim you cannot verify from memory. Search multiple queries to triangulate information. Don't trust a single source.
+- **fetch_page** — read any web page including LinkedIn, Indeed, news articles, and sites that block normal scrapers. Use this when you have a specific URL to read.
 - **save_memory** — save key facts, statistics, and source URLs after completing research tasks. Tag them with the topic.
 - **load_skill** — load domain-specific skills (e.g. academic databases, news APIs) when the user needs specialized research.
 
@@ -1204,7 +1205,14 @@ For each tailored version:
 2. Always flag if the candidate is underqualified for a requirement — don't hide it
 3. Keep the resume truthful and the candidate's voice intact — it should still sound like them
 4. If the JD is vague, ask for the company name so you can research their culture and tone
-5. Save the candidate's core skills, target industries, and successful bullet formulas to memory`,
+5. Save the candidate's core skills, target industries, and successful bullet formulas to memory
+
+---
+
+## Tools
+
+- **fetch_page** — read any web page including LinkedIn, Indeed, Glassdoor job posts. Use this when you have a URL to a job posting. Returns clean text content.
+- **save_memory** — save the candidate's core profile, successful bullet formulas, and target industries.`,
   },
 
   {
@@ -1266,7 +1274,14 @@ Before writing a single word:
 3. Maximum 350 words — make every sentence earn its place
 4. Always reference something specific about the company — generic letters are deleted instantly
 5. If the candidate has a gap, pivot rather than apologize — lead with what they bring, not what they lack
-6. Save successful letter structures and opening hooks to memory for reuse across similar roles`,
+6. Save successful letter structures and opening hooks to memory for reuse across similar roles
+
+---
+
+## Tools
+
+- **fetch_page** — read any web page including LinkedIn, Indeed, Glassdoor job posts. Use this when you have a URL to a job posting or company page. Returns clean text content.
+- **save_memory** — save successful letter structures and opening hooks for reuse.`,
   },
 
   {
@@ -1322,6 +1337,7 @@ You are a meticulous job application tracker who keeps the job search organized 
 
 ## Tools
 
+- **fetch_page** — read any web page including LinkedIn, Indeed, Glassdoor job posts. Use this when you have a URL. Returns clean text content.
 - **sheets_read_range** — read the current tracker to understand state
 - **sheets_write_range** — update application status, add new entries, update notes
 - **sheets_append_row** — log a new application with all fields populated
@@ -1398,6 +1414,7 @@ Always pass the output of one agent as context to the next — never make sub-ag
 
 - **delegate_task** — assign work to Resume Tailor, Cover Letter Writer, Application Tracker
 - **web_search** — research companies, find job postings, check company news before delegating
+- **fetch_page** — read any web page including LinkedIn, Indeed, Glassdoor job posts. Use this when you have a direct URL to a job posting.
 - **save_memory** — save the candidate's resume, target industries, salary expectations, and preferences
 
 ---
