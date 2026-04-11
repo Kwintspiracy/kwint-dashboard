@@ -18,6 +18,7 @@ import {
   createTaskAction,
   updateTaskAction,
   deleteTaskAction,
+  clearDoneTasksAction,
   startTaskAction,
   getAgentsAction,
   updateAgentAction,
@@ -358,6 +359,7 @@ interface DroppableColumnProps {
   onEdit: (task: Task) => void
   onStatusChange: (id: string, status: Task['status']) => void
   onDelete: (id: string) => void
+  onClearDone?: () => void
 }
 
 function DroppableColumn({
@@ -370,6 +372,7 @@ function DroppableColumn({
   onEdit,
   onStatusChange,
   onDelete,
+  onClearDone,
 }: DroppableColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: col.key })
 
@@ -380,11 +383,21 @@ function DroppableColumn({
         <span className="text-xs uppercase tracking-wider font-semibold text-neutral-400">
           {col.label}
         </span>
-        <span
-          className={`inline-flex items-center justify-center min-w-[22px] h-5 px-1.5 rounded-full text-xs font-bold tabular-nums ${col.pillBg} ${col.pillText}`}
-        >
-          {colTasks.length}
-        </span>
+        <div className="flex items-center gap-1.5">
+          {col.key === 'done' && colTasks.length > 0 && onClearDone && (
+            <button
+              onClick={onClearDone}
+              className="text-[11px] px-2 py-0.5 rounded-md text-neutral-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+            >
+              Clear
+            </button>
+          )}
+          <span
+            className={`inline-flex items-center justify-center min-w-[22px] h-5 px-1.5 rounded-full text-xs font-bold tabular-nums ${col.pillBg} ${col.pillText}`}
+          >
+            {colTasks.length}
+          </span>
+        </div>
       </div>
 
       {/* Column lane */}
@@ -598,6 +611,16 @@ export default function TasksPage() {
     mutate()
   }
 
+  async function handleClearDone() {
+    if (!orchestratorId) return
+    const doneCount = tasks.filter(t => t.status === 'done').length
+    if (!doneCount || !confirm(`Delete all ${doneCount} completed task${doneCount > 1 ? 's' : ''}?`)) return
+    const result = await clearDoneTasksAction(orchestratorId === '__all__' ? undefined : orchestratorId)
+    if (!result.ok) { toast.error(result.error); return }
+    toast.success(`Cleared ${result.data.count} completed task${result.data.count !== 1 ? 's' : ''}`)
+    mutate()
+  }
+
   async function handleStart(task: Task) {
     setStarting(task.id)
     try {
@@ -736,6 +759,7 @@ export default function TasksPage() {
                 onEdit={startEdit}
                 onStatusChange={handleStatusChange}
                 onDelete={handleDelete}
+                onClearDone={col.key === 'done' ? handleClearDone : undefined}
               />
             ))}
           </div>

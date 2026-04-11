@@ -2650,6 +2650,28 @@ export async function deleteTaskAction(id: string): Promise<ActionResult> {
   } catch (e) { return dbError(e) }
 }
 
+export async function clearDoneTasksAction(orchestratorId?: string): Promise<ActionResult<{ count: number }>> {
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+    let query = supabase
+      .from('agent_tasks')
+      .select('id')
+      .eq('entity_id', entityId)
+      .eq('status', 'done')
+    if (orchestratorId) query = query.eq('orchestrator_id', orchestratorId)
+    const { data: doneTasks, error: fetchErr } = await query
+    if (fetchErr) return dbFail(fetchErr)
+    if (!doneTasks?.length) return ok({ count: 0 })
+    const ids = doneTasks.map(t => t.id)
+    const { error } = await supabase
+      .from('agent_tasks')
+      .delete()
+      .in('id', ids)
+    if (error) return dbFail(error)
+    return ok({ count: ids.length })
+  } catch (e) { return dbError(e) }
+}
+
 export async function startTaskAction(id: string): Promise<ActionResult<{ job_id: string | null }>> {
   try {
     const { supabase, entityId } = await requireAuthWithEntity()
