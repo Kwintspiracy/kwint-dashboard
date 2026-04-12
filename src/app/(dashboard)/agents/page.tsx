@@ -4,7 +4,6 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { DndContext, DragOverlay, useDraggable, useDroppable, MouseSensor, TouchSensor, useSensor, useSensors, pointerWithin, type DragEndEvent } from '@dnd-kit/core'
 import { getAgentsAction, createAgentAction, updateAgentAction, deleteAgentAction, setDefaultAgentAction, activateTelegramAction, deactivateTelegramAction, getLlmKeysAction, getOperatorProvidersAction, getSkillsAction, getConnectorsAction, getAgentSkillAssignmentsAction, setAgentSkillAssignmentsAction, setSkillApprovalsAction, setSkillEnabledOperationsAction, getOrchestratorAssignmentsAction, getOrchestratorAssignmentDetailsAction, setOrchestratorAssignmentsAction, getAgentOrchestratorAction, setAgentOrchestratorAction, getAllAgentAssignmentsAction, getAllSkillAssignmentsAction, previewEffectivePromptAction, autoAssignTemplateSkillsAction, getSkillCustomInstructionsAction, setSkillCustomInstructionsAction, getAgentEditDataAction, getAgentMemoryCountsAction } from '@/lib/actions'
 import { AgentReadinessBadge } from '@/components/AgentReadiness'
-import MemoryRecipeApplier from '@/components/MemoryRecipeApplier'
 import AgentMemoriesList from '@/components/AgentMemoriesList'
 import { timeAgo } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -2237,7 +2236,7 @@ export default function AgentsPage() {
             </div>
           )}
 
-          {/* Memories section — list + edit/delete + starter recipes */}
+          {/* Memories section — list + edit/delete */}
           {editingId && (() => {
             const a = agents.find(x => x.id === editingId)
             if (!a || a.role === 'system') return null
@@ -2246,17 +2245,9 @@ export default function AgentsPage() {
                 <fieldset>
                   <legend className="text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-3">Agent memories</legend>
                   <p className="text-xs text-neutral-600 mb-3 leading-snug">
-                    Persistent facts this agent knows — loaded automatically into every run. Click any memory to edit or remove it.
+                    Persistent facts this agent knows — loaded automatically into every run. Click any memory to edit or remove it. Add new ones from the Memories page.
                   </p>
                   <AgentMemoriesList agentId={a.id} onChanged={() => mutateMemoryCounts()} />
-                </fieldset>
-                <fieldset>
-                  <legend className="text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-3">Starter memory recipes</legend>
-                  <MemoryRecipeApplier
-                    agentId={a.id}
-                    agentName={a.name}
-                    onApplied={() => { mutateMemoryCounts() }}
-                  />
                 </fieldset>
               </div>
             )

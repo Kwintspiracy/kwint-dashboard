@@ -3030,28 +3030,6 @@ export async function getAllAgentAssignmentsAction(): Promise<ActionResult<{ orc
 
 // Bulk-insert a memory recipe scoped to one agent. Used by the Agents page
 // "Starter recipes" UI to seed an agent with a known-good bundle of memories.
-export async function applyMemoryRecipeAction(
-  agentId: string,
-  memories: { fact: string; category: string; importance: number; global: boolean; skill_tags: string[] }[],
-): Promise<ActionResult<{ inserted: number }>> {
-  try {
-    const { supabase, entityId } = await requireAuthWithEntity()
-    if (!Array.isArray(memories) || memories.length === 0) return fail('No memories to insert')
-    const rows = memories.map(m => ({
-      fact: m.fact,
-      category: m.category,
-      importance: Math.min(5, Math.max(1, m.importance | 0)),
-      agent_id: m.global ? null : agentId,
-      entity_id: entityId,
-      skill_tags: m.skill_tags ?? [],
-      source: 'manual',
-    }))
-    const { data, error } = await supabase.from('agent_memory').insert(rows).select('id')
-    if (error) return dbFail(error)
-    return ok({ inserted: (data ?? []).length })
-  } catch (e) { return dbError(e) }
-}
-
 // Counts non-archived memories per agent for the current entity. Includes global
 // (agent_id NULL) memories counted under key '__global__'. Used by the Agents
 // page to compute a per-agent readiness score.
