@@ -12,6 +12,7 @@ import {
   CreateMemorySchema,
   UpdateMemorySchema,
   ArchiveStaleMemoriesSchema,
+  ImportFileAsMemorySchema,
   CreateScheduleSchema,
   UpdateScheduleSchema,
   ResolveApprovalSchema,
@@ -32,6 +33,7 @@ import {
   CreateTaskSchema,
   UpdateTaskSchema,
   SetSkillApprovalsSchema,
+  UpdateUserProfileSchema,
   type JobsPageInput,
   type SessionsPageInput,
   type ToolCallsPageInput,
@@ -543,13 +545,26 @@ export async function getMemoryCountAction() {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function getSchedulesAction(): Promise<any[]> {
   const { supabase, entityId } = await requireAuthWithEntity()
-  const { data, error } = await supabase
-    .from('agent_schedules')
-    .select('*, agents(name)')
-    .eq('entity_id', entityId)
-    .order('created_at', { ascending: false })
-  if (error) { console.error('[actions]', error.message); throw new Error('Failed to load data') }
-  return data || []
+  const [schedRes, sysRes] = await Promise.all([
+    supabase.from('agent_schedules').select('*, agents(name)').eq('entity_id', entityId).order('created_at', { ascending: false }),
+    supabase.from('agents').select('id, name, slug, active').eq('entity_id', entityId).eq('system_agent', true),
+  ])
+  if (schedRes.error) { console.error('[actions]', schedRes.error.message); throw new Error('Failed to load data') }
+
+  // Surface hardcoded system crons (memory guardian, etc.) alongside user schedules
+  const systemCrons = (sysRes.data || []).map(a => ({
+    id: `system-${a.slug}`,
+    agent_id: a.id,
+    type: 'system',
+    name: `${a.name} (system)`,
+    cron_expr: a.slug === 'memory-guardian' ? '0 3 * * * (daily)' : 'every cron tick',
+    active: a.active,
+    agents: { name: a.name },
+    last_run: null,
+    last_status: null,
+  }))
+
+  return [...(schedRes.data || []), ...systemCrons]
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1113,6 +1128,334 @@ export async function createMemoryAction(
       .single()
 
     if (error) return dbFail(error)
+    return ok(data)
+  } catch (e) {
+    return dbError(e)
+  }
+}
+
+// ─── File Import for Memories ────────────────────────────────────────────────
+
+async function getConnectorToken(supabase: Awaited<ReturnType<typeof requireAuthWithEntity>>['supabase'], entityId: string, slug: string): Promise<string | null> {
+  // Fetch all connector fields needed for auth
+  const { data: rows } = await supabase
+    .from('connectors')
+    .select('id, auth_type, api_key, oauth_access_token, oauth_refresh_token, oauth_token_expires_at, oauth_token_url, oauth_client_id, oauth_client_secret')
+    .eq('slug', slug)
+    .eq('entity_id', entityId)
+
+  if (!rows || rows.length === 0) return null
+
+  // Prefer OAuth2 connector if multiple exist
+  const row = rows.find(r => r.auth_type === 'oauth2') || rows[0]
+
+  if (row.auth_type === 'oauth2') {
+    let token = row.oauth_access_token
+    const expiresAt = row.oauth_token_expires_at
+
+    // Check if token is still valid (5 min buffer)
+    let valid = false
+    if (token && expiresAt) {
+      try {
+        const exp = new Date(expiresAt).getTime()
+        valid = (exp - Date.now()) > 300_000
+      } catch { /* treat as invalid */ }
+    } else if (token && !expiresAt) {
+      valid = true
+    }
+
+    if (valid) return token
+
+    // Try refresh
+    const refreshToken = row.oauth_refresh_token
+    const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'
+    const tokenUrl = row.oauth_token_url || GOOGLE_TOKEN_URL
+    const clientId = row.oauth_client_id || process.env.GOOGLE_CLIENT_ID
+    const clientSecret = row.oauth_client_secret || process.env.GOOGLE_CLIENT_SECRET
+
+    if (refreshToken && clientId && clientSecret) {
+      try {
+        const body = new URLSearchParams({
+          grant_type: 'refresh_token',
+          refresh_token: refreshToken,
+          client_id: clientId,
+          client_secret: clientSecret,
+        })
+        const res = await fetch(tokenUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: body.toString(),
+        })
+        if (res.ok) {
+          const data = await res.json()
+          const newToken = data.access_token
+          if (newToken) {
+            // Update DB with new token
+            const update: Record<string, unknown> = { oauth_access_token: newToken, oauth_token_url: tokenUrl }
+            if (data.expires_in) {
+              update.oauth_token_expires_at = new Date(Date.now() + data.expires_in * 1000).toISOString()
+            }
+            if (data.refresh_token) update.oauth_refresh_token = data.refresh_token
+            await supabase.from('connectors').update(update).eq('id', row.id)
+            return newToken
+          }
+        }
+      } catch { /* refresh failed */ }
+    }
+
+    return token || null // return expired token as last resort
+  }
+
+  // Non-OAuth: use api_key directly
+  return row.api_key || null
+}
+
+export async function listFilesForImportAction(
+  connectorSlug: string,
+  query?: string,
+): Promise<ActionResult<{ id: string; name: string; size?: number; modified?: string; mime?: string }[]>> {
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+
+    const token = await getConnectorToken(supabase, entityId, connectorSlug)
+    if (!token) return fail('Connector not authenticated. Check your connector settings.')
+
+    if (connectorSlug === 'google-drive') {
+      const params = new URLSearchParams({
+        pageSize: '30',
+        fields: 'files(id,name,mimeType,modifiedTime,size)',
+        orderBy: 'modifiedTime desc',
+      })
+      if (query) params.set('q', `name contains '${query.replace(/'/g, "\\'")}'`)
+
+      const res = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) return fail(`Drive API error: ${res.status}`)
+      const data = await res.json()
+      return ok((data.files || []).map((f: Record<string, string>) => ({
+        id: f.id, name: f.name, size: f.size ? Math.round(Number(f.size) / 1024) : undefined,
+        modified: f.modifiedTime?.slice(0, 10), mime: f.mimeType,
+      })))
+    }
+
+    if (connectorSlug === 'notion') {
+      const body: Record<string, unknown> = {
+        page_size: 30,
+        filter: { value: 'page', property: 'object' },
+      }
+      if (query) body.query = query
+
+      const res = await fetch('https://api.notion.com/v1/search', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'Notion-Version': '2022-06-28',
+        },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) return fail(`Notion API error: ${res.status}`)
+      const data = await res.json()
+      return ok((data.results || []).map((p: Record<string, unknown>) => {
+        const props = (p.properties || {}) as Record<string, Record<string, unknown>>
+        let title = ''
+        for (const prop of Object.values(props)) {
+          if (prop.type === 'title') {
+            const parts = (prop.title || []) as { plain_text?: string }[]
+            title = parts.map(t => t.plain_text || '').join('')
+            break
+          }
+        }
+        return {
+          id: p.id as string,
+          name: title || '(untitled)',
+          modified: ((p.last_edited_time || '') as string).slice(0, 10),
+        }
+      }))
+    }
+
+    return fail(`Import not supported for connector: ${connectorSlug}`)
+  } catch (e) {
+    return dbError(e)
+  }
+}
+
+export async function importFileAsMemoryAction(
+  raw: unknown,
+): Promise<ActionResult<unknown>> {
+  const parsed = ImportFileAsMemorySchema.safeParse(raw)
+  if (!parsed.success) return fail(parsed.error.message)
+
+  const { connector_slug, file_id, file_name, agent_id, category, importance } = parsed.data
+
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+
+    const token = await getConnectorToken(supabase, entityId, connector_slug)
+    if (!token) return fail('Connector not authenticated.')
+
+    let text = ''
+    let name = file_name || file_id
+
+    if (connector_slug === 'google-drive') {
+      // Get file metadata
+      const metaRes = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${file_id}?fields=name,mimeType`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      )
+      if (!metaRes.ok) return fail(`Failed to read file metadata: ${metaRes.status}`)
+      const meta = await metaRes.json()
+      name = meta.name || name
+      const mime = meta.mimeType || ''
+
+      if (mime === 'application/vnd.google-apps.document') {
+        // Google Doc → export as text
+        const res = await fetch(
+          `https://www.googleapis.com/drive/v3/files/${file_id}/export?mimeType=text/plain`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        )
+        if (!res.ok) return fail('Failed to export Google Doc')
+        text = await res.text()
+      } else {
+        // Download raw and return as text (server-side, no python-docx available)
+        const res = await fetch(
+          `https://www.googleapis.com/drive/v3/files/${file_id}?alt=media`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        )
+        if (!res.ok) return fail('Failed to download file')
+        const buf = await res.arrayBuffer()
+        // Try to decode as text
+        text = new TextDecoder('utf-8', { fatal: false }).decode(buf)
+        // If mostly garbage (binary), warn
+        const controlChars = (text.match(/[\x00-\x08\x0e-\x1f]/g) || []).length
+        if (controlChars > text.length * 0.1) {
+          return fail(`'${name}' appears to be a binary file (${mime}). Convert to Google Docs format first, then re-import.`)
+        }
+      }
+    } else if (connector_slug === 'notion') {
+      // Get page title
+      const pageRes = await fetch(`https://api.notion.com/v1/pages/${file_id}`, {
+        headers: { Authorization: `Bearer ${token}`, 'Notion-Version': '2022-06-28' },
+      })
+      if (!pageRes.ok) return fail(`Failed to read Notion page: ${pageRes.status}`)
+      const page = await pageRes.json()
+      const props = page.properties || {}
+      for (const prop of Object.values(props) as Record<string, unknown>[]) {
+        if (prop.type === 'title') {
+          name = ((prop.title || []) as { plain_text?: string }[]).map(t => t.plain_text || '').join('')
+          break
+        }
+      }
+
+      // Read blocks (page content)
+      let cursor: string | undefined
+      const blocks: string[] = []
+      for (let i = 0; i < 3; i++) {
+        const url = `https://api.notion.com/v1/blocks/${file_id}/children?page_size=100${cursor ? `&start_cursor=${cursor}` : ''}`
+        const res = await fetch(url, {
+          headers: { Authorization: `Bearer ${token}`, 'Notion-Version': '2022-06-28' },
+        })
+        if (!res.ok) break
+        const data = await res.json()
+        for (const block of (data.results || [])) {
+          const bt = block[block.type] || {}
+          const rt = bt.rich_text || []
+          const blockText = rt.map((r: { plain_text?: string }) => r.plain_text || '').join('')
+          if (blockText) blocks.push(blockText)
+        }
+        if (!data.has_more) break
+        cursor = data.next_cursor
+      }
+      text = blocks.join('\n\n')
+    } else {
+      return fail(`Import not supported for: ${connector_slug}`)
+    }
+
+    if (!text.trim()) return fail(`No text content found in '${name}'.`)
+
+    // Truncate to 5000 chars (memory limit)
+    const fact = text.length > 5000
+      ? `[Imported from ${name}]\n\n${text.slice(0, 4900)}\n\n[...truncated...]`
+      : `[Imported from ${name}]\n\n${text}`
+
+    const { data, error } = await supabase
+      .from('agent_memory')
+      .insert({
+        fact,
+        category,
+        importance,
+        agent_id: agent_id || null,
+        entity_id: entityId,
+        source: 'manual',
+      })
+      .select()
+      .single()
+
+    if (error) return dbFail(error)
+    return ok(data)
+  } catch (e) {
+    return dbError(e)
+  }
+}
+
+export async function importLocalFileAction(
+  base64Content: string,
+  fileName: string,
+  agentId: string | null,
+  category: string,
+  importance: number,
+): Promise<ActionResult<unknown>> {
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+
+    const buffer = Buffer.from(base64Content, 'base64')
+    const ext = fileName.toLowerCase().slice(fileName.lastIndexOf('.'))
+    let text = ''
+
+    if (ext === '.pdf') {
+      try {
+        // pdf-parse v1 loads a test file on require() — bypass by importing the core directly
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const pdfParse = require('pdf-parse/lib/pdf-parse.js')
+        const data = await pdfParse(buffer)
+        text = data.text
+      } catch (pdfErr) {
+        console.error('[importLocalFile] PDF parse error:', pdfErr)
+        return fail(`Failed to extract text from PDF: ${pdfErr instanceof Error ? pdfErr.message : String(pdfErr)}`)
+      }
+    } else if (['.txt', '.md', '.json', '.csv', '.xml', '.html', '.yml', '.yaml', '.toml', '.log'].includes(ext)) {
+      text = buffer.toString('utf-8')
+    } else {
+      return fail(`Unsupported file type: ${ext}. Supported: .pdf, .txt, .md, .json, .csv`)
+    }
+
+    if (!text.trim()) return fail(`No text content found in '${fileName}'.`)
+
+    // Clean text: remove null bytes and excessive whitespace
+    const cleaned = text.replace(/\0/g, '').replace(/\n{3,}/g, '\n\n').trim()
+    const truncated = cleaned.length > 4500 ? cleaned.slice(0, 4500) + '\n\n[...truncated...]' : cleaned
+    const fact = `[${fileName}]\n\n${truncated}`
+
+    console.log(`[importLocalFile] ${fileName}: ${text.length} chars extracted, ${fact.length} chars stored`)
+
+    const { data, error } = await supabase
+      .from('agent_memory')
+      .insert({
+        fact,
+        category,
+        importance,
+        agent_id: agentId || null,
+        entity_id: entityId,
+        source: 'manual',
+      })
+      .select()
+      .single()
+
+    if (error) {
+      console.error('[importLocalFile] DB insert error:', error.message, error.details, error.hint)
+      return fail(`Database error: ${error.message}`)
+    }
     return ok(data)
   } catch (e) {
     return dbError(e)
@@ -2237,6 +2580,61 @@ export async function deleteLlmKeyAction(
 export async function getOperatorProvidersAction(): Promise<string[]> {
   const raw = process.env.OPERATOR_PROVIDERS ?? ''
   return raw.split(',').map(s => s.trim()).filter(Boolean)
+}
+
+// ─── User Profile ────────────────────────────────────────────────────────────
+
+export type UserProfile = {
+  user_id: string
+  email: string
+  display_name: string | null
+  avatar_url: string | null
+  timezone: string
+  locale: string
+}
+
+export async function getUserProfileAction(): Promise<UserProfile> {
+  const { supabase, user } = await requireAuth()
+  const { data } = await supabase
+    .from('user_profiles')
+    .select('user_id, display_name, avatar_url, timezone, locale')
+    .eq('user_id', user.id)
+    .maybeSingle()
+  return {
+    user_id: user.id,
+    email: user.email ?? '',
+    display_name: data?.display_name ?? null,
+    avatar_url: data?.avatar_url ?? null,
+    timezone: data?.timezone ?? 'UTC',
+    locale: data?.locale ?? 'en',
+  }
+}
+
+export async function updateUserProfileAction(raw: unknown): Promise<ActionResult<UserProfile>> {
+  try {
+    const { supabase, user } = await requireAuth()
+    const parsed = UpdateUserProfileSchema.safeParse(raw)
+    if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? 'Invalid input')
+    const { error } = await supabase
+      .from('user_profiles')
+      .upsert({ user_id: user.id, ...parsed.data }, { onConflict: 'user_id' })
+    if (error) return dbFail(error)
+    const profile = await getUserProfileAction()
+    return ok(profile)
+  } catch (e) {
+    return dbError(e)
+  }
+}
+
+// Returns whether the current user is on the operator allowlist.
+// Operator sets OPERATOR_USER_IDS=uuid1,uuid2 in env vars. Only these users can
+// fall back to the operator's env API key when their entity has no key configured.
+// All other users must configure their own LLM key in Settings.
+export async function isOperatorAction(): Promise<{ isOperator: boolean }> {
+  const { user } = await requireAuth()
+  const raw = process.env.OPERATOR_USER_IDS ?? ''
+  const allowlist = raw.split(',').map(s => s.trim()).filter(Boolean)
+  return { isOperator: allowlist.includes(user.id) }
 }
 
 // ─── Agent Skill Assignments ─────────────────────────────────────────────────

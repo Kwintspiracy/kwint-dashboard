@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { getLlmKeysAction, saveLlmKeyAction, deleteLlmKeyAction, getAgentsAction, getMcpTokenAction, rotateMcpTokenAction } from '@/lib/actions'
+import { getLlmKeysAction, saveLlmKeyAction, deleteLlmKeyAction, getAgentsAction, getMcpTokenAction, rotateMcpTokenAction, isOperatorAction, getUserProfileAction, updateUserProfileAction, type UserProfile } from '@/lib/actions'
 import { LLM_PROVIDERS, getProviderForModel, type LlmProvider } from '@/lib/llm-providers'
 import { useData } from '@/hooks/useData'
 import { useAuth } from '@/components/AuthProvider'
@@ -54,6 +54,43 @@ export default function SettingsPage() {
     ]),
   )
 
+  // ── Operator status ───────────────────────────────────────
+  const [isOperator, setIsOperator] = useState(false)
+  useEffect(() => {
+    isOperatorAction().then(r => setIsOperator(r.isOperator)).catch(() => setIsOperator(false))
+  }, [])
+
+  // ── User profile ──────────────────────────────────────────
+  const { data: profile, mutate: mutateProfile } = useData(['user-profile'], getUserProfileAction)
+  const [profileDraft, setProfileDraft] = useState<UserProfile | null>(null)
+  const [savingProfile, setSavingProfile] = useState(false)
+  useEffect(() => {
+    if (profile) setProfileDraft(profile as UserProfile)
+  }, [profile])
+  const profileDirty = profileDraft && profile && (
+    profileDraft.display_name !== profile.display_name ||
+    profileDraft.avatar_url !== profile.avatar_url ||
+    profileDraft.timezone !== profile.timezone ||
+    profileDraft.locale !== profile.locale
+  )
+  async function handleSaveProfile() {
+    if (!profileDraft) return
+    setSavingProfile(true)
+    try {
+      const res = await updateUserProfileAction({
+        display_name: profileDraft.display_name || null,
+        avatar_url: profileDraft.avatar_url || null,
+        timezone: profileDraft.timezone,
+        locale: profileDraft.locale,
+      })
+      if (!res.ok) { toast.error(res.error); return }
+      toast.success('Profile saved')
+      mutateProfile()
+    } finally {
+      setSavingProfile(false)
+    }
+  }
+
   // ── MCP token ────────────────────────────────────────────
   const [mcpToken, setMcpToken] = useState<string | null>(null)
   const [showToken, setShowToken] = useState(false)
@@ -72,7 +109,8 @@ export default function SettingsPage() {
     else toast.error(res.error)
   }
 
-  const appUrl = typeof window !== 'undefined' ? window.location.origin : 'https://your-dashboard.com'
+  const [appUrl, setAppUrl] = useState('https://your-dashboard.com')
+  useEffect(() => { setAppUrl(window.location.origin) }, [])
   const mcpUrl = `${appUrl}/api/mcp/tasks`
   const mcpConfig = mcpToken
     ? JSON.stringify({ mcpServers: { 'kwint-tasks': { type: 'http', url: mcpUrl, headers: { Authorization: `Bearer ${mcpToken}` } } } }, null, 2)
@@ -171,6 +209,110 @@ export default function SettingsPage() {
         subtitle={`${configuredCount} provider${configuredCount !== 1 ? 's' : ''} configured · ${inUseCount} in use by agents`}
       />
 
+      {/* ── Profile ───────────────────────────────────── */}
+      <div className="mt-6 mb-8">
+        <h2 className="text-sm font-semibold text-neutral-300 mb-1">Your profile</h2>
+        <p className="text-xs text-neutral-500 mb-4">
+          How you appear across the dashboard and to your agents.
+        </p>
+        {profileDraft ? (
+          <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-4 space-y-4">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-full bg-neutral-900 border border-neutral-800 overflow-hidden flex items-center justify-center shrink-0">
+                {profileDraft.avatar_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={profileDraft.avatar_url} alt="Avatar" className="w-full h-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                ) : (
+                  <span className="text-lg text-neutral-600">{(profileDraft.display_name || profileDraft.email || '?').slice(0, 1).toUpperCase()}</span>
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm text-white font-medium truncate">{profileDraft.display_name || profileDraft.email}</p>
+                <p className="text-xs text-neutral-500 truncate">{profileDraft.email}</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-neutral-400 mb-1.5">Display name</label>
+                <input
+                  type="text"
+                  value={profileDraft.display_name ?? ''}
+                  onChange={e => setProfileDraft(p => p && ({ ...p, display_name: e.target.value }))}
+                  placeholder="Quentin Beau"
+                  maxLength={120}
+                  className="w-full rounded-lg border border-neutral-800 bg-neutral-900 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-neutral-600 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-neutral-400 mb-1.5">Avatar URL</label>
+                <input
+                  type="text"
+                  value={profileDraft.avatar_url ?? ''}
+                  onChange={e => setProfileDraft(p => p && ({ ...p, avatar_url: e.target.value }))}
+                  placeholder="https://…"
+                  maxLength={500}
+                  className="w-full rounded-lg border border-neutral-800 bg-neutral-900 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-neutral-600 outline-none font-mono"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-neutral-400 mb-1.5">Timezone</label>
+                <input
+                  type="text"
+                  value={profileDraft.timezone}
+                  onChange={e => setProfileDraft(p => p && ({ ...p, timezone: e.target.value }))}
+                  placeholder="Europe/Paris"
+                  maxLength={80}
+                  list="tz-list"
+                  className="w-full rounded-lg border border-neutral-800 bg-neutral-900 px-3 py-2 text-sm text-white placeholder:text-neutral-600 focus:border-neutral-600 outline-none font-mono"
+                />
+                <datalist id="tz-list">
+                  <option value="UTC" />
+                  <option value="Europe/Paris" />
+                  <option value="Europe/London" />
+                  <option value="Europe/Lisbon" />
+                  <option value="America/New_York" />
+                  <option value="America/Los_Angeles" />
+                  <option value="Asia/Singapore" />
+                  <option value="Asia/Hong_Kong" />
+                  <option value="Asia/Tokyo" />
+                </datalist>
+              </div>
+              <div>
+                <label className="block text-xs text-neutral-400 mb-1.5">Locale</label>
+                <select
+                  value={profileDraft.locale}
+                  onChange={e => setProfileDraft(p => p && ({ ...p, locale: e.target.value }))}
+                  className="w-full rounded-lg border border-neutral-800 bg-neutral-900 px-3 py-2 text-sm text-white focus:border-neutral-600 outline-none"
+                >
+                  <option value="en" className="bg-neutral-900">English</option>
+                  <option value="fr" className="bg-neutral-900">Français</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button
+                onClick={() => profile && setProfileDraft(profile as UserProfile)}
+                disabled={!profileDirty || savingProfile}
+                className="px-3 py-1.5 text-xs text-neutral-400 hover:text-white rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Reset
+              </button>
+              <button
+                onClick={handleSaveProfile}
+                disabled={!profileDirty || savingProfile}
+                className="px-3 py-1.5 text-xs font-medium bg-white text-black rounded-md hover:bg-neutral-200 active:bg-neutral-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {savingProfile ? 'Saving…' : 'Save profile'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="h-32 rounded-xl bg-neutral-900 animate-pulse" />
+        )}
+      </div>
+
       {/* ── Connected accounts ────────────────────────── */}
       <div className="mt-6 mb-8">
         <h2 className="text-sm font-semibold text-neutral-300 mb-1">Connected accounts</h2>
@@ -215,6 +357,19 @@ export default function SettingsPage() {
         <p className="text-xs text-neutral-500 mb-5">
           API keys are stored per workspace. Your agents use them when running jobs.
         </p>
+
+        {/* Missing-key warning for non-operators */}
+        {!loading && !isOperator && configuredCount === 0 && (
+          <div className="mb-5 rounded-xl border border-amber-500/40 bg-amber-500/5 px-4 py-3 flex items-start gap-3">
+            <Warning size={18} weight="bold" className="text-amber-400 shrink-0 mt-0.5" />
+            <div className="text-sm">
+              <p className="text-amber-200 font-medium">No LLM key configured — jobs will fail</p>
+              <p className="text-xs text-amber-300/70 mt-0.5">
+                Add a key for at least one provider below. Without a key, every agent job will fail immediately.
+              </p>
+            </div>
+          </div>
+        )}
 
         {loading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">

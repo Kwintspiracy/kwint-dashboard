@@ -129,10 +129,20 @@ export const UnarchiveMemorySchema = z.object({
   id: z.string().uuid(),
 })
 
+export const ImportFileAsMemorySchema = z.object({
+  connector_slug: z.string().min(1),
+  file_id: z.string().min(1),
+  file_name: z.string().optional(),
+  agent_id: z.string().uuid().nullable().optional(),
+  category: z.string().min(1).max(60).default('context'),
+  importance: z.number().int().min(1).max(10).default(4),
+})
+
 export type CreateMemoryInput = z.infer<typeof CreateMemorySchema>
 export type UpdateMemoryInput = z.infer<typeof UpdateMemorySchema>
 export type ArchiveStaleMemoriesInput = z.infer<typeof ArchiveStaleMemoriesSchema>
 export type UnarchiveMemoryInput = z.infer<typeof UnarchiveMemorySchema>
+export type ImportFileAsMemoryInput = z.infer<typeof ImportFileAsMemorySchema>
 
 // ─── Schedule / Automation ───────────────────────────────────────────────────
 
@@ -262,6 +272,16 @@ export const CreateEntitySchema = z.object({
 })
 export const UpdateEntitySchema = CreateEntitySchema.partial()
 export type CreateEntityInput = z.infer<typeof CreateEntitySchema>
+
+// ─── User Profile ─────────────────────────────────────────────────────────────
+
+export const UpdateUserProfileSchema = z.object({
+  display_name: z.string().max(120).nullable().optional(),
+  avatar_url: z.string().max(500).nullable().optional(),
+  timezone: z.string().max(80).optional(),
+  locale: z.string().max(10).optional(),
+})
+export type UpdateUserProfileInput = z.infer<typeof UpdateUserProfileSchema>
 
 // ─── LLM Key ──────────────────────────────────────────────────────────────────
 

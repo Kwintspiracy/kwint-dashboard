@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, Suspense } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { createEntityAction, migrateExistingDataAction, switchEntityAction } from '@/lib/actions'
+import { createEntityAction, migrateExistingDataAction, switchEntityAction, saveLlmKeyAction, isOperatorAction } from '@/lib/actions'
+import { LLM_PROVIDERS } from '@/lib/llm-providers'
 
 const ICONS = ['🏢', '🏠', '🎨', '💼', '🚀', '🔬', '📊', '🎯', '🤖', '💡', '🔧', '⚡', '🌐', '📱', '🎮', '🏗️', '🎪', '🏥', '🏫', '🏦', '🛒', '🏭', '✈️', '📸']
 
@@ -38,10 +39,25 @@ function OnboardingContent() {
   const [icon, setIcon] = useState('🏢')
   const [industry, setIndustry] = useState<Industry | ''>('')
   const [goal, setGoal] = useState('')
+  // API key step
+  const [providerId, setProviderId] = useState<string>('anthropic')
+  const [apiKey, setApiKey] = useState('')
+  const [baseUrl, setBaseUrl] = useState('')
+  const [showKey, setShowKey] = useState(false)
+  const [isOperator, setIsOperator] = useState(false)
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
-  const TOTAL_STEPS = 5
+  // Steps: 0 welcome, 1 name, 2 icon, 3 industry+goal, 4 api-key, 5 loading
+  const TOTAL_STEPS = 6
+  const LOADING_STEP = 5
+  const API_KEY_STEP = 4
+
+  useEffect(() => {
+    isOperatorAction().then(r => setIsOperator(r.isOperator)).catch(() => setIsOperator(false))
+  }, [])
+
+  const provider = LLM_PROVIDERS.find(p => p.id === providerId) ?? LLM_PROVIDERS[0]
 
   function handleNameChange(v: string) {
     setName(v)
@@ -66,14 +82,29 @@ function OnboardingContent() {
         return
       }
       const entityId = result.data.id
+      // Switch active entity FIRST so saveLlmKeyAction's requireAuthWithEntity picks it up
+      await switchEntityAction(entityId)
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('kwint_active_entity', entityId)
+      }
+      // Save the LLM key if provided
+      if (apiKey.trim()) {
+        const keyRes = await saveLlmKeyAction({
+          provider: providerId,
+          api_key: apiKey.trim(),
+          base_url: baseUrl.trim() || null,
+          nickname: null,
+        })
+        if (!keyRes.ok) {
+          setError(`Workspace created, but saving the API key failed: ${keyRes.error}`)
+          setStep(API_KEY_STEP)
+          setSubmitting(false)
+          return
+        }
+      }
       // Migrate existing data (only on first workspace setup, not add mode)
       if (!isAddMode) {
         await migrateExistingDataAction(entityId)
-      }
-      await switchEntityAction(entityId)
-      // Also set localStorage for client
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('kwint_active_entity', entityId)
       }
       router.push('/stats')
     } catch (e) {
@@ -89,9 +120,13 @@ function OnboardingContent() {
       setError('Name and slug are required')
       return
     }
+    if (step === API_KEY_STEP && !apiKey.trim() && !isOperator) {
+      setError('An API key is required to run agents. You can change it later in Settings.')
+      return
+    }
     setError('')
-    if (step === 3) {
-      setStep(4)
+    if (step === API_KEY_STEP) {
+      setStep(LOADING_STEP)
       handleSubmit()
       return
     }
@@ -103,13 +138,14 @@ function OnboardingContent() {
     setStep(s => Math.max(s - 1, 0))
   }
 
-  const dots = Array.from({ length: TOTAL_STEPS - 1 }, (_, i) => i + 1)
+  // Progress dots: one dot per interactive step (1..API_KEY_STEP)
+  const dots = Array.from({ length: API_KEY_STEP }, (_, i) => i + 1)
 
   return (
     <div className="flex min-h-screen w-full items-center justify-center bg-neutral-950 px-4">
       <div className="w-full max-w-md">
-        {/* Progress dots — skip for step 0 (welcome) and step 4 (loading) */}
-        {step > 0 && step < 4 && (
+        {/* Progress dots — hidden on welcome and loading */}
+        {step > 0 && step < LOADING_STEP && (
           <div className="flex items-center justify-center gap-2 mb-8">
             {dots.map(i => (
               <div
@@ -242,8 +278,76 @@ function OnboardingContent() {
             </div>
           )}
 
-          {/* Step 4: Creating */}
-          {step === 4 && (
+          {/* Step 4: LLM API key */}
+          {step === API_KEY_STEP && (
+            <div className="space-y-5">
+              <div>
+                <h2 className="text-lg font-bold text-white tracking-tight">Connect an LLM provider</h2>
+                <p className="text-sm text-neutral-500 mt-1">
+                  Agents need an API key to run. Your key stays in your workspace and is only used for your jobs.
+                </p>
+              </div>
+              <div>
+                <label className="block text-xs text-neutral-400 mb-1.5">Provider</label>
+                <select
+                  value={providerId}
+                  onChange={e => setProviderId(e.target.value)}
+                  className="w-full rounded-lg border border-neutral-800/50 bg-neutral-800/30 px-3 py-2.5 text-sm text-white focus:border-neutral-600 transition-colors outline-none"
+                >
+                  {LLM_PROVIDERS.map(p => (
+                    <option key={p.id} value={p.id} className="bg-neutral-900">{p.name}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-neutral-600 mt-1">{provider.description}</p>
+              </div>
+              <div>
+                <label className="block text-xs text-neutral-400 mb-1.5">{provider.keyLabel}</label>
+                <div className="relative">
+                  <input
+                    type={showKey ? 'text' : 'password'}
+                    value={apiKey}
+                    onChange={e => setApiKey(e.target.value)}
+                    placeholder={provider.keyPlaceholder}
+                    autoComplete="off"
+                    className="w-full rounded-lg border border-neutral-800/50 bg-neutral-800/30 px-3 py-2.5 pr-16 text-sm text-white placeholder:text-neutral-600 focus:border-neutral-600 transition-colors outline-none font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowKey(s => !s)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-neutral-500 hover:text-neutral-300 px-2 py-1"
+                  >
+                    {showKey ? 'Hide' : 'Show'}
+                  </button>
+                </div>
+                <p className="text-xs text-neutral-600 mt-1">{provider.keyHelp}</p>
+              </div>
+              {provider.needsBaseUrl && (
+                <div>
+                  <label className="block text-xs text-neutral-400 mb-1.5">{provider.baseUrlLabel ?? 'Base URL'}</label>
+                  <input
+                    type="text"
+                    value={baseUrl}
+                    onChange={e => setBaseUrl(e.target.value)}
+                    placeholder={provider.baseUrlPlaceholder}
+                    className="w-full rounded-lg border border-neutral-800/50 bg-neutral-800/30 px-3 py-2.5 text-sm text-white placeholder:text-neutral-600 focus:border-neutral-600 transition-colors outline-none font-mono"
+                  />
+                </div>
+              )}
+              {isOperator && (
+                <button
+                  type="button"
+                  onClick={() => { setApiKey(''); setError(''); setStep(LOADING_STEP); handleSubmit() }}
+                  className="text-xs text-neutral-500 hover:text-neutral-300 underline"
+                >
+                  Skip for now (operator)
+                </button>
+              )}
+              {error && <p className="text-sm text-red-400">{error}</p>}
+            </div>
+          )}
+
+          {/* Step 5: Creating */}
+          {step === LOADING_STEP && (
             <div className="text-center space-y-4 py-4">
               <div className="text-4xl animate-pulse">{icon}</div>
               <h2 className="text-lg font-bold text-white tracking-tight">Creating your workspace...</h2>
@@ -254,8 +358,8 @@ function OnboardingContent() {
             </div>
           )}
 
-          {/* Navigation — not shown on step 0 or step 4 */}
-          {step > 0 && step < 4 && (
+          {/* Navigation — not shown on step 0 or loading step */}
+          {step > 0 && step < LOADING_STEP && (
             <div className="flex items-center gap-3 mt-6">
               <button
                 onClick={back}
@@ -268,7 +372,7 @@ function OnboardingContent() {
                 disabled={submitting}
                 className="flex-1 rounded-lg bg-white text-black py-2.5 text-sm font-medium hover:bg-neutral-200 active:bg-neutral-300 active:scale-[0.97] transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                {step === 3 ? 'Create workspace' : 'Next'}
+                {step === API_KEY_STEP ? 'Create workspace' : 'Next'}
               </button>
             </div>
           )}

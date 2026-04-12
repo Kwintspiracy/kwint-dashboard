@@ -797,8 +797,8 @@ export default function TasksPage() {
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-sm text-white font-medium truncate">{s.name}</span>
-                        <span className="text-xs px-1.5 py-0.5 rounded bg-amber-950/50 border border-amber-900/30 text-amber-400 font-mono shrink-0">
-                          {s.type === 'heartbeat' ? 'heartbeat' : 'cron'}
+                        <span className={`text-xs px-1.5 py-0.5 rounded font-mono shrink-0 ${s.type === 'system' ? 'bg-violet-950/50 border border-violet-900/30 text-violet-400' : 'bg-amber-950/50 border border-amber-900/30 text-amber-400'}`}>
+                          {s.type === 'system' ? 'system' : s.type === 'heartbeat' ? 'heartbeat' : 'cron'}
                         </span>
                       </div>
                       <span className="text-xs text-neutral-600">
