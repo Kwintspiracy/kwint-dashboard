@@ -31,7 +31,12 @@ export async function proxy(request: NextRequest) {
     }
   )
 
-  const { data: { user } } = await supabase.auth.getUser()
+  // Use getSession() (cookie-only, no network) instead of getUser() (hits Supabase
+  // /auth/v1/user endpoint, 300-800ms per nav). Middleware only needs to know if
+  // the user is authed for redirect gating — the real security check happens
+  // in requireAuth() inside server actions, which uses getUser().
+  const { data: { session } } = await supabase.auth.getSession()
+  const user = session?.user ?? null
 
   const pathname = request.nextUrl.pathname
   const isPublicPath =
