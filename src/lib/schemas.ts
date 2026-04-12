@@ -116,6 +116,14 @@ export const CreateMemorySchema = z.object({
   category: z.string().min(1, 'Category is required').max(60),
   importance: z.number().int().min(1).max(10),
   agent_id: z.string().uuid().nullable().optional(),
+  // Skill tags control WHICH skill contexts trigger this memory to be loaded
+  // (e.g. ["google-drive", "file-storage"] → loaded when any agent is handling
+  // a drive/files-related task). Empty = only loaded globally via L1/L2 rules.
+  skill_tags: z.array(z.string().max(60)).max(20).optional().default([]),
+  // L1 = always loaded when skill matches (use for critical/permanent context),
+  // L2 = keyword-match-triggered (default for most memories),
+  // L3 = semantic search only (embedding-based, rarely loaded).
+  memory_layer: z.enum(['L1', 'L2', 'L3']).nullable().optional(),
 })
 
 export const UpdateMemorySchema = CreateMemorySchema.partial()
