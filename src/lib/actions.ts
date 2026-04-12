@@ -520,7 +520,13 @@ export async function getSkillsAction(): Promise<any[]> {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function getMemoriesAction(category?: string, agentId?: string, includeArchived = false): Promise<any[]> {
   const { supabase, entityId } = await requireAuthWithEntity()
-  let query = supabase.from('agent_memory').select('*').eq('entity_id', entityId).order('updated_at', { ascending: false })
+  // Exclude `embedding` (vector(1536)) — huge payload never used in the UI.
+  let query = supabase
+    .from('agent_memory')
+    .select('id, entity_id, agent_id, category, fact, importance, source, skill_tags, memory_layer, valid_to, archived, access_count, last_accessed_at, created_at, updated_at')
+    .eq('entity_id', entityId)
+    .order('updated_at', { ascending: false })
+    .limit(500)
   if (!includeArchived) query = query.eq('archived', false)
   if (category) query = query.eq('category', category)
   if (agentId) query = query.eq('agent_id', agentId)

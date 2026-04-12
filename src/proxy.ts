@@ -94,6 +94,9 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.png$).*)',
+    // Skip middleware entirely for: Next.js internals, API routes (handled by their own auth),
+    // static images, and SVG/icon assets. This avoids a Supabase auth round-trip on every
+    // asset/api request and cuts TTFB on navigation.
+    '/((?!_next/static|_next/image|favicon\\.ico|api/|app-icons/|.*\\.(?:png|jpg|jpeg|gif|webp|svg|ico|woff2?|ttf|map)$).*)',
   ],
 }

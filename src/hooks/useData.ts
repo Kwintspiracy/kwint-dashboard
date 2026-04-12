@@ -20,7 +20,10 @@ export function useData<T>(
     fetcher,
     {
       revalidateOnFocus: false,
-      dedupingInterval: 10_000,
+      revalidateOnReconnect: false,
+      revalidateIfStale: false,        // Served cached data instantly; only refetch on mutate()
+      dedupingInterval: 30_000,        // Same key within 30s → no refetch
+      focusThrottleInterval: 60_000,   // If focus revalidation re-enabled, throttle to 1/min
       keepPreviousData: true,
       errorRetryCount: 3,              // Stop retrying after 3 failures
       errorRetryInterval: 5_000,       // Wait 5s between retries
