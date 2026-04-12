@@ -11,12 +11,20 @@ import useSWR, { SWRConfiguration } from 'swr'
  *   const { data, isLoading, mutate } = useData(['jobs', filters], () => getJobsAction(filters))
  */
 export function useData<T>(
-  key: string | unknown[],
+  key: string | unknown[] | null,
   fetcher: () => Promise<T>,
   config?: SWRConfiguration<T>
 ) {
+  // Auto-skip when any element of a tuple key is null/undefined — typically
+  // `eid` during AuthProvider bootstrap. Prevents firing every server action
+  // twice: once with undefined entity, once with the resolved entity.
+  const safeKey: string | unknown[] | null =
+    key === null ? null
+    : Array.isArray(key) && key.some(k => k === null || k === undefined) ? null
+    : key
+
   return useSWR<T>(
-    key,
+    safeKey,
     fetcher,
     {
       revalidateOnFocus: false,

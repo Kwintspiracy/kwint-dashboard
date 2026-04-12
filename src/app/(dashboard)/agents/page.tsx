@@ -547,7 +547,7 @@ export default function AgentsPage() {
     setAssignedSkillIds([]); setSkillApprovalOverrides({}); setSkillCustomInstructions({})
     setAssignedAgentIds([]); setAgentInstructions({}); setSelectedOrchestratorId(null)
     setForm({
-      name: a.name, slug: a.slug, personality: a.personality, model: a.model,
+      name: a.name, slug: a.slug, personality: '', model: a.model,
       role: a.role || 'agent',
       telegram_bot_token: a.telegram_bot_token || '',
       telegram_bot_username: a.telegram_bot_username || '',
@@ -556,10 +556,12 @@ export default function AgentsPage() {
       avatar_url: a.avatar_url || null,
     })
 
-    // Single fetch for all edit data (1 server action, 3 parallel DB queries)
+    // Single fetch for all edit data (1 server action, 4 parallel DB queries)
+    // Personality is fetched here (not in the list endpoint) to keep the list payload small.
     setLoadingEditId(a.id)
     const res = await getAgentEditDataAction(a.id)
     if (res.ok) {
+      setForm(prev => ({ ...prev, personality: res.data.personality ?? '' }))
       const validSkillIds = new Set(skills.map(s => s.id))
       setAssignedSkillIds(res.data.skillIds.filter(id => validSkillIds.has(id)))
       setSkillCustomInstructions(res.data.customInstructions)

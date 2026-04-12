@@ -432,8 +432,11 @@ export async function getCostByAgentAction() {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function getAgentsAction(): Promise<any[]> {
   const { supabase, entityId } = await requireAuthWithEntity()
+  // List view never needs `personality` (the 2-10KB system prompt text).
+  // It's loaded on demand via getAgentEditDataAction(id) when the edit panel opens.
   const { data, error } = await supabase
-    .from('agents').select('*')
+    .from('agents')
+    .select('id, name, slug, model, role, active, is_default, avatar_url, capabilities, requires_approval, task_context_template, system_agent, telegram_bot_token, telegram_bot_username, created_at, updated_at')
     .eq('entity_id', entityId)
     .order('is_default', { ascending: false })
     .order('name')
@@ -2646,6 +2649,7 @@ export async function isOperatorAction(): Promise<{ isOperator: boolean }> {
 // ─── Agent Skill Assignments ─────────────────────────────────────────────────
 
 export async function getAgentEditDataAction(agentId: string): Promise<ActionResult<{
+  personality: string | null
   skillIds: string[]
   customInstructions: Record<string, boolean>
   subAgents: { sub_agent_id: string; instructions: string | null }[]
@@ -2653,7 +2657,8 @@ export async function getAgentEditDataAction(agentId: string): Promise<ActionRes
 }>> {
   try {
     const { supabase, entityId } = await requireAuthWithEntity()
-    const [skillsRes, assignmentsRes, orchParentRes] = await Promise.all([
+    const [agentRes, skillsRes, assignmentsRes, orchParentRes] = await Promise.all([
+      supabase.from('agents').select('personality').eq('id', agentId).eq('entity_id', entityId).limit(1).maybeSingle(),
       supabase.from('agent_skill_assignments').select('skill_id, use_custom_instructions').eq('agent_id', agentId).eq('entity_id', entityId),
       supabase.from('agent_assignments').select('sub_agent_id, instructions').eq('orchestrator_id', agentId).eq('entity_id', entityId),
       supabase.from('agent_assignments').select('orchestrator_id').eq('sub_agent_id', agentId).eq('entity_id', entityId).limit(1).maybeSingle(),
@@ -2662,6 +2667,7 @@ export async function getAgentEditDataAction(agentId: string): Promise<ActionRes
     const customInstructions: Record<string, boolean> = {}
     for (const r of skillRows) { if (r.use_custom_instructions) customInstructions[r.skill_id] = true }
     return ok({
+      personality: agentRes.data?.personality ?? null,
       skillIds: skillRows.map(r => r.skill_id),
       customInstructions,
       subAgents: assignmentsRes.data ?? [],
