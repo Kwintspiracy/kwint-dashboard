@@ -5,6 +5,7 @@ import { DndContext, DragOverlay, useDraggable, useDroppable, MouseSensor, Touch
 import { getAgentsAction, createAgentAction, updateAgentAction, deleteAgentAction, setDefaultAgentAction, activateTelegramAction, deactivateTelegramAction, getLlmKeysAction, getOperatorProvidersAction, getSkillsAction, getConnectorsAction, getAgentSkillAssignmentsAction, setAgentSkillAssignmentsAction, setSkillApprovalsAction, setSkillEnabledOperationsAction, getOrchestratorAssignmentsAction, getOrchestratorAssignmentDetailsAction, setOrchestratorAssignmentsAction, getAgentOrchestratorAction, setAgentOrchestratorAction, getAllAgentAssignmentsAction, getAllSkillAssignmentsAction, previewEffectivePromptAction, autoAssignTemplateSkillsAction, getSkillCustomInstructionsAction, setSkillCustomInstructionsAction, getAgentEditDataAction, getAgentMemoryCountsAction } from '@/lib/actions'
 import { AgentReadinessBadge } from '@/components/AgentReadiness'
 import MemoryRecipeApplier from '@/components/MemoryRecipeApplier'
+import AgentMemoriesList from '@/components/AgentMemoriesList'
 import { timeAgo } from '@/lib/utils'
 import { toast } from 'sonner'
 import { useData } from '@/hooks/useData'
@@ -2236,12 +2237,19 @@ export default function AgentsPage() {
             </div>
           )}
 
-          {/* Starter memory recipes — only visible when editing an existing agent */}
+          {/* Memories section — list + edit/delete + starter recipes */}
           {editingId && (() => {
             const a = agents.find(x => x.id === editingId)
             if (!a || a.role === 'system') return null
             return (
               <div className="space-y-6 mt-6">
+                <fieldset>
+                  <legend className="text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-3">Agent memories</legend>
+                  <p className="text-xs text-neutral-600 mb-3 leading-snug">
+                    Persistent facts this agent knows — loaded automatically into every run. Click any memory to edit or remove it.
+                  </p>
+                  <AgentMemoriesList agentId={a.id} onChanged={() => mutateMemoryCounts()} />
+                </fieldset>
                 <fieldset>
                   <legend className="text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-3">Starter memory recipes</legend>
                   <MemoryRecipeApplier
