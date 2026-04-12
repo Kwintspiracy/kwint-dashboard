@@ -540,7 +540,14 @@ export async function getMemoriesAction(category?: string, agentId?: string, inc
 
 export async function getMemoryCountAction() {
   const { supabase, entityId } = await requireAuthWithEntity()
-  const { data, error } = await supabase.from('agent_memory').select('category').eq('entity_id', entityId)
+  // Count only NON-archived memories — the category filter on /memories loads
+  // archived=false by default, so the top-bar counts must match that view.
+  // Archived memories show up via the "Show archived" toggle (separate path).
+  const { data, error } = await supabase
+    .from('agent_memory')
+    .select('category')
+    .eq('entity_id', entityId)
+    .eq('archived', false)
   if (error) { console.error('[actions]', error.message); throw new Error('Failed to load data') }
 
   const counts: Record<string, number> = { total: 0 }
