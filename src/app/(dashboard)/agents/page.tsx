@@ -2,7 +2,9 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { DndContext, DragOverlay, useDraggable, useDroppable, MouseSensor, TouchSensor, useSensor, useSensors, pointerWithin, type DragEndEvent } from '@dnd-kit/core'
-import { getAgentsAction, createAgentAction, updateAgentAction, deleteAgentAction, setDefaultAgentAction, activateTelegramAction, deactivateTelegramAction, getLlmKeysAction, getOperatorProvidersAction, getSkillsAction, getConnectorsAction, getAgentSkillAssignmentsAction, setAgentSkillAssignmentsAction, setSkillApprovalsAction, getOrchestratorAssignmentsAction, getOrchestratorAssignmentDetailsAction, setOrchestratorAssignmentsAction, getAgentOrchestratorAction, setAgentOrchestratorAction, getAllAgentAssignmentsAction, getAllSkillAssignmentsAction, previewEffectivePromptAction, autoAssignTemplateSkillsAction, getSkillCustomInstructionsAction, setSkillCustomInstructionsAction, getAgentEditDataAction } from '@/lib/actions'
+import { getAgentsAction, createAgentAction, updateAgentAction, deleteAgentAction, setDefaultAgentAction, activateTelegramAction, deactivateTelegramAction, getLlmKeysAction, getOperatorProvidersAction, getSkillsAction, getConnectorsAction, getAgentSkillAssignmentsAction, setAgentSkillAssignmentsAction, setSkillApprovalsAction, getOrchestratorAssignmentsAction, getOrchestratorAssignmentDetailsAction, setOrchestratorAssignmentsAction, getAgentOrchestratorAction, setAgentOrchestratorAction, getAllAgentAssignmentsAction, getAllSkillAssignmentsAction, previewEffectivePromptAction, autoAssignTemplateSkillsAction, getSkillCustomInstructionsAction, setSkillCustomInstructionsAction, getAgentEditDataAction, getAgentMemoryCountsAction } from '@/lib/actions'
+import { AgentReadinessBadge } from '@/components/AgentReadiness'
+import MemoryRecipeApplier from '@/components/MemoryRecipeApplier'
 import { timeAgo } from '@/lib/utils'
 import { toast } from 'sonner'
 import { useData } from '@/hooks/useData'
@@ -410,6 +412,9 @@ export default function AgentsPage() {
   const { data: connectorsRaw = [] } = useData(['connectors', eid], getConnectorsAction)
   const { data: allAssignmentsRaw, mutate: mutateAssignments } = useData(['agent-assignments', eid], getAllAgentAssignmentsAction)
   const { data: allSkillAssignmentsRaw, mutate: mutateSkillAssignments } = useData(['all-skill-assignments', eid], getAllSkillAssignmentsAction)
+  const { data: memoryCountsRaw = {}, mutate: mutateMemoryCounts } = useData(['memory-counts-by-agent', eid], getAgentMemoryCountsAction)
+  const memoryCounts = memoryCountsRaw as Record<string, number>
+  const globalMemoryCount = memoryCounts['__global__'] ?? 0
   const configuredProviders = new Set(
     (llmKeysRaw as { provider: string; is_active: boolean }[]).filter(k => k.is_active).map(k => k.provider)
   )
@@ -421,7 +426,7 @@ export default function AgentsPage() {
   type ConnectorRef = { id: string; name: string; slug: string; active: boolean }
   const skills = skillsRaw as Skill[]
   const connectors = connectorsRaw as ConnectorRef[]
-  type AgentAssignment = { orchestrator_id: string; sub_agent_id: string }
+  type AgentAssignment = { orchestrator_id: string; sub_agent_id: string; instructions: string | null }
   const allAssignments: AgentAssignment[] = (allAssignmentsRaw as { ok: boolean; data?: AgentAssignment[] } | undefined)?.ok
     ? ((allAssignmentsRaw as { ok: true; data: AgentAssignment[] }).data ?? [])
     : []
@@ -433,6 +438,20 @@ export default function AgentsPage() {
   for (const r of rawSkillAssignments) {
     if (!skillMap[r.agent_id]) skillMap[r.agent_id] = []
     skillMap[r.agent_id].push(r.slug)
+  }
+
+  // Readiness input builder — used by AgentReadinessBadge on each agent card
+  // and by the expanded checklist in the edit panel.
+  function buildReadinessInput(agent: Agent) {
+    const ownAssignments = allAssignments.filter(a => a.orchestrator_id === agent.id)
+    return {
+      agent: { id: agent.id, role: agent.role },
+      skillCount: (skillMap[agent.id] ?? []).length,
+      teammateCount: ownAssignments.length,
+      teammateWithInstructions: ownAssignments.filter(a => ((a.instructions ?? '') as string).trim().length > 0).length,
+      memoryCount: memoryCounts[agent.id] ?? 0,
+      globalMemoryCount,
+    }
   }
 
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -768,6 +787,11 @@ export default function AgentsPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
+                    {a.role !== 'system' && (
+                      <div onClick={(e) => e.stopPropagation()}>
+                        <AgentReadinessBadge input={buildReadinessInput(a)} />
+                      </div>
+                    )}
                     {a.role === 'orchestrator' && (
                       <span className="text-xs px-1.5 py-0.5 rounded-full bg-sky-950/60 text-sky-400 border border-sky-800/40 font-medium">orchestrator</span>
                     )}
@@ -1103,7 +1127,7 @@ export default function AgentsPage() {
             ? allAssignments.filter(a => a.sub_agent_id !== agentId)
             : [
                 ...allAssignments.filter(a => a.sub_agent_id !== agentId),
-                { orchestrator_id: targetId, sub_agent_id: agentId },
+                { orchestrator_id: targetId, sub_agent_id: agentId, instructions: null },
               ]
 
           void mutateAssignments(
@@ -1349,6 +1373,17 @@ export default function AgentsPage() {
 
             {/* Identity + Instructions */}
             <div className="space-y-6">
+
+              {/* Readiness checklist — only when editing an existing agent */}
+              {editingId && (() => {
+                const a = agents.find(x => x.id === editingId)
+                if (!a || a.role === 'system') return null
+                return (
+                  <div className="rounded-xl border border-neutral-800/60 bg-neutral-900/40 p-4">
+                    <AgentReadinessBadge input={buildReadinessInput(a)} compact={false} />
+                  </div>
+                )
+              })()}
 
               {/* Identity */}
               <fieldset className="space-y-4">
@@ -2129,6 +2164,24 @@ export default function AgentsPage() {
               )}
             </div>
           )}
+
+          {/* Starter memory recipes — only visible when editing an existing agent */}
+          {editingId && (() => {
+            const a = agents.find(x => x.id === editingId)
+            if (!a || a.role === 'system') return null
+            return (
+              <div className="space-y-6 mt-6">
+                <fieldset>
+                  <legend className="text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-3">Starter memory recipes</legend>
+                  <MemoryRecipeApplier
+                    agentId={a.id}
+                    agentName={a.name}
+                    onApplied={() => { mutateMemoryCounts() }}
+                  />
+                </fieldset>
+              </div>
+            )
+          })()}
 
       </SidePanel>
     </div>

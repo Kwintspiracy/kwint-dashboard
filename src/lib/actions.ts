@@ -2973,16 +2973,59 @@ export async function setOrchestratorAssignmentsAction(
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function getAllAgentAssignmentsAction(): Promise<ActionResult<{ orchestrator_id: string; sub_agent_id: string }[]>> {
+export async function getAllAgentAssignmentsAction(): Promise<ActionResult<{ orchestrator_id: string; sub_agent_id: string; instructions: string | null }[]>> {
   try {
     const { supabase, entityId } = await requireAuthWithEntity()
     const { data, error } = await supabase
       .from('agent_assignments')
-      .select('orchestrator_id, sub_agent_id')
+      .select('orchestrator_id, sub_agent_id, instructions')
       .eq('entity_id', entityId)
     if (error) return dbFail(error)
     return ok(data ?? [])
   } catch (e) { return dbError(e) }
+}
+
+// Bulk-insert a memory recipe scoped to one agent. Used by the Agents page
+// "Starter recipes" UI to seed an agent with a known-good bundle of memories.
+export async function applyMemoryRecipeAction(
+  agentId: string,
+  memories: { fact: string; category: string; importance: number; global: boolean; skill_tags: string[] }[],
+): Promise<ActionResult<{ inserted: number }>> {
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+    if (!Array.isArray(memories) || memories.length === 0) return fail('No memories to insert')
+    const rows = memories.map(m => ({
+      fact: m.fact,
+      category: m.category,
+      importance: Math.min(5, Math.max(1, m.importance | 0)),
+      agent_id: m.global ? null : agentId,
+      entity_id: entityId,
+      skill_tags: m.skill_tags ?? [],
+      source: 'manual',
+    }))
+    const { data, error } = await supabase.from('agent_memory').insert(rows).select('id')
+    if (error) return dbFail(error)
+    return ok({ inserted: (data ?? []).length })
+  } catch (e) { return dbError(e) }
+}
+
+// Counts non-archived memories per agent for the current entity. Includes global
+// (agent_id NULL) memories counted under key '__global__'. Used by the Agents
+// page to compute a per-agent readiness score.
+export async function getAgentMemoryCountsAction(): Promise<Record<string, number>> {
+  const { supabase, entityId } = await requireAuthWithEntity()
+  const { data, error } = await supabase
+    .from('agent_memory')
+    .select('agent_id')
+    .eq('entity_id', entityId)
+    .eq('archived', false)
+  if (error) { console.error('[actions]', error.message); throw new Error('Failed to load data') }
+  const counts: Record<string, number> = {}
+  for (const row of data ?? []) {
+    const key = row.agent_id ?? '__global__'
+    counts[key] = (counts[key] ?? 0) + 1
+  }
+  return counts
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
