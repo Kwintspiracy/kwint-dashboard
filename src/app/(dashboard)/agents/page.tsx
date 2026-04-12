@@ -421,7 +421,7 @@ export default function AgentsPage() {
   const operatorProviders = new Set(operatorProvidersRaw as string[])
   const agents = agentsRaw as Agent[]
   type RequiredConfigItem = { label: string; description: string; type: 'connector_slug' | 'manual'; value?: string; critical: boolean }
-  type OperationItem = { name: string; slug: string; risk: 'read' | 'write' | 'destructive'; requires_approval: boolean }
+  type OperationItem = { name: string; slug: string; risk: 'read' | 'write' | 'destructive'; requires_approval: boolean; description?: string }
   type Skill = { id: string; name: string; slug: string; active: boolean; content: string | null; description: string | null; required_config: RequiredConfigItem[] | null; default_content: string | null; content_overridden: boolean; operations: OperationItem[] | null }
   type ConnectorRef = { id: string; name: string; slug: string; active: boolean }
   const skills = skillsRaw as Skill[]
@@ -1690,7 +1690,7 @@ export default function AgentsPage() {
                                 <p className="text-[11px] text-neutral-700 leading-snug">
                                   Uncheck tools this agent shouldn&apos;t use. Fewer tools = smaller prompt + less chance the agent picks the wrong one.
                                 </p>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+                                <div className="grid grid-cols-1 gap-1.5">
                                   {(skill.operations ?? []).map(op => {
                                     const currentEnabled = skillEnabledOps[skill.id]
                                     const isEnabled = currentEnabled === null || currentEnabled === undefined
@@ -1701,7 +1701,11 @@ export default function AgentsPage() {
                                       op.risk === 'write' ? 'text-amber-400' :
                                       'text-red-400'
                                     return (
-                                      <label key={op.slug} className="flex items-center gap-2 cursor-pointer group px-1 py-0.5 rounded hover:bg-neutral-900/40">
+                                      <label
+                                        key={op.slug}
+                                        className="flex items-start gap-2 cursor-pointer group px-1 py-0.5 rounded hover:bg-neutral-900/40"
+                                        title={op.description ? `${op.slug}\n\n${op.description}` : op.slug}
+                                      >
                                         <input
                                           type="checkbox"
                                           checked={isEnabled}
@@ -1709,29 +1713,38 @@ export default function AgentsPage() {
                                             setSkillEnabledOps(prev => {
                                               const current = prev[skill.id]
                                               const allOps = (skill.operations ?? []).map(o => o.slug)
-                                              // If currently "all enabled" (null) and user unchecks, switch to explicit list minus this one
                                               const baseList: string[] = current === null || current === undefined ? [...allOps] : [...current]
                                               let next: string[] | null
                                               if (isEnabled) {
-                                                // Uncheck — remove from list
                                                 next = baseList.filter(s => s !== op.slug)
                                               } else {
-                                                // Check — add to list
                                                 next = baseList.includes(op.slug) ? baseList : [...baseList, op.slug]
                                               }
-                                              // If next equals all ops, collapse to null (all enabled)
                                               if (next.length === allOps.length && allOps.every(s => next!.includes(s))) {
                                                 next = null
                                               }
                                               return { ...prev, [skill.id]: next }
                                             })
                                           }}
-                                          className="rounded border-neutral-700 bg-neutral-800 accent-emerald-500 shrink-0 cursor-pointer"
+                                          className="rounded border-neutral-700 bg-neutral-800 accent-emerald-500 shrink-0 cursor-pointer mt-0.5"
                                         />
-                                        <span className={`text-xs font-mono ${isEnabled ? tone : 'text-neutral-700 line-through'}`}>
-                                          {op.name}
-                                        </span>
-                                        {op.risk === 'destructive' && <span className="text-[10px] text-red-500/60">⚠</span>}
+                                        <div className="flex-1 min-w-0">
+                                          <div className="flex items-center gap-1.5">
+                                            <span className={`text-xs font-mono ${isEnabled ? tone : 'text-neutral-700 line-through'}`}>
+                                              {op.name}
+                                            </span>
+                                            {op.risk === 'destructive' && <span className="text-[10px] text-red-500/60">⚠</span>}
+                                            {op.description && (
+                                              <span className="text-[10px] text-neutral-600 group-hover:text-neutral-400 transition-colors cursor-help" title={op.description}>ⓘ</span>
+                                            )}
+                                          </div>
+                                          {op.description && (
+                                            <p className={`text-[10px] leading-snug mt-0.5 ${isEnabled ? 'text-neutral-600' : 'text-neutral-700'}`}>
+                                              {op.description}
+                                            </p>
+                                          )}
+                                          <code className="text-[9px] text-neutral-700 font-mono block">{op.slug}</code>
+                                        </div>
                                       </label>
                                     )
                                   })}

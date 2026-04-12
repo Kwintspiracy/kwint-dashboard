@@ -16,6 +16,7 @@ export type OperationItem = {
   slug: string
   risk: 'read' | 'write' | 'destructive'
   requires_approval: boolean
+  description?: string  // Short hint explaining when/how to use this tool. Shown as tooltip in the UI.
 }
 
 export type SkillTemplate = {
@@ -397,12 +398,12 @@ System label IDs: INBOX, SENT, DRAFT, TRASH, SPAM, UNREAD, STARRED, IMPORTANT
       { label: 'Gmail connector', description: 'Google OAuth2 credentials with gmail.modify scope', type: 'connector_slug', value: 'gmail', critical: true },
     ],
     operations: [
-      { name: 'Search emails', slug: 'search_emails', risk: 'read', requires_approval: false },
-      { name: 'Read email', slug: 'read_email', risk: 'read', requires_approval: false },
-      { name: 'Send email', slug: 'send_email', risk: 'destructive', requires_approval: true },
-      { name: 'Reply to email', slug: 'reply_email', risk: 'destructive', requires_approval: true },
-      { name: 'Label email', slug: 'label_email', risk: 'write', requires_approval: false },
-      { name: 'Delete email', slug: 'delete_email', risk: 'destructive', requires_approval: true },
+      { name: 'Search emails', slug: 'search_emails', risk: 'read', requires_approval: false, description: 'Search the inbox using Gmail query syntax (from:, subject:, has:attachment, newer_than:1d…). Returns a list of matching message ids. Use read_email to fetch bodies.' },
+      { name: 'Read email', slug: 'read_email', risk: 'read', requires_approval: false, description: 'Fetch the full content of a specific email by id: headers, body (text/html), attachments metadata.' },
+      { name: 'Send email', slug: 'send_email', risk: 'destructive', requires_approval: true, description: 'Send a new email from the user\'s account. Approval required because emails sent in your name are visible and hard to take back.' },
+      { name: 'Reply to email', slug: 'reply_email', risk: 'destructive', requires_approval: true, description: 'Reply in an existing thread. Approval required for the same reason as send_email.' },
+      { name: 'Label email', slug: 'label_email', risk: 'write', requires_approval: false, description: 'Add or remove Gmail labels on a message (INBOX, STARRED, IMPORTANT, TRASH, SPAM, UNREAD, custom labels). Low risk.' },
+      { name: 'Delete email', slug: 'delete_email', risk: 'destructive', requires_approval: true, description: 'Move an email to Trash (recoverable for 30 days) or permanently delete. Approval required.' },
     ],
   },
   {
@@ -427,9 +428,21 @@ System label IDs: INBOX, SENT, DRAFT, TRASH, SPAM, UNREAD, STARRED, IMPORTANT
       { label: 'Google Drive connector', description: 'OAuth2 credentials with drive scope', type: 'connector_slug', value: 'google-drive', critical: true },
     ],
     operations: [
-      { name: 'List files', slug: 'drive_list_files', risk: 'read', requires_approval: false },
-      { name: 'Read file', slug: 'drive_read_file', risk: 'read', requires_approval: false },
-      { name: 'Upload file', slug: 'drive_upload_file', risk: 'write', requires_approval: true },
+      // Read
+      { name: 'List files', slug: 'drive_list_files', risk: 'read', requires_approval: false, description: 'Search Drive by name/mime/parent. Accepts a query string (e.g. "name contains \'resume\'"). Use this first to find a file id before reading.' },
+      { name: 'Read file content', slug: 'drive_read_file', risk: 'read', requires_approval: false, description: 'Read the TEXT content of a file. Works natively on Google Docs and .docx (via python-docx). PDFs only return text if they have been OCR\'d — otherwise fails. Pass file_id and file_name.' },
+      { name: 'Get file info', slug: 'drive_get_file_info', risk: 'read', requires_approval: false, description: 'Fetch metadata of a file: name, mime type, size, owner, created/modified dates, permissions. Does NOT read content.' },
+      { name: 'Export file', slug: 'drive_export_file', risk: 'read', requires_approval: false, description: 'Export a Google-native file (Docs, Sheets, Slides) to a specific format like text/plain or PDF. Fails on binary files like .docx or .pdf — only works for Docs Editors files.' },
+      { name: 'List permissions', slug: 'drive_list_permissions', risk: 'read', requires_approval: false, description: 'Who has access to a file (owner, editors, viewers). Useful before sharing.' },
+      // Write
+      { name: 'Upload file', slug: 'drive_upload_file', risk: 'write', requires_approval: true, description: 'Upload a new file with binary content. Approval required because it can exfiltrate data or fill storage.' },
+      { name: 'Create folder', slug: 'drive_create_folder', risk: 'write', requires_approval: false, description: 'Create an empty folder. Low risk.' },
+      { name: 'Rename file', slug: 'drive_rename_file', risk: 'write', requires_approval: false, description: 'Change the display name of a file or folder without touching content.' },
+      { name: 'Move file', slug: 'drive_move_file', risk: 'write', requires_approval: false, description: 'Change the parent folder of a file. Moves file in Drive tree.' },
+      { name: 'Copy file', slug: 'drive_copy_file', risk: 'write', requires_approval: false, description: 'Duplicate a file, preserving content. Returns the new file id.' },
+      { name: 'Share file', slug: 'drive_share_file', risk: 'write', requires_approval: true, description: 'Grant access to a user or make the file public. Approval required — sharing can leak data.' },
+      // Destructive
+      { name: 'Delete file', slug: 'drive_delete_file', risk: 'destructive', requires_approval: true, description: 'Permanently delete a file (bypasses trash). Not reversible. Approval required.' },
     ],
   },
 
@@ -682,11 +695,26 @@ GET /blocks/{page_id}/children?page_size=100
       { label: 'Notion Integration Token', description: 'Internal integration token (ntn_...) with read/write access', type: 'connector_slug', value: 'notion', critical: true },
     ],
     operations: [
-      { name: 'Search', slug: 'search', risk: 'read', requires_approval: false },
-      { name: 'Read page', slug: 'read_page', risk: 'read', requires_approval: false },
-      { name: 'Create page', slug: 'create_page', risk: 'write', requires_approval: true },
-      { name: 'Update page', slug: 'update_page', risk: 'write', requires_approval: false },
-      { name: 'Delete page', slug: 'delete_page', risk: 'destructive', requires_approval: true },
+      // Read
+      { name: 'Search pages & databases', slug: 'notion_search', risk: 'read', requires_approval: false, description: 'Full-text search across PAGE TITLES only (not database rows). Returns a mixed list of pages and databases. Bad at finding rows by property — use notion_query_database for that.' },
+      { name: 'List databases with schema', slug: 'notion_list_databases', risk: 'read', requires_approval: false, description: 'Enumerate all databases accessible to the integration, with their columns and types. Useful when the agent does not yet know a database id.' },
+      { name: 'Read page properties', slug: 'notion_get_page', risk: 'read', requires_approval: false, description: 'Fetch metadata + properties of a single page (title, author, timestamps, and database-row properties if the page is a DB row). Does NOT return body content.' },
+      { name: 'Read page content', slug: 'notion_get_page_content', risk: 'read', requires_approval: false, description: 'Fetch the BLOCK content of a page (paragraphs, headings, lists, toggles). Use this to read what is written inside a page. Database pages often have empty content — the data lives in properties.' },
+      { name: 'Query database rows', slug: 'notion_query_database', risk: 'read', requires_approval: false, description: 'THE canonical way to list rows from a Notion database. Accepts property filters (e.g. {"property":"Company","rich_text":{"contains":"X"}}) and sorts. Always prefer this over notion_search when looking for rows by column value.' },
+      { name: 'List comments', slug: 'notion_list_comments', risk: 'read', requires_approval: false, description: 'List comment threads on a page or block.' },
+      { name: 'List users', slug: 'notion_list_users', risk: 'read', requires_approval: false, description: 'List workspace users (id, name, email). Useful to find a mention target.' },
+      { name: 'Get user details', slug: 'notion_get_user', risk: 'read', requires_approval: false, description: 'Fetch a single user by id. Rarely needed independently.' },
+      // Write
+      { name: 'Create page', slug: 'notion_create_page', risk: 'write', requires_approval: false, description: 'Create a NEW page. Can be a root page (parent: page_id) or a row in a database (parent: database_id, with properties matching the DB schema). Main tool to publish content to Notion.' },
+      { name: 'Bulk create rows', slug: 'notion_bulk_create', risk: 'write', requires_approval: false, description: 'Create multiple database rows in one call. Use when importing N items. Faster than notion_create_page × N.' },
+      { name: 'Append content to page', slug: 'notion_append_content', risk: 'write', requires_approval: false, description: 'Append blocks (paragraphs, lists, headings…) to an existing page. Use to update an existing page instead of creating a duplicate.' },
+      { name: 'Update page properties', slug: 'notion_update_page', risk: 'write', requires_approval: false, description: 'Modify the properties of an existing page (status, tags, date, etc.). Does not touch body content — use notion_append_content for that.' },
+      { name: 'Add comment', slug: 'notion_add_comment', risk: 'write', requires_approval: false, description: 'Post a comment on a page or block. Visible to workspace collaborators.' },
+      { name: 'Create database', slug: 'notion_create_database', risk: 'write', requires_approval: true, description: 'Create a whole new database with a custom schema. Rare; requires approval because it structurally changes the workspace.' },
+      { name: 'Update database schema', slug: 'notion_update_database', risk: 'write', requires_approval: true, description: 'Add/rename/remove columns on an existing database. Risky: breaks rows that reference missing columns. Requires approval.' },
+      // Destructive
+      { name: 'Archive page', slug: 'notion_archive_page', risk: 'destructive', requires_approval: true, description: 'Soft-delete a page (moves to trash, recoverable for 30 days). Requires approval.' },
+      { name: 'Delete block', slug: 'notion_delete_block', risk: 'destructive', requires_approval: true, description: 'Permanently remove a block from a page. Not reversible. Requires approval.' },
     ],
   },
   {
@@ -1385,9 +1413,9 @@ Then check the returned markdown for "No longer accepting applications" or simil
       { label: 'Firecrawl API Key', description: 'API key (fc-...) from firecrawl.dev > Dashboard', type: 'connector_slug', value: 'firecrawl', critical: true },
     ],
     operations: [
-      { name: 'Scrape page', slug: 'scrape_page', risk: 'read', requires_approval: false },
-      { name: 'Batch scrape', slug: 'batch_scrape', risk: 'read', requires_approval: false },
-      { name: 'Crawl website', slug: 'crawl_site', risk: 'read', requires_approval: false },
+      { name: 'Scrape page', slug: 'scrape_page', risk: 'read', requires_approval: false, description: 'Fetch and render a single URL (including JS-rendered pages), returns clean markdown. Use when fetch_page returns a login wall or empty body. Paid quota.' },
+      { name: 'Batch scrape', slug: 'batch_scrape', risk: 'read', requires_approval: false, description: 'Scrape a list of URLs in parallel. Faster than N scrape_page calls. Use for 3+ URLs.' },
+      { name: 'Crawl website', slug: 'crawl_site', risk: 'read', requires_approval: false, description: 'Crawl an entire domain starting from a root URL, following internal links. Asynchronous; returns a job id then poll for results. Use for discovering pages on a site.' },
     ],
   },
 
