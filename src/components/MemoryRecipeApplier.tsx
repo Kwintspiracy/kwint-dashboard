@@ -11,55 +11,85 @@ interface Props {
   onApplied?: () => void
 }
 
+type DraftMemory = {
+  fact: string
+  category: 'preference' | 'context' | 'learned_rule' | 'outcome'
+  importance: number
+  global: boolean
+  skill_tags: string[]
+}
+
 /**
  * Inline widget shown in the agent edit panel. Lists memory recipes; clicking
- * one expands a form where the user fills placeholders (DB ids, folder URLs,
- * etc.) before insert. Each recipe bundles 1-3 memories covering a common
- * failure pattern.
+ * one expands a form where the user fills placeholders AND can edit the raw
+ * memory text before inserting. Nothing is fixed — everything in the template
+ * is editable at apply time.
  */
 export default function MemoryRecipeApplier({ agentId, agentName, onApplied }: Props) {
   const [selected, setSelected] = useState<MemoryRecipe | null>(null)
   const [placeholders, setPlaceholders] = useState<Record<string, string>>({})
+  const [drafts, setDrafts] = useState<DraftMemory[]>([])
   const [applying, setApplying] = useState(false)
+
+  // Apply current placeholders to all draft facts (only for drafts that still
+  // contain a {{KEY}} token — once the user edits manually we stop auto-substituting).
+  function renderFactWithPlaceholders(template: string, values: Record<string, string>): string {
+    let out = template
+    for (const [k, v] of Object.entries(values)) {
+      if (v.trim()) out = out.split(`{{${k}}}`).join(v.trim())
+    }
+    return out
+  }
 
   function startRecipe(recipe: MemoryRecipe) {
     setSelected(recipe)
-    const init: Record<string, string> = {}
-    for (const p of recipe.placeholders) init[p.key] = ''
-    setPlaceholders(init)
+    const initP: Record<string, string> = {}
+    for (const p of recipe.placeholders) initP[p.key] = p.example ?? ''
+    setPlaceholders(initP)
+    // Seed editable drafts from the recipe templates, with example values already substituted.
+    setDrafts(recipe.memories.map(m => ({
+      fact: renderFactWithPlaceholders(m.fact, initP),
+      category: m.category,
+      importance: m.importance,
+      global: m.global,
+      skill_tags: [...m.skill_tags],
+    })))
   }
 
   function cancel() {
     setSelected(null)
     setPlaceholders({})
+    setDrafts([])
+  }
+
+  // When user edits a placeholder, re-render any draft fact that still contains
+  // that placeholder token (so the user sees the substitution happen live).
+  // If the user has already manually edited a draft (no token left), leave it alone.
+  function updatePlaceholder(key: string, value: string) {
+    const newP = { ...placeholders, [key]: value }
+    setPlaceholders(newP)
+    if (!selected) return
+    setDrafts(prev => prev.map((d, i) => {
+      const template = selected.memories[i].fact
+      // Re-render from the original template every time, using updated placeholders
+      const autoRendered = renderFactWithPlaceholders(template, newP)
+      const hasBeenManuallyEdited = d.fact !== renderFactWithPlaceholders(template, placeholders)
+      return hasBeenManuallyEdited ? d : { ...d, fact: autoRendered }
+    }))
   }
 
   async function apply() {
     if (!selected) return
-    // Validate placeholders
-    for (const p of selected.placeholders) {
-      if (!placeholders[p.key]?.trim()) {
-        toast.error(`"${p.label}" is required`)
+    // Basic validation: no empty fact
+    for (const d of drafts) {
+      if (!d.fact.trim()) {
+        toast.error('One of the memories has an empty fact — fill it or remove.')
         return
       }
     }
-    // Substitute placeholders in each memory
-    const rendered = selected.memories.map(m => {
-      let fact = m.fact
-      for (const [k, v] of Object.entries(placeholders)) {
-        fact = fact.split(`{{${k}}}`).join(v.trim())
-      }
-      return {
-        fact,
-        category: m.category,
-        importance: m.importance,
-        global: m.global,
-        skill_tags: m.skill_tags,
-      }
-    })
     setApplying(true)
     try {
-      const res = await applyMemoryRecipeAction(agentId, rendered)
+      const res = await applyMemoryRecipeAction(agentId, drafts)
       if (!res.ok) { toast.error(res.error); return }
       toast.success(`Added ${res.data.inserted} memory${res.data.inserted > 1 ? 'ies' : ''} to ${agentName}`)
       cancel()
@@ -69,11 +99,19 @@ export default function MemoryRecipeApplier({ agentId, agentName, onApplied }: P
     }
   }
 
+  function updateDraft(index: number, patch: Partial<DraftMemory>) {
+    setDrafts(prev => prev.map((d, i) => i === index ? { ...d, ...patch } : d))
+  }
+
+  function removeDraft(index: number) {
+    setDrafts(prev => prev.filter((_, i) => i !== index))
+  }
+
   if (!selected) {
     return (
       <div className="space-y-2">
         <p className="text-xs text-neutral-500 mb-2">
-          Starter packs of pre-written memories. Pick one that matches a workflow your agent handles — saves the agent from exploring blindly.
+          Starter packs of pre-written memories. Pick one to customize and apply — nothing is fixed, edit the text before inserting.
         </p>
         <div className="space-y-1.5">
           {MEMORY_RECIPES.map(r => (
@@ -106,24 +144,21 @@ export default function MemoryRecipeApplier({ agentId, agentName, onApplied }: P
           <p className="text-sm text-white font-medium">{selected.name}</p>
           <p className="text-[11px] text-neutral-500 mt-0.5 leading-snug">{selected.description}</p>
         </div>
-        <button
-          type="button"
-          onClick={cancel}
-          className="text-xs text-neutral-500 hover:text-white shrink-0"
-        >
+        <button type="button" onClick={cancel} className="text-xs text-neutral-500 hover:text-white shrink-0">
           Cancel
         </button>
       </div>
 
       {selected.placeholders.length > 0 && (
         <div className="space-y-2.5 pt-1">
+          <p className="text-[11px] text-neutral-500 font-medium">Placeholders (auto-inserted into memories below)</p>
           {selected.placeholders.map(p => (
             <div key={p.key}>
               <label className="block text-xs text-neutral-400 mb-1">{p.label}</label>
               <input
                 type="text"
                 value={placeholders[p.key] ?? ''}
-                onChange={e => setPlaceholders(prev => ({ ...prev, [p.key]: e.target.value }))}
+                onChange={e => updatePlaceholder(p.key, e.target.value)}
                 placeholder={p.example}
                 className="w-full rounded-md border border-neutral-800 bg-neutral-900 px-2.5 py-1.5 text-xs text-white placeholder:text-neutral-700 focus:border-neutral-600 outline-none font-mono"
               />
@@ -133,35 +168,72 @@ export default function MemoryRecipeApplier({ agentId, agentName, onApplied }: P
         </div>
       )}
 
-      <details className="text-[11px] text-neutral-500">
-        <summary className="cursor-pointer hover:text-neutral-300">Preview memories ({selected.memories.length})</summary>
-        <div className="mt-2 space-y-2 pl-2 border-l border-neutral-800">
-          {selected.memories.map((m, i) => (
-            <div key={i} className="text-[11px] text-neutral-600 leading-relaxed">
-              <span className={`text-[10px] font-mono px-1 py-px rounded ${m.global ? 'bg-sky-950/60 text-sky-400' : 'bg-violet-950/60 text-violet-400'}`}>
-                {m.global ? 'global' : 'agent-scoped'}
-              </span>{' '}
-              {m.fact.slice(0, 180)}{m.fact.length > 180 ? '…' : ''}
+      <div className="space-y-2 pt-2 border-t border-neutral-800/40">
+        <p className="text-[11px] text-neutral-500 font-medium">Memories to insert — edit freely</p>
+        {drafts.length === 0 && (
+          <p className="text-[11px] text-neutral-600 italic">All memories removed. Cancel to start over.</p>
+        )}
+        {drafts.map((d, i) => (
+          <div key={i} className="rounded-md border border-neutral-800 bg-neutral-900/60 p-2.5 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5">
+                <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${d.global ? 'bg-sky-950/60 text-sky-400' : 'bg-violet-950/60 text-violet-400'}`}>
+                  {d.global ? 'global' : 'agent-scoped'}
+                </span>
+                <select
+                  value={d.category}
+                  onChange={e => updateDraft(i, { category: e.target.value as DraftMemory['category'] })}
+                  className="text-[10px] bg-neutral-900 border border-neutral-800 rounded px-1 py-0.5 text-neutral-400 font-mono focus:border-neutral-600 outline-none"
+                >
+                  <option value="preference">preference</option>
+                  <option value="context">context</option>
+                  <option value="learned_rule">learned_rule</option>
+                  <option value="outcome">outcome</option>
+                </select>
+                <label className="flex items-center gap-1 text-[10px] text-neutral-500">
+                  imp
+                  <input
+                    type="number" min={1} max={5}
+                    value={d.importance}
+                    onChange={e => updateDraft(i, { importance: Math.min(5, Math.max(1, parseInt(e.target.value) || 3)) })}
+                    className="w-10 bg-neutral-900 border border-neutral-800 rounded px-1 py-0.5 text-[10px] text-neutral-300 font-mono focus:border-neutral-600 outline-none"
+                  />
+                </label>
+              </div>
+              <button type="button" onClick={() => removeDraft(i)} className="text-[10px] text-neutral-600 hover:text-red-400">
+                Remove
+              </button>
             </div>
-          ))}
-        </div>
-      </details>
+            <textarea
+              value={d.fact}
+              onChange={e => updateDraft(i, { fact: e.target.value })}
+              rows={Math.min(8, Math.max(3, d.fact.split('\n').length))}
+              className="w-full bg-neutral-950 border border-neutral-800 rounded px-2 py-1.5 text-[11px] text-neutral-300 font-mono leading-relaxed focus:border-neutral-600 outline-none resize-y"
+            />
+            <div className="flex items-center gap-2 text-[10px] text-neutral-600">
+              <span>Tags:</span>
+              <input
+                type="text"
+                value={d.skill_tags.join(', ')}
+                onChange={e => updateDraft(i, { skill_tags: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
+                className="flex-1 bg-neutral-900 border border-neutral-800 rounded px-1.5 py-0.5 text-[10px] text-neutral-400 font-mono focus:border-neutral-600 outline-none"
+              />
+            </div>
+          </div>
+        ))}
+      </div>
 
-      <div className="flex justify-end gap-2 pt-1">
-        <button
-          type="button"
-          onClick={cancel}
-          className="px-3 py-1.5 text-xs text-neutral-400 hover:text-white"
-        >
+      <div className="flex justify-end gap-2 pt-2 border-t border-neutral-800/40">
+        <button type="button" onClick={cancel} className="px-3 py-1.5 text-xs text-neutral-400 hover:text-white">
           Cancel
         </button>
         <button
           type="button"
           onClick={apply}
-          disabled={applying}
+          disabled={applying || drafts.length === 0}
           className="px-3 py-1.5 text-xs font-medium bg-white text-black rounded-md hover:bg-neutral-200 disabled:opacity-50"
         >
-          {applying ? 'Adding…' : `Apply ${selected.memories.length} memor${selected.memories.length > 1 ? 'ies' : 'y'}`}
+          {applying ? 'Adding…' : `Apply ${drafts.length} memor${drafts.length > 1 ? 'ies' : 'y'}`}
         </button>
       </div>
     </div>
