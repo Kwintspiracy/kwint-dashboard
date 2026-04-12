@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { DndContext, DragOverlay, useDraggable, useDroppable, MouseSensor, TouchSensor, useSensor, useSensors, pointerWithin, type DragEndEvent } from '@dnd-kit/core'
-import { getAgentsAction, createAgentAction, updateAgentAction, deleteAgentAction, setDefaultAgentAction, activateTelegramAction, deactivateTelegramAction, getLlmKeysAction, getOperatorProvidersAction, getSkillsAction, getConnectorsAction, getAgentSkillAssignmentsAction, setAgentSkillAssignmentsAction, setSkillApprovalsAction, getOrchestratorAssignmentsAction, getOrchestratorAssignmentDetailsAction, setOrchestratorAssignmentsAction, getAgentOrchestratorAction, setAgentOrchestratorAction, getAllAgentAssignmentsAction, getAllSkillAssignmentsAction, previewEffectivePromptAction, autoAssignTemplateSkillsAction, getSkillCustomInstructionsAction, setSkillCustomInstructionsAction, getAgentEditDataAction, getAgentMemoryCountsAction } from '@/lib/actions'
+import { getAgentsAction, createAgentAction, updateAgentAction, deleteAgentAction, setDefaultAgentAction, activateTelegramAction, deactivateTelegramAction, getLlmKeysAction, getOperatorProvidersAction, getSkillsAction, getConnectorsAction, getAgentSkillAssignmentsAction, setAgentSkillAssignmentsAction, setSkillApprovalsAction, setSkillEnabledOperationsAction, getOrchestratorAssignmentsAction, getOrchestratorAssignmentDetailsAction, setOrchestratorAssignmentsAction, getAgentOrchestratorAction, setAgentOrchestratorAction, getAllAgentAssignmentsAction, getAllSkillAssignmentsAction, previewEffectivePromptAction, autoAssignTemplateSkillsAction, getSkillCustomInstructionsAction, setSkillCustomInstructionsAction, getAgentEditDataAction, getAgentMemoryCountsAction } from '@/lib/actions'
 import { AgentReadinessBadge } from '@/components/AgentReadiness'
 import MemoryRecipeApplier from '@/components/MemoryRecipeApplier'
 import { timeAgo } from '@/lib/utils'
@@ -459,6 +459,8 @@ export default function AgentsPage() {
   const [expandedSkillId, setExpandedSkillId] = useState<string | null>(null)
   const [skillApprovalOverrides, setSkillApprovalOverrides] = useState<Record<string, Record<string, boolean>>>({})
   const [skillCustomInstructions, setSkillCustomInstructions] = useState<Record<string, boolean>>({})
+  // Per-skill enabled operations. null = all enabled (default), [] = none, [list] = only those.
+  const [skillEnabledOps, setSkillEnabledOps] = useState<Record<string, string[] | null>>({})
   const [assignedAgentIds, setAssignedAgentIds] = useState<string[]>([])
   const [agentInstructions, setAgentInstructions] = useState<Record<string, string>>({})
   const [selectedOrchestratorId, setSelectedOrchestratorId] = useState<string | null>(null)
@@ -563,7 +565,7 @@ export default function AgentsPage() {
     setEditingId(a.id); setShowAdd(false); setTelegramStatus('')
     setSlugManuallyEdited(false)
     setPromptPreview(null); setShowPromptPreview(true); setExpandedPreviewSections(new Set())
-    setAssignedSkillIds([]); setSkillApprovalOverrides({}); setSkillCustomInstructions({})
+    setAssignedSkillIds([]); setSkillApprovalOverrides({}); setSkillCustomInstructions({}); setSkillEnabledOps({})
     setAssignedAgentIds([]); setAgentInstructions({}); setSelectedOrchestratorId(null)
     setForm({
       name: a.name, slug: a.slug, personality: '', model: a.model,
@@ -584,6 +586,7 @@ export default function AgentsPage() {
       const validSkillIds = new Set(skills.map(s => s.id))
       setAssignedSkillIds(res.data.skillIds.filter(id => validSkillIds.has(id)))
       setSkillCustomInstructions(res.data.customInstructions)
+      setSkillEnabledOps(res.data.enabledOperations ?? {})
       setAssignedAgentIds(res.data.subAgents.map(d => d.sub_agent_id))
       const instr: Record<string, string> = {}
       for (const d of res.data.subAgents) { if (d.instructions) instr[d.sub_agent_id] = d.instructions }
@@ -656,6 +659,8 @@ export default function AgentsPage() {
           .map(skillId => setSkillApprovalsAction({ agent_id: editingId, skill_id: skillId, approval_overrides: skillApprovalOverrides[skillId] })),
         // Custom instructions flags
         ...assignedSkillIds.map(skillId => setSkillCustomInstructionsAction(editingId, skillId, skillCustomInstructions[skillId] ?? false)),
+        // Per-skill enabled operations (narrows the agent's toolkit)
+        ...assignedSkillIds.map(skillId => setSkillEnabledOperationsAction(editingId, skillId, skillEnabledOps[skillId] ?? null)),
       ]
       const results = await Promise.all(savePromises)
       const failed = results.filter(r => !r.ok)
@@ -1652,18 +1657,84 @@ export default function AgentsPage() {
                                 ))}
                               </div>
                             )}
-                            {/* Operations: pills + per-operation approval toggles */}
+                            {/* Operations: per-tool enable/disable + approval toggles */}
                             {(skill.operations ?? []).length > 0 && (
                               <div className="space-y-2">
-                                <p className="text-xs font-medium text-neutral-600">Operations</p>
-                                <div className="flex flex-wrap gap-1">
-                                  {(skill.operations ?? []).map(op => (
-                                    <span key={op.slug} className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded border ${
-                                      op.risk === 'read' ? 'bg-emerald-950/40 text-emerald-400 border-emerald-900/30' :
-                                      op.risk === 'write' ? 'bg-amber-950/40 text-amber-400 border-amber-900/30' :
-                                      'bg-red-950/40 text-red-400 border-red-900/30'
-                                    }`}>{op.name}</span>
-                                  ))}
+                                {(() => {
+                                  const currentEnabled = skillEnabledOps[skill.id]
+                                  const allOps = (skill.operations ?? []).map(op => op.slug)
+                                  const enabledCount = currentEnabled === null || currentEnabled === undefined
+                                    ? allOps.length
+                                    : currentEnabled.length
+                                  const allChecked = currentEnabled === null || currentEnabled === undefined || currentEnabled.length === allOps.length
+                                  return (
+                                    <div className="flex items-center justify-between">
+                                      <p className="text-xs font-medium text-neutral-600">
+                                        Enabled tools <span className="text-neutral-700">({enabledCount}/{allOps.length})</span>
+                                      </p>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setSkillEnabledOps(prev => ({
+                                            ...prev,
+                                            [skill.id]: allChecked ? [] : null,
+                                          }))
+                                        }}
+                                        className="text-[11px] text-neutral-500 hover:text-neutral-300"
+                                      >
+                                        {allChecked ? 'Uncheck all' : 'Enable all'}
+                                      </button>
+                                    </div>
+                                  )
+                                })()}
+                                <p className="text-[11px] text-neutral-700 leading-snug">
+                                  Uncheck tools this agent shouldn&apos;t use. Fewer tools = smaller prompt + less chance the agent picks the wrong one.
+                                </p>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+                                  {(skill.operations ?? []).map(op => {
+                                    const currentEnabled = skillEnabledOps[skill.id]
+                                    const isEnabled = currentEnabled === null || currentEnabled === undefined
+                                      ? true
+                                      : currentEnabled.includes(op.slug)
+                                    const tone =
+                                      op.risk === 'read' ? 'text-emerald-400' :
+                                      op.risk === 'write' ? 'text-amber-400' :
+                                      'text-red-400'
+                                    return (
+                                      <label key={op.slug} className="flex items-center gap-2 cursor-pointer group px-1 py-0.5 rounded hover:bg-neutral-900/40">
+                                        <input
+                                          type="checkbox"
+                                          checked={isEnabled}
+                                          onChange={() => {
+                                            setSkillEnabledOps(prev => {
+                                              const current = prev[skill.id]
+                                              const allOps = (skill.operations ?? []).map(o => o.slug)
+                                              // If currently "all enabled" (null) and user unchecks, switch to explicit list minus this one
+                                              const baseList: string[] = current === null || current === undefined ? [...allOps] : [...current]
+                                              let next: string[] | null
+                                              if (isEnabled) {
+                                                // Uncheck — remove from list
+                                                next = baseList.filter(s => s !== op.slug)
+                                              } else {
+                                                // Check — add to list
+                                                next = baseList.includes(op.slug) ? baseList : [...baseList, op.slug]
+                                              }
+                                              // If next equals all ops, collapse to null (all enabled)
+                                              if (next.length === allOps.length && allOps.every(s => next!.includes(s))) {
+                                                next = null
+                                              }
+                                              return { ...prev, [skill.id]: next }
+                                            })
+                                          }}
+                                          className="rounded border-neutral-700 bg-neutral-800 accent-emerald-500 shrink-0 cursor-pointer"
+                                        />
+                                        <span className={`text-xs font-mono ${isEnabled ? tone : 'text-neutral-700 line-through'}`}>
+                                          {op.name}
+                                        </span>
+                                        {op.risk === 'destructive' && <span className="text-[10px] text-red-500/60">⚠</span>}
+                                      </label>
+                                    )
+                                  })}
                                 </div>
                                 {/* Approval toggles for write/destructive only */}
                                 {(skill.operations ?? []).filter(op => op.risk !== 'read').length > 0 && (

@@ -2652,6 +2652,7 @@ export async function getAgentEditDataAction(agentId: string): Promise<ActionRes
   personality: string | null
   skillIds: string[]
   customInstructions: Record<string, boolean>
+  enabledOperations: Record<string, string[] | null>
   subAgents: { sub_agent_id: string; instructions: string | null }[]
   orchestratorId: string | null
 }>> {
@@ -2659,17 +2660,22 @@ export async function getAgentEditDataAction(agentId: string): Promise<ActionRes
     const { supabase, entityId } = await requireAuthWithEntity()
     const [agentRes, skillsRes, assignmentsRes, orchParentRes] = await Promise.all([
       supabase.from('agents').select('personality').eq('id', agentId).eq('entity_id', entityId).limit(1).maybeSingle(),
-      supabase.from('agent_skill_assignments').select('skill_id, use_custom_instructions').eq('agent_id', agentId).eq('entity_id', entityId),
+      supabase.from('agent_skill_assignments').select('skill_id, use_custom_instructions, enabled_operations').eq('agent_id', agentId).eq('entity_id', entityId),
       supabase.from('agent_assignments').select('sub_agent_id, instructions').eq('orchestrator_id', agentId).eq('entity_id', entityId),
       supabase.from('agent_assignments').select('orchestrator_id').eq('sub_agent_id', agentId).eq('entity_id', entityId).limit(1).maybeSingle(),
     ])
     const skillRows = skillsRes.data ?? []
     const customInstructions: Record<string, boolean> = {}
-    for (const r of skillRows) { if (r.use_custom_instructions) customInstructions[r.skill_id] = true }
+    const enabledOperations: Record<string, string[] | null> = {}
+    for (const r of skillRows) {
+      if (r.use_custom_instructions) customInstructions[r.skill_id] = true
+      enabledOperations[r.skill_id] = r.enabled_operations ?? null
+    }
     return ok({
       personality: agentRes.data?.personality ?? null,
       skillIds: skillRows.map(r => r.skill_id),
       customInstructions,
+      enabledOperations,
       subAgents: assignmentsRes.data ?? [],
       orchestratorId: orchParentRes.data?.orchestrator_id ?? null,
     })
@@ -2720,6 +2726,31 @@ export async function setSkillCustomInstructionsAction(agentId: string, skillId:
     if (error) return dbFail(error)
     return ok(null)
   } catch (e) { return dbError(e) }
+}
+
+// Controls which specific tools of a skill are exposed to the agent.
+// - null = all tools enabled (default, backwards-compat)
+// - [] = no tools (skill effectively muted)
+// - ["tool_a", "tool_b"] = only those tools exposed
+// Reduces prompt size and helps the agent pick the right tool by shrinking its toolbox.
+export async function setSkillEnabledOperationsAction(
+  agentId: string,
+  skillId: string,
+  enabledOperations: string[] | null,
+): Promise<ActionResult<null>> {
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+    const { error } = await supabase
+      .from('agent_skill_assignments')
+      .update({ enabled_operations: enabledOperations })
+      .eq('agent_id', agentId)
+      .eq('skill_id', skillId)
+      .eq('entity_id', entityId)
+    if (error) return dbFail(error)
+    return ok(null)
+  } catch (e) {
+    return dbError(e)
+  }
 }
 
 export async function setSkillApprovalsAction(raw: unknown): Promise<ActionResult<null>> {
@@ -2825,16 +2856,20 @@ export async function setAgentSkillAssignmentsAction(agentId: string, skillIds: 
     const { supabase, entityId } = await requireAuthWithEntity()
     const { data: agent } = await supabase.from('agents').select('id').eq('id', agentId).eq('entity_id', entityId).single()
     if (!agent) return fail('Agent not found')
-    // Preserve existing approval_overrides before deleting
+    // Preserve existing approval_overrides AND enabled_operations before deleting
     const { data: existing } = await supabase
       .from('agent_skill_assignments')
-      .select('skill_id, approval_overrides')
+      .select('skill_id, approval_overrides, enabled_operations')
       .eq('agent_id', agentId)
       .eq('entity_id', entityId)
     const overridesMap: Record<string, Record<string, boolean>> = {}
+    const enabledOpsMap: Record<string, string[] | null> = {}
     for (const row of existing ?? []) {
       if (row.approval_overrides && Object.keys(row.approval_overrides).length > 0) {
         overridesMap[row.skill_id] = row.approval_overrides
+      }
+      if (row.enabled_operations !== null && row.enabled_operations !== undefined) {
+        enabledOpsMap[row.skill_id] = row.enabled_operations
       }
     }
     await supabase.from('agent_skill_assignments').delete().eq('agent_id', agentId).eq('entity_id', entityId)
@@ -2842,6 +2877,7 @@ export async function setAgentSkillAssignmentsAction(agentId: string, skillIds: 
       const rows = skillIds.map(skill_id => ({
         agent_id: agentId, skill_id, entity_id: entityId,
         approval_overrides: overridesMap[skill_id] ?? {},
+        enabled_operations: enabledOpsMap[skill_id] ?? null,
       }))
       const { error } = await supabase.from('agent_skill_assignments').insert(rows)
       if (error) return dbFail(error)
