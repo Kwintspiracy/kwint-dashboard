@@ -2378,10 +2378,15 @@ export async function testMcpServerAction(id: string): Promise<ActionResult<{ to
       }
     } catch { return fail('Invalid server URL') }
 
-    // Resolve Bearer token if the server links to an existing connector
+    // Resolve Bearer token — priority: MCP-native OAuth > literal > connector
     let bearer: string | null = null
-    const env = server.env_vars as { auth_bearer?: string; auth_connector_slug?: string } | null
-    if (env?.auth_bearer) bearer = env.auth_bearer
+    const env = server.env_vars as {
+      access_token?: string
+      auth_bearer?: string
+      auth_connector_slug?: string
+    } | null
+    if (env?.access_token) bearer = env.access_token
+    else if (env?.auth_bearer) bearer = env.auth_bearer
     else if (env?.auth_connector_slug) {
       const { data: conn } = await supabase
         .from('connectors')
