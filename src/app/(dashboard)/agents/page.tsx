@@ -1897,7 +1897,7 @@ export default function AgentsPage() {
                 {mcpServers.length === 0 ? (
                   <p className="text-xs text-neutral-600">
                     No MCP servers installed —{' '}
-                    <a href="/mcp-servers" className="text-orange-400 underline hover:text-orange-300 transition-colors">browse the Marketplace</a>
+                    <a href="/connectors" className="text-orange-400 underline hover:text-orange-300 transition-colors">browse the Marketplace</a>
                   </p>
                 ) : (
                   <div className="space-y-1.5">
@@ -1937,7 +1937,7 @@ export default function AgentsPage() {
                               {assigned && tools.length === 0 && (
                                 <p className="text-xs text-amber-400/70 mt-0.5">
                                   Tool list not yet discovered — click Test Connection on{' '}
-                                  <a href="/mcp-servers" className="underline">MCP Servers</a> first.
+                                  <a href="/connectors" className="underline">Connectors</a> first (click Test on the MCP card).
                                 </p>
                               )}
                             </div>

@@ -11,7 +11,7 @@ import { cookies } from 'next/headers'
 // 4. Redirect user to the authorization endpoint
 //
 // The callback route verifies state, exchanges code for tokens, persists them in
-// mcp_servers.env_vars, then redirects back to /mcp-servers.
+// mcp_servers.env_vars, then redirects back to /connectors.
 
 function b64url(buf: Buffer): string {
   return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')

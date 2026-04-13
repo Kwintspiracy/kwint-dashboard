@@ -11,7 +11,7 @@ function timingSafeEqual(a: string, b: string): boolean {
 
 export async function GET(request: NextRequest) {
   const origin = request.nextUrl.origin
-  const targetUrl = new URL('/mcp-servers', origin)
+  const targetUrl = new URL('/connectors', origin)
 
   const code = request.nextUrl.searchParams.get('code')
   const state = request.nextUrl.searchParams.get('state')
