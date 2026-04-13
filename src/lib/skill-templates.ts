@@ -48,6 +48,9 @@ export type SkillTemplate = {
   capabilities?: string[]
   required_config?: RequiredConfigItem[]
   operations?: OperationItem[]
+  /** Slug of the matching MCP_CATALOG entry when a remote-MCP alternative exists.
+   *  Surfaces the orange "MCP Remote" badge + install path on the marketplace card. */
+  mcp_catalog_slug?: string
 }
 
 /** Maps skill slug → capability tags (auto-derived, no manual input needed). */
@@ -616,6 +619,7 @@ amount is in smallest currency unit (cents for USD). Omit amount to refund in fu
     id: 'notion', name: 'Notion', slug: 'notion',
     description: 'All-in-one workspace: notes, databases, wikis, projects',
     category: 'planning', color: '#FFFFFF',
+    mcp_catalog_slug: 'notion',
     icon: 'M4 4.5A2.5 2.5 0 016.5 2H18l4 4.5V22a2 2 0 01-2 2H6.5A2.5 2.5 0 014 21.5v-17zM8 8h8v2H8V8zm0 4h8v2H8v-2zm0 4h5v2H8v-2z',
     brandIcon: '/app-icons/notion.svg',
     darkBrandIcon: true,

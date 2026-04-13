@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { DndContext, DragOverlay, useDraggable, useDroppable, MouseSensor, TouchSensor, useSensor, useSensors, pointerWithin, type DragEndEvent } from '@dnd-kit/core'
-import { getAgentsAction, createAgentAction, updateAgentAction, deleteAgentAction, setDefaultAgentAction, activateTelegramAction, deactivateTelegramAction, getLlmKeysAction, getOperatorProvidersAction, getSkillsAction, getConnectorsAction, getAgentSkillAssignmentsAction, setAgentSkillAssignmentsAction, setSkillApprovalsAction, setSkillEnabledOperationsAction, getOrchestratorAssignmentsAction, getOrchestratorAssignmentDetailsAction, setOrchestratorAssignmentsAction, getAgentOrchestratorAction, setAgentOrchestratorAction, getAllAgentAssignmentsAction, getAllSkillAssignmentsAction, previewEffectivePromptAction, autoAssignTemplateSkillsAction, getSkillCustomInstructionsAction, setSkillCustomInstructionsAction, getAgentEditDataAction, getAgentMemoryCountsAction } from '@/lib/actions'
+import { getAgentsAction, createAgentAction, updateAgentAction, deleteAgentAction, setDefaultAgentAction, activateTelegramAction, deactivateTelegramAction, getLlmKeysAction, getOperatorProvidersAction, getSkillsAction, getConnectorsAction, getAgentSkillAssignmentsAction, setAgentSkillAssignmentsAction, setSkillApprovalsAction, setSkillEnabledOperationsAction, getOrchestratorAssignmentsAction, getOrchestratorAssignmentDetailsAction, setOrchestratorAssignmentsAction, getAgentOrchestratorAction, setAgentOrchestratorAction, getAllAgentAssignmentsAction, getAllSkillAssignmentsAction, previewEffectivePromptAction, autoAssignTemplateSkillsAction, getSkillCustomInstructionsAction, setSkillCustomInstructionsAction, getAgentEditDataAction, getAgentMemoryCountsAction, getMcpServersAction, getAgentMcpAssignmentsAction, upsertAgentMcpAssignmentAction, deleteAgentMcpAssignmentAction } from '@/lib/actions'
 import { AgentReadinessBadge } from '@/components/AgentReadiness'
 import AgentMemoriesList from '@/components/AgentMemoriesList'
 import { timeAgo } from '@/lib/utils'
@@ -412,6 +412,9 @@ export default function AgentsPage() {
   const { data: connectorsRaw = [] } = useData(['connectors', eid], getConnectorsAction)
   const { data: allAssignmentsRaw, mutate: mutateAssignments } = useData(['agent-assignments', eid], getAllAgentAssignmentsAction)
   const { data: allSkillAssignmentsRaw, mutate: mutateSkillAssignments } = useData(['all-skill-assignments', eid], getAllSkillAssignmentsAction)
+  // MCP servers available on this entity (for per-agent assignment UI).
+  const { data: mcpServersRaw = [] } = useData(['mcp-servers', eid], getMcpServersAction)
+  const mcpServers = mcpServersRaw as { id: string; name: string; slug: string; active: boolean; available_tools: { name: string; description?: string }[] | null }[]
   const { data: memoryCountsRaw = {}, mutate: mutateMemoryCounts } = useData(['memory-counts-by-agent', eid], getAgentMemoryCountsAction)
   const memoryCounts = memoryCountsRaw as Record<string, number>
   const globalMemoryCount = memoryCounts['__global__'] ?? 0
@@ -461,6 +464,11 @@ export default function AgentsPage() {
   const [skillCustomInstructions, setSkillCustomInstructions] = useState<Record<string, boolean>>({})
   // Per-skill enabled operations. null = all enabled (default), [] = none, [list] = only those.
   const [skillEnabledOps, setSkillEnabledOps] = useState<Record<string, string[] | null>>({})
+  // Per-agent MCP assignments. Map mcp_server_id → enabled_tools (null = all, [] = none, [names] = subset).
+  // `undefined` (key absent) means the server is NOT assigned to this agent.
+  const [mcpAssignments, setMcpAssignments] = useState<Record<string, string[] | null>>({})
+  const [mcpInitial, setMcpInitial] = useState<Record<string, string[] | null>>({})
+  const [expandedMcpId, setExpandedMcpId] = useState<string | null>(null)
   const [assignedAgentIds, setAssignedAgentIds] = useState<string[]>([])
   const [agentInstructions, setAgentInstructions] = useState<Record<string, string>>({})
   const [selectedOrchestratorId, setSelectedOrchestratorId] = useState<string | null>(null)
@@ -566,6 +574,7 @@ export default function AgentsPage() {
     setSlugManuallyEdited(false)
     setPromptPreview(null); setShowPromptPreview(true); setExpandedPreviewSections(new Set())
     setAssignedSkillIds([]); setSkillApprovalOverrides({}); setSkillCustomInstructions({}); setSkillEnabledOps({})
+    setMcpAssignments({}); setMcpInitial({}); setExpandedMcpId(null)
     setAssignedAgentIds([]); setAgentInstructions({}); setSelectedOrchestratorId(null)
     setForm({
       name: a.name, slug: a.slug, personality: '', model: a.model,
@@ -593,6 +602,15 @@ export default function AgentsPage() {
       setAgentInstructions(instr)
       setSelectedOrchestratorId(res.data.orchestratorId)
     }
+    // Load MCP assignments in parallel (non-blocking for the rest of the UI)
+    getAgentMcpAssignmentsAction(a.id).then(mcpRes => {
+      if (mcpRes.ok) {
+        const map: Record<string, string[] | null> = {}
+        for (const asg of mcpRes.data) map[asg.mcp_server_id] = asg.enabled_tools
+        setMcpAssignments(map)
+        setMcpInitial(map)
+      }
+    })
     setLoadingEditId(null)
     loadPromptPreview(a.id)
   }
@@ -662,10 +680,28 @@ export default function AgentsPage() {
         // Per-skill enabled operations (narrows the agent's toolkit)
         ...assignedSkillIds.map(skillId => setSkillEnabledOperationsAction(editingId, skillId, skillEnabledOps[skillId] ?? null)),
       ]
-      const results = await Promise.all(savePromises)
+      // Diff MCP assignments and persist upserts / deletes
+      const mcpPromises: Promise<{ ok: boolean; error?: string }>[] = []
+      const currentIds = new Set(Object.keys(mcpAssignments))
+      const initialIds = new Set(Object.keys(mcpInitial))
+      for (const serverId of currentIds) {
+        const tools = mcpAssignments[serverId] ?? null
+        const initTools = mcpInitial[serverId]
+        if (!initialIds.has(serverId) || JSON.stringify(initTools ?? null) !== JSON.stringify(tools)) {
+          mcpPromises.push(upsertAgentMcpAssignmentAction(editingId, serverId, tools))
+        }
+      }
+      for (const serverId of initialIds) {
+        if (!currentIds.has(serverId)) {
+          mcpPromises.push(deleteAgentMcpAssignmentAction(editingId, serverId))
+        }
+      }
+
+      const results = await Promise.all([...savePromises, ...mcpPromises])
       const failed = results.filter(r => !r.ok)
       if (failed.length > 0) toast.error(`${failed.length} save(s) failed`)
       toast.success('Agent updated')
+      setMcpInitial(mcpAssignments)
       setEditingId(null)
     } else {
       const result = await createAgentAction({
@@ -1847,6 +1883,131 @@ export default function AgentsPage() {
                 })()}
                 {assignedSkillIds.length === 0 && skills.length > 0 && (
                   <p className="text-xs text-neutral-700 mt-1.5">All {skills.length} skills available.</p>
+                )}
+              </section>
+
+              {/* MCP tools — remote MCP servers assigned to this agent, with per-tool toggles */}
+              <section aria-labelledby="section-mcp" className="border-t border-neutral-800/50 pt-5">
+                <h3 id="section-mcp" className="text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-1">
+                  MCP Tools <span className="ml-1 px-1.5 py-0.5 rounded text-xs font-semibold bg-orange-950/50 text-orange-400 border border-orange-900/40">MCP Remote</span>
+                </h3>
+                <p className="text-xs text-neutral-600 mb-2.5">
+                  Pick which remote-MCP servers this agent can use, and which of their tools to expose.
+                </p>
+                {mcpServers.length === 0 ? (
+                  <p className="text-xs text-neutral-600">
+                    No MCP servers installed —{' '}
+                    <a href="/mcp-servers" className="text-orange-400 underline hover:text-orange-300 transition-colors">browse the Marketplace</a>
+                  </p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {mcpServers.filter(s => s.active).map(server => {
+                      const assigned = server.id in mcpAssignments
+                      const enabled = mcpAssignments[server.id] // null = all, [] = none, [names] = subset
+                      const isExpanded = expandedMcpId === server.id
+                      const tools = server.available_tools ?? []
+                      return (
+                        <div key={server.id} className={`rounded-lg border transition-colors ${assigned ? 'border-orange-900/50 bg-orange-950/10' : 'border-transparent'}`}>
+                          <label className="flex items-start gap-2.5 px-2 py-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={assigned}
+                              onChange={() => {
+                                setMcpAssignments(prev => {
+                                  const next = { ...prev }
+                                  if (assigned) delete next[server.id]
+                                  else next[server.id] = null // default = all tools
+                                  return next
+                                })
+                                if (!assigned) setExpandedMcpId(server.id)
+                                else if (isExpanded) setExpandedMcpId(null)
+                              }}
+                              className="rounded border-neutral-700 bg-neutral-800 accent-orange-500 shrink-0 mt-0.5 cursor-pointer"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-xs font-medium text-neutral-300">{server.name}</span>
+                                <span className="text-xs text-neutral-600 font-mono">{server.slug}</span>
+                                {assigned && tools.length > 0 && (
+                                  <span className="text-xs text-orange-400/80">
+                                    {enabled === null ? `all ${tools.length}` : `${enabled.length}/${tools.length}`} tools
+                                  </span>
+                                )}
+                              </div>
+                              {assigned && tools.length === 0 && (
+                                <p className="text-xs text-amber-400/70 mt-0.5">
+                                  Tool list not yet discovered — click Test Connection on{' '}
+                                  <a href="/mcp-servers" className="underline">MCP Servers</a> first.
+                                </p>
+                              )}
+                            </div>
+                            {assigned && tools.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={e => { e.preventDefault(); setExpandedMcpId(isExpanded ? null : server.id) }}
+                                className="text-neutral-600 hover:text-neutral-400 transition-colors shrink-0 mt-0.5"
+                              >
+                                <svg className={`w-3.5 h-3.5 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                                </svg>
+                              </button>
+                            )}
+                          </label>
+                          {assigned && isExpanded && tools.length > 0 && (
+                            <div className="px-3 pb-3 pt-2 border-t border-orange-900/30 space-y-1">
+                              <div className="flex items-center gap-3 mb-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setMcpAssignments(prev => ({ ...prev, [server.id]: null }))}
+                                  className="text-xs text-orange-400 hover:text-orange-300"
+                                >
+                                  Enable all
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setMcpAssignments(prev => ({ ...prev, [server.id]: [] }))}
+                                  className="text-xs text-neutral-500 hover:text-neutral-400"
+                                >
+                                  Disable all
+                                </button>
+                              </div>
+                              {tools.map(tool => {
+                                const isOn = enabled === null || (enabled ?? []).includes(tool.name)
+                                return (
+                                  <label key={tool.name} className="flex items-start gap-2 py-1 cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      checked={isOn}
+                                      onChange={() => {
+                                        setMcpAssignments(prev => {
+                                          const current = prev[server.id]
+                                          const allNames = tools.map(t => t.name)
+                                          // Materialize the current state as a concrete list
+                                          let list = current === null ? [...allNames] : [...(current ?? [])]
+                                          if (isOn) list = list.filter(n => n !== tool.name)
+                                          else if (!list.includes(tool.name)) list.push(tool.name)
+                                          // Collapse "all enabled" back to null for a cleaner diff
+                                          const next: string[] | null = list.length === allNames.length && list.every(n => allNames.includes(n)) ? null : list
+                                          return { ...prev, [server.id]: next }
+                                        })
+                                      }}
+                                      className="rounded border-neutral-700 bg-neutral-800 accent-orange-500 shrink-0 mt-0.5 cursor-pointer"
+                                    />
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-xs font-mono text-neutral-300">{tool.name}</p>
+                                      {tool.description && (
+                                        <p className="text-xs text-neutral-600 line-clamp-2">{tool.description}</p>
+                                      )}
+                                    </div>
+                                  </label>
+                                )
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
                 )}
               </section>
 

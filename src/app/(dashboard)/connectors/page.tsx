@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { getConnectorsAction, createConnectorAction, updateConnectorAction, deleteConnectorAction, toggleConnectorActiveAction, createSkillAction, getSkillsAction } from '@/lib/actions'
+import { getConnectorsAction, createConnectorAction, updateConnectorAction, deleteConnectorAction, toggleConnectorActiveAction, createSkillAction, getSkillsAction, getMcpServersAction, installMcpFromCatalogAction } from '@/lib/actions'
 import { SKILL_TEMPLATES, SKILL_CATEGORIES, SKILL_CAPABILITIES, type SkillTemplate } from '@/lib/skill-templates'
+import { MCP_CATALOG } from '@/lib/mcp-catalog'
 import { CONNECTOR_OAUTH } from '@/lib/oauth-providers'
 import { useData } from '@/hooks/useData'
 import { useAuth } from '@/components/AuthProvider'
@@ -110,6 +111,30 @@ export default function ConnectorsPage() {
 
   const { data: connectorsRaw = [], isLoading: loading, mutate } = useData(['connectors', eid], getConnectorsAction)
   const connectors = connectorsRaw as Connector[]
+  const { data: mcpServersRaw = [], mutate: mutateMcp } = useData(['mcp-servers', eid], getMcpServersAction)
+  const installedMcpSlugs = new Set((mcpServersRaw as { slug: string }[]).map(s => s.slug))
+  const mcpCatalogSlugs = new Set(MCP_CATALOG.map(e => e.slug))
+  const [installingMcpSlug, setInstallingMcpSlug] = useState<string | null>(null)
+
+  async function handleInstallMcp(slug: string) {
+    setInstallingMcpSlug(slug)
+    try {
+      const result = await installMcpFromCatalogAction(slug)
+      if (!result.ok) { toast.error(result.error); return }
+      if (result.data.needs_oauth) {
+        const popup = window.open(`/api/mcp/oauth/start?server_id=${result.data.id}`, '_blank')
+        if (!popup) { toast.error('Popup blocked — allow popups and retry'); return }
+        toast.info('Complete the authorization in the new tab.')
+        const onFocus = () => { mutateMcp() }
+        window.addEventListener('focus', onFocus, { once: true })
+        return
+      }
+      toast.success('MCP server installed')
+      mutateMcp()
+    } finally {
+      setInstallingMcpSlug(null)
+    }
+  }
 
   function startEdit(c: Connector) {
     setEditingId(c.id)
@@ -595,8 +620,12 @@ export default function ConnectorsPage() {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="text-sm font-semibold text-white leading-tight">{template.name}</p>
+                        <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-semibold bg-violet-950/50 text-violet-400 border border-violet-900/40" title="Hand-written adapter targeting the vendor's REST API">API Custom</span>
+                        {template.mcp_catalog_slug && mcpCatalogSlugs.has(template.mcp_catalog_slug) && (
+                          <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-semibold bg-orange-950/50 text-orange-400 border border-orange-900/40" title="Official remote MCP server — full API coverage, zero maintenance">MCP Remote</span>
+                        )}
                         {template.connector?.auth_type === 'oauth2' && (
-                          <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-semibold bg-violet-950/50 text-violet-400 border border-violet-900/40">OAuth2</span>
+                          <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-semibold bg-neutral-800 text-neutral-400 border border-neutral-700">OAuth2</span>
                         )}
                       </div>
                       <p className="text-xs text-neutral-500 mt-1 leading-relaxed line-clamp-3">{template.description}</p>
@@ -639,17 +668,33 @@ export default function ConnectorsPage() {
                       color={
                         (({ google: 'blue', design: 'purple', marketing: 'amber', finance: 'emerald', planning: 'amber', communication: 'purple', analytics: 'blue', storage: 'neutral', ai: 'purple', ecommerce: 'amber', dev: 'emerald', crm: 'blue', hr: 'emerald', search: 'red', media: 'red' } as Record<string, string>)[template.category] || 'neutral') as 'emerald' | 'red' | 'amber' | 'blue' | 'purple' | 'neutral'
                       } />
-                    {isInstalled ? (
-                      <span className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-emerald-400 bg-emerald-950/30 border border-emerald-900/40 rounded-lg">
-                        <svg viewBox="0 0 16 16" className="w-3 h-3" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z" /></svg>
-                        Installed
-                      </span>
-                    ) : (
-                      <button onClick={() => openInstallModal(template)}
-                        className="px-4 py-1.5 text-xs font-medium border border-neutral-800 text-neutral-400 rounded-lg hover:text-white hover:border-neutral-700 transition-colors duration-150">
-                        Install
-                      </button>
-                    )}
+                    <div className="flex items-center gap-1.5">
+                      {isInstalled ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-violet-400 bg-violet-950/30 border border-violet-900/40 rounded-lg" title="API Custom installed">
+                          <svg viewBox="0 0 16 16" className="w-3 h-3" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z" /></svg>
+                          API
+                        </span>
+                      ) : (
+                        <button onClick={() => openInstallModal(template)}
+                          className="px-3 py-1.5 text-xs font-medium border border-violet-900/60 text-violet-300 rounded-lg hover:bg-violet-950/40 transition-colors duration-150">
+                          Install API
+                        </button>
+                      )}
+                      {template.mcp_catalog_slug && mcpCatalogSlugs.has(template.mcp_catalog_slug) && (
+                        installedMcpSlugs.has(template.mcp_catalog_slug) ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-orange-400 bg-orange-950/30 border border-orange-900/40 rounded-lg" title="MCP Remote installed">
+                            <svg viewBox="0 0 16 16" className="w-3 h-3" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z" /></svg>
+                            MCP
+                          </span>
+                        ) : (
+                          <button onClick={() => handleInstallMcp(template.mcp_catalog_slug!)}
+                            disabled={installingMcpSlug === template.mcp_catalog_slug}
+                            className="px-3 py-1.5 text-xs font-medium border border-orange-900/60 text-orange-300 rounded-lg hover:bg-orange-950/40 transition-colors duration-150 disabled:opacity-50">
+                            {installingMcpSlug === template.mcp_catalog_slug ? 'Installing…' : 'Install MCP'}
+                          </button>
+                        )
+                      )}
+                    </div>
                   </div>
                 </div>
               )

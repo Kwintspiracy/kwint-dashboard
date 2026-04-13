@@ -2447,9 +2447,23 @@ export async function testMcpServerAction(id: string): Promise<ActionResult<{ to
     }
 
     const tools: unknown[] = json?.result?.tools ?? []
-    const toolNames = (tools as { name?: string }[])
+    const richTools = (tools as { name?: string; description?: string; inputSchema?: unknown }[])
       .filter((t) => typeof t?.name === 'string')
-      .map((t) => t.name as string)
+      .map((t) => ({
+        name: t.name as string,
+        description: typeof t.description === 'string' ? t.description : '',
+        inputSchema: t.inputSchema ?? null,
+      }))
+    const toolNames = richTools.map((t) => t.name)
+
+    // Cache tool list on the server row so the agent builder can render per-tool checkboxes
+    try {
+      await supabase
+        .from('mcp_servers')
+        .update({ available_tools: richTools, updated_at: new Date().toISOString() })
+        .eq('id', id)
+        .eq('entity_id', entityId)
+    } catch { /* non-fatal */ }
 
     return ok({ tool_count: toolNames.length, tools: toolNames })
   } catch (e) {
@@ -2818,6 +2832,67 @@ export async function getAgentSkillAssignmentsAction(agentId: string): Promise<A
   } catch (e) {
     return dbError(e)
   }
+}
+
+// ─── Agent ↔ MCP server assignments ────────────────────────────────────────
+
+export type AgentMcpAssignment = {
+  mcp_server_id: string
+  enabled_tools: string[] | null
+}
+
+export async function getAgentMcpAssignmentsAction(agentId: string): Promise<ActionResult<AgentMcpAssignment[]>> {
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+    const { data, error } = await supabase
+      .from('agent_mcp_servers')
+      .select('mcp_server_id, enabled_tools')
+      .eq('agent_id', agentId)
+      .eq('entity_id', entityId)
+    if (error) return dbFail(error)
+    return ok((data ?? []) as AgentMcpAssignment[])
+  } catch (e) { return dbError(e) }
+}
+
+export async function upsertAgentMcpAssignmentAction(
+  agentId: string,
+  mcpServerId: string,
+  enabledTools: string[] | null,
+): Promise<ActionResult<null>> {
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+    // Verify the server belongs to this entity
+    const { data: server } = await supabase
+      .from('mcp_servers')
+      .select('id')
+      .eq('id', mcpServerId)
+      .eq('entity_id', entityId)
+      .maybeSingle()
+    if (!server) return fail('MCP server not found for this workspace')
+
+    const { error } = await supabase
+      .from('agent_mcp_servers')
+      .upsert(
+        { agent_id: agentId, mcp_server_id: mcpServerId, entity_id: entityId, enabled_tools: enabledTools, updated_at: new Date().toISOString() },
+        { onConflict: 'agent_id,mcp_server_id' },
+      )
+    if (error) return dbFail(error)
+    return ok(null)
+  } catch (e) { return dbError(e) }
+}
+
+export async function deleteAgentMcpAssignmentAction(agentId: string, mcpServerId: string): Promise<ActionResult<null>> {
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+    const { error } = await supabase
+      .from('agent_mcp_servers')
+      .delete()
+      .eq('agent_id', agentId)
+      .eq('mcp_server_id', mcpServerId)
+      .eq('entity_id', entityId)
+    if (error) return dbFail(error)
+    return ok(null)
+  } catch (e) { return dbError(e) }
 }
 
 export async function getSkillCustomInstructionsAction(agentId: string): Promise<ActionResult<Record<string, boolean>>> {
