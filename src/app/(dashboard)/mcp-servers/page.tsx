@@ -176,7 +176,16 @@ export default function McpServersPage() {
       const result = await installMcpFromCatalogAction(slug)
       if (!result.ok) { toast.error(result.error); return }
       if (result.data.needs_oauth) {
-        window.location.href = `/api/mcp/oauth/start?server_id=${result.data.id}`
+        const popup = window.open(`/api/mcp/oauth/start?server_id=${result.data.id}`, '_blank')
+        if (!popup) {
+          toast.error('Popup blocked — allow popups for this site and retry')
+          return
+        }
+        toast.info('Complete the authorization in the new tab, then come back here.')
+        setTab('installed')
+        // Refresh when the user returns to this tab (OAuth callback ran in the popup)
+        const onFocus = () => { mutate(); }
+        window.addEventListener('focus', onFocus, { once: true })
         return
       }
       toast.success('Installed from marketplace')
