@@ -2906,6 +2906,22 @@ export type AgentMcpAssignment = {
   enabled_tools: string[] | null
 }
 
+export async function getAllAgentMcpAssignmentsAction(): Promise<Record<string, string[]>> {
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+    const { data, error } = await supabase
+      .from('agent_mcp_servers')
+      .select('agent_id, mcp_server_id')
+      .eq('entity_id', entityId)
+    if (error) { console.error('[actions]', error.message); return {} }
+    const map: Record<string, string[]> = {}
+    for (const r of (data ?? []) as { agent_id: string; mcp_server_id: string }[]) {
+      (map[r.agent_id] ??= []).push(r.mcp_server_id)
+    }
+    return map
+  } catch { return {} }
+}
+
 export async function getAgentMcpAssignmentsAction(agentId: string): Promise<ActionResult<AgentMcpAssignment[]>> {
   try {
     const { supabase, entityId } = await requireAuthWithEntity()

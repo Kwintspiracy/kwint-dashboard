@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { DndContext, DragOverlay, useDraggable, useDroppable, MouseSensor, TouchSensor, useSensor, useSensors, pointerWithin, type DragEndEvent } from '@dnd-kit/core'
-import { getAgentsAction, createAgentAction, updateAgentAction, deleteAgentAction, setDefaultAgentAction, activateTelegramAction, deactivateTelegramAction, getLlmKeysAction, getOperatorProvidersAction, getSkillsAction, getConnectorsAction, getAgentSkillAssignmentsAction, setAgentSkillAssignmentsAction, setSkillApprovalsAction, setSkillEnabledOperationsAction, getOrchestratorAssignmentsAction, getOrchestratorAssignmentDetailsAction, setOrchestratorAssignmentsAction, getAgentOrchestratorAction, setAgentOrchestratorAction, getAllAgentAssignmentsAction, getAllSkillAssignmentsAction, previewEffectivePromptAction, autoAssignTemplateSkillsAction, getSkillCustomInstructionsAction, setSkillCustomInstructionsAction, getAgentEditDataAction, getAgentMemoryCountsAction, getMcpServersAction, getAgentMcpAssignmentsAction, upsertAgentMcpAssignmentAction, deleteAgentMcpAssignmentAction } from '@/lib/actions'
+import { getAgentsAction, createAgentAction, updateAgentAction, deleteAgentAction, setDefaultAgentAction, activateTelegramAction, deactivateTelegramAction, getLlmKeysAction, getOperatorProvidersAction, getSkillsAction, getConnectorsAction, getAgentSkillAssignmentsAction, setAgentSkillAssignmentsAction, setSkillApprovalsAction, setSkillEnabledOperationsAction, getOrchestratorAssignmentsAction, getOrchestratorAssignmentDetailsAction, setOrchestratorAssignmentsAction, getAgentOrchestratorAction, setAgentOrchestratorAction, getAllAgentAssignmentsAction, getAllSkillAssignmentsAction, previewEffectivePromptAction, autoAssignTemplateSkillsAction, getSkillCustomInstructionsAction, setSkillCustomInstructionsAction, getAgentEditDataAction, getAgentMemoryCountsAction, getMcpServersAction, getAgentMcpAssignmentsAction, upsertAgentMcpAssignmentAction, deleteAgentMcpAssignmentAction, getAllAgentMcpAssignmentsAction } from '@/lib/actions'
 import { AgentReadinessBadge } from '@/components/AgentReadiness'
 import AgentMemoriesList from '@/components/AgentMemoriesList'
 import { timeAgo } from '@/lib/utils'
@@ -414,6 +414,8 @@ export default function AgentsPage() {
   const { data: allSkillAssignmentsRaw, mutate: mutateSkillAssignments } = useData(['all-skill-assignments', eid], getAllSkillAssignmentsAction)
   // MCP servers available on this entity (for per-agent assignment UI).
   const { data: mcpServersRaw = [] } = useData(['mcp-servers', eid], getMcpServersAction)
+  const { data: allMcpAssignmentsRaw = {}, mutate: mutateAllMcp } = useData(['all-agent-mcp', eid], getAllAgentMcpAssignmentsAction)
+  const agentMcpMap = allMcpAssignmentsRaw as Record<string, string[]>
   const mcpServers = mcpServersRaw as { id: string; name: string; slug: string; active: boolean; available_tools: { name: string; description?: string }[] | null }[]
   const { data: memoryCountsRaw = {}, mutate: mutateMemoryCounts } = useData(['memory-counts-by-agent', eid], getAgentMemoryCountsAction)
   const memoryCounts = memoryCountsRaw as Record<string, number>
@@ -705,6 +707,7 @@ export default function AgentsPage() {
       if (failed.length > 0) toast.error(`${failed.length} save(s) failed`)
       toast.success('Agent updated')
       setMcpInitial(mcpAssignments)
+      mutateAllMcp()
       setEditingId(null)
     } else {
       const result = await createAgentAction({
@@ -798,6 +801,8 @@ export default function AgentsPage() {
           {agents.map((a) => {
             const assignedSlugs = skillMap[a.id] ?? []
             const assignedSkills = skills.filter(s => assignedSlugs.includes(s.slug))
+            const assignedMcpIds = agentMcpMap[a.id] ?? []
+            const assignedMcps = mcpServers.filter(s => assignedMcpIds.includes(s.id))
             return (
               <div
                 key={a.id}
@@ -870,17 +875,20 @@ export default function AgentsPage() {
                   )}
                 </div>
 
-                {/* Skills pills */}
-                {assignedSkills.length > 0 && (
+                {/* Skills + MCP pills — violet for API Custom, orange for MCP Remote */}
+                {(assignedSkills.length > 0 || assignedMcps.length > 0) && (
                   <div className="flex flex-wrap gap-1">
                     {assignedSkills.map(s => (
-                      <span key={s.id} className="px-1.5 py-0.5 text-xs font-medium bg-violet-950/60 text-violet-400 border border-violet-800/40 rounded leading-tight">{s.name}</span>
+                      <span key={`skill-${s.id}`} className="px-1.5 py-0.5 text-xs font-medium bg-violet-950/60 text-violet-400 border border-violet-800/40 rounded leading-tight">{s.name}</span>
+                    ))}
+                    {assignedMcps.map(m => (
+                      <span key={`mcp-${m.id}`} className="px-1.5 py-0.5 text-xs font-medium bg-orange-950/60 text-orange-400 border border-orange-800/40 rounded leading-tight" title="MCP Remote">{m.name}</span>
                     ))}
                   </div>
                 )}
 
                 {/* Capabilities */}
-                {(a.capabilities?.length > 0 && assignedSkills.length === 0) && (
+                {(a.capabilities?.length > 0 && assignedSkills.length === 0 && assignedMcps.length === 0) && (
                   <div className="flex flex-wrap gap-1">
                     {a.capabilities.slice(0, 4).map(c => (
                       <span key={c} className="px-1.5 py-0.5 text-xs font-medium bg-neutral-800 text-neutral-500 border border-neutral-700/40 rounded leading-tight">{c}</span>
