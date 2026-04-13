@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   getMcpServersAction,
   createMcpServerAction,
@@ -8,7 +8,9 @@ import {
   deleteMcpServerAction,
   toggleMcpServerActiveAction,
   testMcpServerAction,
+  installMcpFromCatalogAction,
 } from '@/lib/actions'
+import { MCP_CATALOG } from '@/lib/mcp-catalog'
 import { useData } from '@/hooks/useData'
 import { useAuth } from '@/components/AuthProvider'
 import PageHeader from '@/components/PageHeader'
@@ -54,6 +56,8 @@ export default function McpServersPage() {
   const [saving, setSaving] = useState(false)
   const [testingId, setTestingId] = useState<string | null>(null)
   const [testResults, setTestResults] = useState<Record<string, TestResult | string>>({})
+  const [tab, setTab] = useState<'installed' | 'marketplace'>('installed')
+  const [installingSlug, setInstallingSlug] = useState<string | null>(null)
 
   const { data: serversRaw = [], isLoading: loading, mutate } = useData(
     ['mcp-servers', eid],
@@ -166,21 +170,74 @@ export default function McpServersPage() {
     }
   }
 
+  async function handleInstallCatalog(slug: string) {
+    setInstallingSlug(slug)
+    try {
+      const result = await installMcpFromCatalogAction(slug)
+      if (!result.ok) { toast.error(result.error); return }
+      if (result.data.needs_oauth) {
+        window.location.href = `/api/mcp/oauth/start?server_id=${result.data.id}`
+        return
+      }
+      toast.success('Installed from marketplace')
+      setTab('installed')
+      mutate()
+    } finally {
+      setInstallingSlug(null)
+    }
+  }
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const success = params.get('mcp_oauth_success')
+    const error = params.get('mcp_oauth_error')
+    if (success) toast.success(`${success} connected via OAuth`)
+    if (error) toast.error(`MCP OAuth failed: ${error}`)
+    if (success || error) {
+      const url = new URL(window.location.href)
+      url.searchParams.delete('mcp_oauth_success')
+      url.searchParams.delete('mcp_oauth_error')
+      window.history.replaceState({}, '', url.toString())
+    }
+  }, [])
+
   if (loading) return <CardSkeleton />
 
   const isFormOpen = showAdd || editingId !== null
+  const installedSlugs = new Set(servers.map(s => s.slug))
+
+  const tabClass = (t: typeof tab) =>
+    `px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors ${
+      tab === t
+        ? 'bg-neutral-800 text-white border-neutral-700'
+        : 'text-neutral-500 border-transparent hover:text-neutral-300'
+    }`
 
   return (
     <div className="space-y-5 max-w-7xl">
-      <PageHeader title="Tool Servers" count={servers.length}>
-        <button
-          onClick={startAdd}
-          className="px-4 py-2 text-xs font-semibold bg-white text-black rounded-lg hover:bg-neutral-200 active:bg-neutral-300 active:scale-[0.97] transition-all duration-150"
-        >
-          Add tool server
-        </button>
+      <PageHeader title="Tool Servers" count={tab === 'installed' ? servers.length : undefined}>
+        {tab === 'installed' && (
+          <button
+            onClick={startAdd}
+            className="px-4 py-2 text-xs font-semibold bg-white text-black rounded-lg hover:bg-neutral-200 active:bg-neutral-300 active:scale-[0.97] transition-all duration-150"
+          >
+            Add tool server
+          </button>
+        )}
       </PageHeader>
 
+      <div className="flex items-center gap-2">
+        <button onClick={() => setTab('installed')} className={tabClass('installed')}>
+          Installed
+          {servers.length > 0 && <span className="ml-1.5 text-xs text-neutral-600">({servers.length})</span>}
+        </button>
+        <button onClick={() => setTab('marketplace')} className={tabClass('marketplace')}>
+          Marketplace
+        </button>
+      </div>
+
+      {tab === 'installed' && (
+      <>
       <p className="text-xs text-neutral-500">
         Connect your agents to external tool services via MCP.
         Only HTTP transport is supported in serverless environments.
@@ -302,9 +359,67 @@ export default function McpServersPage() {
       {servers.length === 0 && !isFormOpen && (
         <EmptyState
           message="No tool servers yet"
-          description="Add external tool services to give your agents more capabilities."
-          action={{ label: 'Add tool server', onClick: startAdd }}
+          description="Browse the Marketplace for one-click installs, or add a custom server manually."
+          action={{ label: 'Browse Marketplace', onClick: () => setTab('marketplace') }}
         />
+      )}
+      </>
+      )}
+
+      {tab === 'marketplace' && (
+      <>
+        <p className="text-xs text-neutral-500">
+          Curated catalog of remote MCP servers. One click installs the server and reuses
+          the linked connector's OAuth token — no extra auth step required.
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {MCP_CATALOG.map((entry) => {
+            const installed = installedSlugs.has(entry.slug)
+            return (
+              <div key={entry.slug} className="bg-neutral-900/50 border border-neutral-800/50 hover:border-neutral-700 rounded-xl p-5 flex flex-col gap-3 transition-all">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-violet-900/30 flex items-center justify-center shrink-0 text-lg">
+                    {entry.icon}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-white">{entry.name}</p>
+                    <p className="text-xs text-neutral-500 font-mono">{entry.category}</p>
+                  </div>
+                </div>
+                <p className="text-xs text-neutral-400 line-clamp-4">{entry.description}</p>
+                <div className="space-y-1 text-xs">
+                  <div className="flex items-center gap-2 text-neutral-500">
+                    <span className="text-neutral-600 w-24 shrink-0">Endpoint</span>
+                    <span className="truncate font-mono text-neutral-400">{entry.mcp_url}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-neutral-500">
+                    <span className="text-neutral-600 w-24 shrink-0">Reuses auth</span>
+                    <span className="font-mono text-neutral-400">{entry.requires_connector_slug}</span>
+                  </div>
+                </div>
+                <div className="mt-auto pt-2 border-t border-neutral-800/30 flex items-center justify-between gap-2">
+                  {entry.docs_url && (
+                    <a href={entry.docs_url} target="_blank" rel="noreferrer" className="text-xs text-neutral-500 hover:text-neutral-300">
+                      Docs ↗
+                    </a>
+                  )}
+                  <button
+                    onClick={() => handleInstallCatalog(entry.slug)}
+                    disabled={installed || installingSlug === entry.slug}
+                    className={`ml-auto px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
+                      installed
+                        ? 'bg-emerald-950/60 text-emerald-400 border border-emerald-900/40 cursor-default'
+                        : 'bg-white text-black hover:bg-neutral-200 disabled:opacity-50'
+                    }`}
+                  >
+                    {installed ? 'Installed' : installingSlug === entry.slug ? 'Installing…' : 'Install'}
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </>
       )}
 
       <SidePanel

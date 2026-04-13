@@ -2279,6 +2279,72 @@ export async function toggleMcpServerActiveAction(id: string, active: boolean): 
   } catch (e) { return dbError(e) }
 }
 
+export async function installMcpFromCatalogAction(slug: string): Promise<ActionResult<{ id: string; needs_oauth: boolean }>> {
+  const { MCP_CATALOG } = await import('@/lib/mcp-catalog')
+  const entry = MCP_CATALOG.find((e) => e.slug === slug)
+  if (!entry) return fail(`Unknown MCP catalog entry: ${slug}`)
+
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+
+    if (entry.auth_mode === 'reuse_connector') {
+      if (!entry.requires_connector_slug) return fail('Catalog entry misconfigured')
+      const { data: conn } = await supabase
+        .from('connectors')
+        .select('id, slug, active')
+        .eq('slug', entry.requires_connector_slug)
+        .eq('entity_id', entityId)
+        .eq('active', true)
+        .maybeSingle()
+      if (!conn) return fail(`Connect the "${entry.requires_connector_slug}" connector first.`)
+    }
+
+    const envBase = entry.auth_mode === 'reuse_connector'
+      ? { auth_mode: 'reuse_connector', auth_connector_slug: entry.requires_connector_slug }
+      : { auth_mode: 'mcp_oauth' }
+
+    const { data: existing } = await supabase
+      .from('mcp_servers')
+      .select('id, env_vars')
+      .eq('entity_id', entityId)
+      .eq('slug', entry.slug)
+      .maybeSingle()
+
+    const existingEnv = (existing?.env_vars as Record<string, unknown> | null) || {}
+    const mergedEnv = { ...existingEnv, ...envBase }
+
+    const row = {
+      name: entry.name,
+      slug: entry.slug,
+      transport: 'http' as const,
+      url: entry.mcp_url,
+      command: null,
+      active: true,
+      env_vars: mergedEnv,
+      updated_at: new Date().toISOString(),
+    }
+
+    let id: string
+    if (existing?.id) {
+      const { error } = await supabase.from('mcp_servers').update(row).eq('id', existing.id).eq('entity_id', entityId)
+      if (error) return dbFail(error)
+      id = existing.id
+    } else {
+      const { data, error } = await supabase
+        .from('mcp_servers')
+        .insert({ ...row, entity_id: entityId })
+        .select('id')
+        .single()
+      if (error) return dbFail(error)
+      id = data.id
+    }
+
+    const needs_oauth =
+      entry.auth_mode === 'mcp_oauth' && !(mergedEnv as { access_token?: string }).access_token
+    return ok({ id, needs_oauth })
+  } catch (e) { return dbError(e) }
+}
+
 export async function testMcpServerAction(id: string): Promise<ActionResult<{ tool_count: number; tools: string[] }>> {
   try {
     const { supabase, entityId } = await requireAuthWithEntity()
@@ -2312,20 +2378,65 @@ export async function testMcpServerAction(id: string): Promise<ActionResult<{ to
       }
     } catch { return fail('Invalid server URL') }
 
-    // Call tools/list via the dashboard (server-side fetch)
-    const payload = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} })
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: payload,
-      signal: AbortSignal.timeout(10_000),
+    // Resolve Bearer token if the server links to an existing connector
+    let bearer: string | null = null
+    const env = server.env_vars as { auth_bearer?: string; auth_connector_slug?: string } | null
+    if (env?.auth_bearer) bearer = env.auth_bearer
+    else if (env?.auth_connector_slug) {
+      const { data: conn } = await supabase
+        .from('connectors')
+        .select('api_key, oauth_access_token')
+        .eq('slug', env.auth_connector_slug)
+        .eq('entity_id', entityId)
+        .maybeSingle()
+      bearer = conn?.oauth_access_token || conn?.api_key || null
+    }
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json, text/event-stream',
+      'MCP-Protocol-Version': '2025-06-18',
+    }
+    if (bearer) headers['Authorization'] = `Bearer ${bearer}`
+
+    // MCP handshake: initialize first, reuse session id
+    let sessionId: string | null = null
+    const initBody = JSON.stringify({
+      jsonrpc: '2.0', id: 1, method: 'initialize',
+      params: {
+        protocolVersion: '2025-06-18',
+        capabilities: {},
+        clientInfo: { name: 'KwintAgents', version: '0.1.0' },
+      },
     })
+    const initRes = await fetch(url, { method: 'POST', headers, body: initBody, signal: AbortSignal.timeout(10_000) })
+    if (!initRes.ok) return fail(`MCP initialize failed: HTTP ${initRes.status}`)
+    sessionId = initRes.headers.get('Mcp-Session-Id')
+    if (sessionId) headers['Mcp-Session-Id'] = sessionId
+    // Send initialized notification (no response expected)
+    await fetch(url, { method: 'POST', headers, body: JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }), signal: AbortSignal.timeout(5_000) }).catch(() => {})
+
+    const payload = JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} })
+    const res = await fetch(url, { method: 'POST', headers, body: payload, signal: AbortSignal.timeout(10_000) })
 
     if (!res.ok) {
       return fail(`MCP server returned HTTP ${res.status}`)
     }
 
-    const json = await res.json().catch(() => null)
+    // Response may be JSON or SSE — handle both
+    const ctype = res.headers.get('Content-Type') || ''
+    let json: { result?: { tools?: unknown[] }; error?: { message?: string } } | null = null
+    if (ctype.includes('text/event-stream')) {
+      const text = await res.text()
+      const dataLines: string[] = []
+      for (const line of text.split(/\r?\n/)) {
+        if (line.startsWith('data:')) dataLines.push(line.slice(5).trimStart())
+        else if (!line.trim() && dataLines.length) break
+      }
+      try { json = JSON.parse(dataLines.join('\n')) } catch { json = null }
+    } else {
+      json = await res.json().catch(() => null)
+    }
     if (!json || json.error) {
       return fail(`MCP server returned an error: ${json?.error?.message ?? 'unknown'}`)
     }
