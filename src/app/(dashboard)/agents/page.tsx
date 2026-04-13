@@ -592,8 +592,11 @@ export default function AgentsPage() {
     const res = await getAgentEditDataAction(a.id)
     if (res.ok) {
       setForm(prev => ({ ...prev, personality: res.data.personality ?? '' }))
-      const validSkillIds = new Set(skills.map(s => s.id))
-      setAssignedSkillIds(res.data.skillIds.filter(id => validSkillIds.has(id)))
+      // Trust the DB — do NOT filter by the client-side `skills` array here.
+      // Filtering caused silent wipes when SWR hadn't loaded skills yet:
+      //   validSkillIds = ∅  →  every assigned id stripped  →  save persists []  →  skills lost.
+      // The server action already enforces referential integrity; deleted skills cascade via FK.
+      setAssignedSkillIds(res.data.skillIds)
       setSkillCustomInstructions(res.data.customInstructions)
       setSkillEnabledOps(res.data.enabledOperations ?? {})
       setAssignedAgentIds(res.data.subAgents.map(d => d.sub_agent_id))
