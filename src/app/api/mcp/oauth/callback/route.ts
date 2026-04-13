@@ -94,8 +94,30 @@ export async function GET(request: NextRequest) {
     const tokenRes = await fetch(tokenEndpoint, { method: 'POST', headers, body: body.toString(), signal: AbortSignal.timeout(15_000) })
     if (!tokenRes.ok) {
       const text = await tokenRes.text().catch(() => '')
-      console.error('[mcp/oauth/callback] token exchange failed', tokenRes.status, text)
-      targetUrl.searchParams.set('mcp_oauth_error', `token_exchange_${tokenRes.status}`)
+      console.error('[mcp/oauth/callback] token_exchange_failed', {
+        status: tokenRes.status,
+        body: text.slice(0, 500),
+        tokenEndpoint,
+        clientId,
+        redirectUri,
+      })
+      // If the stored client is no longer known to the MCP server (expired DCR),
+      // wipe our cached DCR fields so the next /start re-registers from scratch.
+      if (tokenRes.status === 400 || tokenRes.status === 401) {
+        const cleaned = { ...env }
+        delete cleaned.client_id
+        delete cleaned.client_secret
+        delete cleaned.token_endpoint
+        delete cleaned.authorization_endpoint
+        delete cleaned.registration_endpoint
+        await supabase
+          .from('mcp_servers')
+          .update({ env_vars: cleaned, updated_at: new Date().toISOString() })
+          .eq('id', decoded.server_id)
+          .eq('entity_id', decoded.entity_id)
+          .then(() => {}, () => {})
+      }
+      targetUrl.searchParams.set('mcp_oauth_error', `token_exchange_${tokenRes.status}: ${text.slice(0, 200)}`)
       return NextResponse.redirect(targetUrl)
     }
     const tokens = await tokenRes.json() as {
