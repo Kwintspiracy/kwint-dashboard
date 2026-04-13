@@ -47,7 +47,6 @@ const NAV_ITEMS: NavGroup[] = [
       { href: '/memories', label: 'Memories', icon: Brain },
       { href: '/connectors', label: 'Connectors', icon: Plug },
       { href: '/skills', label: 'Skills', icon: BookOpenText },
-      { href: '/mcp-servers', label: 'Tool Servers', icon: HardDrives },
     ],
   },
   {

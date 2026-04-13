@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { getConnectorsAction, createConnectorAction, updateConnectorAction, deleteConnectorAction, toggleConnectorActiveAction, createSkillAction, getSkillsAction, getMcpServersAction, installMcpFromCatalogAction } from '@/lib/actions'
+import { getConnectorsAction, createConnectorAction, updateConnectorAction, deleteConnectorAction, toggleConnectorActiveAction, createSkillAction, getSkillsAction, getMcpServersAction, installMcpFromCatalogAction, testMcpServerAction, deleteMcpServerAction } from '@/lib/actions'
 import { SKILL_TEMPLATES, SKILL_CATEGORIES, SKILL_CAPABILITIES, type SkillTemplate } from '@/lib/skill-templates'
 import { MCP_CATALOG } from '@/lib/mcp-catalog'
 import { CONNECTOR_OAUTH } from '@/lib/oauth-providers'
@@ -112,9 +112,43 @@ export default function ConnectorsPage() {
   const { data: connectorsRaw = [], isLoading: loading, mutate } = useData(['connectors', eid], getConnectorsAction)
   const connectors = connectorsRaw as Connector[]
   const { data: mcpServersRaw = [], mutate: mutateMcp } = useData(['mcp-servers', eid], getMcpServersAction)
-  const installedMcpSlugs = new Set((mcpServersRaw as { slug: string }[]).map(s => s.slug))
+  const mcpServers = mcpServersRaw as {
+    id: string; name: string; slug: string; url: string | null; active: boolean;
+    env_vars?: { auth_mode?: string; access_token?: string } | null;
+    available_tools?: { name: string }[] | null;
+    created_at: string;
+  }[]
+  const installedMcpSlugs = new Set(mcpServers.map(s => s.slug))
   const mcpCatalogSlugs = new Set(MCP_CATALOG.map(e => e.slug))
   const [installingMcpSlug, setInstallingMcpSlug] = useState<string | null>(null)
+  const [testingMcpId, setTestingMcpId] = useState<string | null>(null)
+  const [mcpTestResult, setMcpTestResult] = useState<Record<string, string>>({})
+
+  async function handleTestMcp(id: string) {
+    setTestingMcpId(id)
+    setMcpTestResult(prev => ({ ...prev, [id]: '' }))
+    try {
+      const result = await testMcpServerAction(id)
+      if (!result.ok) {
+        setMcpTestResult(prev => ({ ...prev, [id]: result.error }))
+        toast.error(result.error)
+      } else {
+        setMcpTestResult(prev => ({ ...prev, [id]: `${result.data.tool_count} tools` }))
+        toast.success(`Connected — ${result.data.tool_count} tool${result.data.tool_count === 1 ? '' : 's'}`)
+        mutateMcp()
+      }
+    } finally {
+      setTestingMcpId(null)
+    }
+  }
+
+  async function handleDeleteMcp(id: string, name: string) {
+    if (!confirm(`Delete "${name}"? Agents lose access to its tools.`)) return
+    const result = await deleteMcpServerAction(id)
+    if (!result.ok) { toast.error(result.error); return }
+    toast.success('MCP server deleted')
+    mutateMcp()
+  }
 
   async function handleInstallMcp(slug: string) {
     setInstallingMcpSlug(slug)
@@ -472,12 +506,104 @@ export default function ConnectorsPage() {
             ))}
           </div>
 
-          {connectors.length === 0 && !isFormOpen && (
+          {connectors.length === 0 && mcpServers.length === 0 && !isFormOpen && (
             <EmptyState
-              message="No connectors yet"
-              description="Connect your agents to services like Gmail, Slack, Notion, and more."
+              message="Nothing connected yet"
+              description="Hook up Gmail, Slack, Notion, and more — via API or MCP."
               action={{ label: 'Browse the Marketplace', onClick: () => setTab('marketplace') }}
             />
+          )}
+
+          {/* ── MCP servers ──────────────────────────────────────── */}
+          {mcpServers.length > 0 && (
+            <div className="mt-8">
+              <div className="flex items-center gap-2 mb-3">
+                <h2 className="text-xs font-semibold text-neutral-500 uppercase tracking-wide">MCP Servers</h2>
+                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold bg-orange-950/50 text-orange-400 border border-orange-900/40">Remote</span>
+                <span className="text-xs text-neutral-600">({mcpServers.length})</span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {mcpServers.map(s => {
+                  const isOauth = s.env_vars?.auth_mode === 'mcp_oauth'
+                  const needsConnect = isOauth && !s.env_vars?.access_token
+                  const toolCount = s.available_tools?.length ?? 0
+                  const testRes = mcpTestResult[s.id]
+                  return (
+                    <div key={s.id} className={`bg-neutral-900/50 border rounded-xl p-5 flex flex-col gap-3 transition-all ${s.active ? 'border-neutral-800/50 hover:border-orange-900/40' : 'border-neutral-800/30 opacity-50'}`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-10 h-10 rounded-lg bg-orange-900/30 flex items-center justify-center shrink-0">
+                            <svg className="w-5 h-5 text-orange-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3" /></svg>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-white truncate">{s.name}</p>
+                            <p className="text-xs text-neutral-500 font-mono truncate">{s.slug}</p>
+                          </div>
+                        </div>
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold bg-orange-950/50 text-orange-400 border border-orange-900/40 shrink-0">MCP</span>
+                      </div>
+                      <div className="space-y-1 text-xs">
+                        <div className="flex items-center gap-2 text-neutral-500">
+                          <span className="text-neutral-600 w-16 shrink-0">URL</span>
+                          <span className="truncate font-mono text-neutral-400">{s.url}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-neutral-500">
+                          <span className="text-neutral-600 w-16 shrink-0">Tools</span>
+                          <span className={toolCount > 0 ? 'text-neutral-300' : 'text-neutral-600'}>
+                            {toolCount > 0 ? `${toolCount} discovered` : 'not yet discovered'}
+                          </span>
+                        </div>
+                      </div>
+                      {needsConnect && (
+                        <div className="bg-amber-950/30 border border-amber-900/30 rounded-lg px-3 py-2 text-xs text-amber-300">
+                          OAuth not completed. Click Connect to finish.
+                        </div>
+                      )}
+                      {testRes && (
+                        <div className={`rounded-lg px-3 py-2 text-xs ${testRes.endsWith('tools') ? 'bg-emerald-950/40 border border-emerald-900/30 text-emerald-400' : 'bg-red-950/40 border border-red-900/30 text-red-400'}`}>
+                          {testRes}
+                        </div>
+                      )}
+                      <div className="flex items-center gap-1 mt-auto pt-2 border-t border-neutral-800/30">
+                        {needsConnect ? (
+                          <button
+                            onClick={() => { window.open(`/api/mcp/oauth/start?server_id=${s.id}`, '_blank'); const onFocus = () => mutateMcp(); window.addEventListener('focus', onFocus, { once: true }) }}
+                            className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-orange-600 text-white hover:bg-orange-500"
+                          >
+                            Connect
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleTestMcp(s.id)}
+                            disabled={testingMcpId === s.id}
+                            title="Test connection"
+                            className="p-2 rounded-lg text-neutral-500 hover:text-orange-400 hover:bg-neutral-800 transition-all duration-150 disabled:opacity-50"
+                          >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" /></svg>
+                          </button>
+                        )}
+                        {isOauth && !needsConnect && (
+                          <button
+                            onClick={() => { window.open(`/api/mcp/oauth/start?server_id=${s.id}`, '_blank'); const onFocus = () => mutateMcp(); window.addEventListener('focus', onFocus, { once: true }) }}
+                            title="Reconnect OAuth"
+                            className="p-2 rounded-lg text-neutral-500 hover:text-orange-400 hover:bg-neutral-800 transition-all duration-150"
+                          >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" /></svg>
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleDeleteMcp(s.id, s.name)}
+                          title="Delete"
+                          className="ml-auto p-2 rounded-lg text-neutral-500 hover:text-red-400 hover:bg-neutral-800 transition-all duration-150"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
           )}
 
           <SidePanel

@@ -2398,10 +2398,58 @@ export async function testMcpServerAction(id: string): Promise<ActionResult<{ to
     // Resolve Bearer token — priority: MCP-native OAuth > literal > connector
     let bearer: string | null = null
     const env = server.env_vars as {
+      auth_mode?: string
       access_token?: string
+      refresh_token?: string
+      token_expires_at?: number
+      client_id?: string
+      client_secret?: string
+      token_endpoint?: string
       auth_bearer?: string
       auth_connector_slug?: string
     } | null
+
+    // If OAuth-native but no token yet → surface actionable guidance
+    if (env?.auth_mode === 'mcp_oauth' && !env.access_token) {
+      return fail('Not authorized yet — click "Connect" to complete the OAuth flow.')
+    }
+
+    // Refresh a near-expired token before using it (60s buffer)
+    if (env?.access_token && env.refresh_token && env.token_expires_at && env.token_endpoint && env.client_id) {
+      const nowSec = Math.floor(Date.now() / 1000)
+      if (env.token_expires_at - 60 < nowSec) {
+        try {
+          const body = new URLSearchParams({
+            grant_type: 'refresh_token',
+            refresh_token: env.refresh_token,
+            client_id: env.client_id,
+          })
+          const headers: Record<string, string> = {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Accept': 'application/json',
+            'User-Agent': 'KwintAgents/1.0',
+          }
+          if (env.client_secret) {
+            headers['Authorization'] = 'Basic ' + Buffer.from(`${env.client_id}:${env.client_secret}`).toString('base64')
+          }
+          const rRes = await fetch(env.token_endpoint, { method: 'POST', headers, body: body.toString(), signal: AbortSignal.timeout(15_000) })
+          if (rRes.ok) {
+            const tokens = await rRes.json() as { access_token?: string; refresh_token?: string; expires_in?: number }
+            if (tokens.access_token) {
+              const merged = {
+                ...env,
+                access_token: tokens.access_token,
+                ...(tokens.refresh_token ? { refresh_token: tokens.refresh_token } : {}),
+                ...(tokens.expires_in ? { token_expires_at: nowSec + tokens.expires_in } : {}),
+              }
+              await supabase.from('mcp_servers').update({ env_vars: merged, updated_at: new Date().toISOString() }).eq('id', id).eq('entity_id', entityId)
+              env.access_token = tokens.access_token
+            }
+          }
+        } catch { /* fall through — use stale token; server will reject if truly dead */ }
+      }
+    }
+
     if (env?.access_token) bearer = env.access_token
     else if (env?.auth_bearer) bearer = env.auth_bearer
     else if (env?.auth_connector_slug) {
