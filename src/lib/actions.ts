@@ -887,9 +887,26 @@ export async function updateConnectorAction(
 export async function deleteConnectorAction(id: string): Promise<ActionResult> {
   try {
     const { supabase, entityId } = await requireAuthWithEntity()
-    const { error } = await supabase.from('connectors').delete().eq('id', id).eq('entity_id', entityId)
+    // Look up the slug BEFORE deleting so we can cascade to the paired skill.
+    const { data: conn } = await supabase
+      .from('connectors')
+      .select('slug')
+      .eq('id', id)
+      .eq('entity_id', entityId)
+      .maybeSingle()
 
+    const { error } = await supabase.from('connectors').delete().eq('id', id).eq('entity_id', entityId)
     if (error) return dbFail(error)
+
+    // Delete the paired skill (install creates connector + skill with the same slug).
+    // agent_skill_assignments has ON DELETE CASCADE on skill_id, so agent profiles clean up automatically.
+    if (conn?.slug) {
+      await supabase
+        .from('agent_skills')
+        .delete()
+        .eq('slug', conn.slug)
+        .eq('entity_id', entityId)
+    }
     return ok(undefined)
   } catch (e) {
     return dbError(e)
