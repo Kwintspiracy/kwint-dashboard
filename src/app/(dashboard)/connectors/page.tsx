@@ -640,8 +640,29 @@ export default function ConnectorsPage() {
                       )}
                     </div>
                   </div>
-                  {/* Endpoints preview */}
+                  {/* Tool preview — prefer the declared operations list (truer count than parsing prose) */}
                   {(() => {
+                    if (template.operations && template.operations.length > 0) {
+                      const shown = template.operations.slice(0, 4)
+                      const extra = template.operations.length - shown.length
+                      return (
+                        <div className="mt-3 pt-3 border-t border-neutral-800/40 space-y-1">
+                          {shown.map(op => (
+                            <div key={op.slug} className="flex items-center gap-1.5">
+                              <span className={`inline-flex items-center px-1.5 py-0.5 text-[10px] font-bold rounded border leading-tight shrink-0 ${
+                                op.risk === 'destructive' ? 'bg-red-950/60 text-red-400 border-red-800/40'
+                                : op.risk === 'write' ? 'bg-amber-950/60 text-amber-400 border-amber-800/40'
+                                : 'bg-emerald-950/60 text-emerald-400 border-emerald-800/40'
+                              }`}>{op.risk.toUpperCase()}</span>
+                              <span className="text-xs text-neutral-400 truncate">{op.name}</span>
+                            </div>
+                          ))}
+                          {extra > 0 && (
+                            <p className="text-xs text-neutral-600">+{extra} more ({template.operations.length} tools total)</p>
+                          )}
+                        </div>
+                      )
+                    }
                     const endpoints = parseEndpoints(template.content)
                     if (endpoints.length === 0) return null
                     const shown = endpoints.slice(0, 3)
