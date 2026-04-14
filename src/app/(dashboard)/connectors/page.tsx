@@ -305,11 +305,18 @@ export default function ConnectorsPage() {
         if (installing.connector.oauth_token_url) connPayload.oauth_token_url = installing.connector.oauth_token_url
         if (installing.connector.oauth_scopes) connPayload.oauth_scopes = installing.connector.oauth_scopes
 
-        const connResult = await createConnectorAction(connPayload as Parameters<typeof createConnectorAction>[0])
-        if (!connResult.ok) { toast.error(connResult.error); return }
-        const freshConnectors = await getConnectorsAction()
-        const created = (freshConnectors as Connector[]).find(c => c.slug === installing.connector!.slug)
-        if (created) connectorId = created.id
+        const existing = connectors.find(c => c.slug === installing.connector!.slug)
+        if (existing) {
+          const updateResult = await updateConnectorAction(existing.id, connPayload as Parameters<typeof updateConnectorAction>[1])
+          if (!updateResult.ok) { toast.error(updateResult.error); return }
+          connectorId = existing.id
+        } else {
+          const connResult = await createConnectorAction(connPayload as Parameters<typeof createConnectorAction>[0])
+          if (!connResult.ok) { toast.error(connResult.error); return }
+          const freshConnectors = await getConnectorsAction()
+          const created = (freshConnectors as Connector[]).find(c => c.slug === installing.connector!.slug)
+          if (created) connectorId = created.id
+        }
       }
 
       const skillResult = await createSkillAction({

@@ -2311,9 +2311,11 @@ export async function installMcpFromCatalogAction(slug: string): Promise<ActionR
         .select('id, slug, active')
         .eq('slug', entry.requires_connector_slug)
         .eq('entity_id', entityId)
-        .eq('active', true)
         .maybeSingle()
       if (!conn) return fail(`Connect the "${entry.requires_connector_slug}" connector first.`)
+      if (!conn.active) {
+        await supabase.from('connectors').update({ active: true }).eq('id', conn.id).eq('entity_id', entityId)
+      }
     }
 
     const envBase = entry.auth_mode === 'reuse_connector'
