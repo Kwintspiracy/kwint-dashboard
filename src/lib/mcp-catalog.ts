@@ -30,6 +30,28 @@ export const MCP_CATALOG: McpCatalogEntry[] = [
     auth_mode: "mcp_oauth",
     docs_url: "https://developers.notion.com/docs/mcp",
   },
+  {
+    slug: "firecrawl",
+    name: "Firecrawl MCP",
+    description:
+      "Web scraping and crawling via Firecrawl's official remote MCP. Scrape single pages, crawl entire sites, extract structured data, and search the web — all with JS rendering and anti-bot handling built in.",
+    icon: "🔥",
+    mcp_url: "https://mcp.firecrawl.dev/mcp",
+    category: "Web & Data",
+    auth_mode: "mcp_oauth",
+    docs_url: "https://docs.firecrawl.dev/mcp",
+  },
+  {
+    slug: "apify",
+    name: "Apify MCP",
+    description:
+      "Access 5,000+ Apify Actors via the official remote MCP server. Run web scrapers, automation workflows, and data extraction tools — from social media scrapers to browser automation — through a single connection.",
+    icon: "🕷️",
+    mcp_url: "https://mcp.apify.com",
+    category: "Web & Data",
+    auth_mode: "mcp_oauth",
+    docs_url: "https://docs.apify.com/platform/integrations/mcp",
+  },
 ];
 
 export function getMcpCatalogEntry(slug: string): McpCatalogEntry | undefined {
