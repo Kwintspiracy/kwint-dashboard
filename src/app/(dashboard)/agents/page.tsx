@@ -29,6 +29,7 @@ type Agent = {
   requires_approval: string[] | null
   capabilities: string[]
   avatar_url: string | null
+  max_tokens_per_job: number | null
   created_at: string; updated_at: string
 }
 
@@ -493,6 +494,7 @@ export default function AgentsPage() {
     requires_approval: [] as string[],
     capabilities: [] as string[],
     avatar_url: null as string | null,
+    max_tokens_per_job: 0,
   })
   const [slugManuallyEdited, setSlugManuallyEdited] = useState(false)
   const [telegramStatus, setTelegramStatus] = useState('')
@@ -550,6 +552,7 @@ export default function AgentsPage() {
       requires_approval: template.suggestedApprovalTools,
       capabilities: [],
       avatar_url: null,
+      max_tokens_per_job: 0,
     })
     setShowAdd(true)
   }
@@ -586,6 +589,7 @@ export default function AgentsPage() {
       requires_approval: a.requires_approval || [],
       capabilities: a.capabilities || [],
       avatar_url: a.avatar_url || null,
+      max_tokens_per_job: a.max_tokens_per_job ?? 0,
     })
 
     // Single fetch for all edit data (1 server action, 4 parallel DB queries)
@@ -629,6 +633,7 @@ export default function AgentsPage() {
       requires_approval: [],
       capabilities: [],
       avatar_url: null,
+      max_tokens_per_job: 0,
     })
   }
 
@@ -668,6 +673,7 @@ export default function AgentsPage() {
         telegram_bot_username: form.telegram_bot_username || null,
         requires_approval: form.requires_approval,
         avatar_url: form.avatar_url || null,
+        max_tokens_per_job: form.max_tokens_per_job,
       })
       if (!result.ok) { toast.error(result.error); return }
       const orchAssignments = assignedAgentIds.map(id => ({ sub_agent_id: id, instructions: agentInstructions[id] || null }))
@@ -717,6 +723,7 @@ export default function AgentsPage() {
         telegram_bot_username: form.telegram_bot_username || null,
         requires_approval: form.requires_approval,
         avatar_url: form.avatar_url || null,
+        max_tokens_per_job: form.max_tokens_per_job,
       })
       if (!result.ok) { toast.error(result.error); return }
       const newId = (result as { ok: true; data: { id: string } }).data?.id
@@ -1490,6 +1497,54 @@ export default function AgentsPage() {
                     <span>Delegates tasks via <code className="font-mono bg-violet-950/60 px-1 rounded text-violet-300">delegate_task</code>. Use <code className="font-mono bg-violet-950/60 px-1 rounded text-violet-300">{'{{team}}'}</code> in the personality to control where the agent roster is injected.</span>
                   </div>
                 )}
+
+                {/* Max tokens per job */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs text-neutral-500">
+                      Max tokens per job
+                      <span title="Cumulative input+output across every LLM call in one job (including self-chains and cache reads). Leftmost = runner default (150k). Sub-agents have their own cap — tokens do not roll up to the parent."
+                            className="ml-1 text-neutral-600 cursor-help">(?)</span>
+                    </label>
+                    <span className="font-mono text-xs text-amber-400">
+                      {form.max_tokens_per_job === 0
+                        ? 'Default (150k)'
+                        : `${(form.max_tokens_per_job / 1000).toLocaleString()}k tokens`}
+                    </span>
+                  </div>
+                  {(() => {
+                    const STOPS = [0, 5_000, 10_000, 25_000, 50_000, 100_000, 250_000, 500_000]
+                    const tokensToIdx = (t: number) => {
+                      if (!t) return 0
+                      let best = 1
+                      for (let i = 1; i < STOPS.length; i++)
+                        if (Math.abs(Math.log(STOPS[i]) - Math.log(t)) <
+                            Math.abs(Math.log(STOPS[best]) - Math.log(t))) best = i
+                      return best
+                    }
+                    return (
+                      <input
+                        type="range"
+                        min={0}
+                        max={STOPS.length - 1}
+                        step={1}
+                        value={tokensToIdx(form.max_tokens_per_job ?? 0)}
+                        onChange={e => setForm(prev => ({ ...prev, max_tokens_per_job: STOPS[+e.target.value] }))}
+                        className="w-full accent-amber-500"
+                      />
+                    )
+                  })()}
+                  <div className="flex justify-between text-[10px] text-neutral-600 mt-1 font-mono">
+                    <span>default</span>
+                    <span>5k</span>
+                    <span>10k</span>
+                    <span>25k</span>
+                    <span>50k</span>
+                    <span>100k</span>
+                    <span>250k</span>
+                    <span>500k</span>
+                  </div>
+                </div>
               </fieldset>
 
               {/* Instructions */}

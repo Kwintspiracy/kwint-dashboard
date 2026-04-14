@@ -23,6 +23,7 @@ export const CreateAgentSchema = z.object({
   requires_approval: z.array(z.string()).nullable().optional(),
   task_context_template: z.string().nullable().optional(),
   avatar_url: z.string().nullable().optional(),
+  max_tokens_per_job: z.coerce.number().int().min(0).max(500_000).optional(),
 })
 
 export const UpdateAgentSchema = CreateAgentSchema.partial().extend({

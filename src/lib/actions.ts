@@ -436,7 +436,7 @@ export async function getAgentsAction(): Promise<any[]> {
   // It's loaded on demand via getAgentEditDataAction(id) when the edit panel opens.
   const { data, error } = await supabase
     .from('agents')
-    .select('id, name, slug, model, role, active, is_default, avatar_url, capabilities, requires_approval, task_context_template, system_agent, telegram_bot_token, telegram_bot_username, created_at, updated_at')
+    .select('id, name, slug, model, role, active, is_default, avatar_url, capabilities, requires_approval, task_context_template, system_agent, telegram_bot_token, telegram_bot_username, max_tokens_per_job, created_at, updated_at')
     .eq('entity_id', entityId)
     .order('is_default', { ascending: false })
     .order('name')
