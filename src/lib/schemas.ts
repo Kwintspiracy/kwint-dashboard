@@ -24,6 +24,7 @@ export const CreateAgentSchema = z.object({
   task_context_template: z.string().nullable().optional(),
   avatar_url: z.string().nullable().optional(),
   max_tokens_per_job: z.coerce.number().int().min(0).max(500_000).optional(),
+  enabled_builtin_tools: z.array(z.string()).nullable().optional(),
 })
 
 export const UpdateAgentSchema = CreateAgentSchema.partial().extend({
@@ -84,6 +85,7 @@ export const CreateSkillSchema = z.object({
   content_overridden: z.boolean().optional(),
   required_config: z.array(RequiredConfigItemSchema).nullable().optional(),
   operations: z.array(OperationItemSchema).nullable().optional(),
+  required_builtins: z.array(z.string()).optional(),
   connector_ids: z.array(UuidSchema).optional(),
 })
 
@@ -96,6 +98,7 @@ export const UpdateSkillSchema = z.object({
   content_overridden: z.boolean().optional(),
   required_config: z.array(RequiredConfigItemSchema).nullable().optional(),
   operations: z.array(OperationItemSchema).nullable().optional(),
+  required_builtins: z.array(z.string()).optional(),
   active: z.boolean().optional(),
   connector_ids: z.array(UuidSchema).optional(),
 })

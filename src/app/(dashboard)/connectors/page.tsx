@@ -322,6 +322,9 @@ export default function ConnectorsPage() {
       const skillResult = await createSkillAction({
         name: installing.name, slug: installing.slug, content: installing.content,
         connector_ids: connectorId ? [connectorId] : [],
+        required_builtins: installing.required_builtins,
+        operations: installing.operations,
+        required_config: installing.required_config,
       })
       if (!skillResult.ok) { toast.error(skillResult.error); return }
       toast.success(`${installing.name} installed successfully`)

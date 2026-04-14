@@ -30,11 +30,27 @@ type Agent = {
   capabilities: string[]
   avatar_url: string | null
   max_tokens_per_job: number | null
+  enabled_builtin_tools: string[] | null
   created_at: string; updated_at: string
 }
 
 const AVATAR_COUNT = 42
 const AVATARS = Array.from({ length: AVATAR_COUNT }, (_, i) => `/avatars/avatar-${i}.png`)
+
+// Built-in tools the runner exposes by default. Keep this list in sync with
+// AgentOne/agent/tools.py TOOL_DEFINITIONS.
+// Note: `return_result` is always injected by the runner and is not listed here.
+const BUILTIN_TOOLS: [string, string, string][] = [
+  ['web_search',        'Search the web',            'Google/Brave web search. For research and up-to-date info.'],
+  ['fetch_page',        'Read a web page',           'Fetch clean text from a public URL. LinkedIn, articles, product pages.'],
+  ['scan_urls',         'Scan multiple URLs',        'Batch-fetch URLs and pattern-match without burning tokens.'],
+  ['http_request',      'Call HTTP APIs',            'Required by Google Sheets, Airtable, Notion proxy and custom API skills.'],
+  ['save_memory',       'Save long-term memory',     'Persist facts across conversations.'],
+  ['recall_memory',     'Recall long-term memory',   'Look up previously saved memories on demand.'],
+  ['query_database',    'Query internal DB',         'Read agent-owned Supabase tables.'],
+  ['send_notification', 'Send notification (email)', 'Email delivery for task completion / alerts.'],
+]
+const BUILTIN_TOOL_NAMES = BUILTIN_TOOLS.map(([k]) => k)
 
 function AvatarPicker({ value, onChange }: { value: string | null; onChange: (v: string | null) => void }) {
   const [open, setOpen] = useState(false)
@@ -428,7 +444,7 @@ export default function AgentsPage() {
   const agents = agentsRaw as Agent[]
   type RequiredConfigItem = { label: string; description: string; type: 'connector_slug' | 'manual'; value?: string; critical: boolean }
   type OperationItem = { name: string; slug: string; risk: 'read' | 'write' | 'destructive'; requires_approval: boolean; description?: string }
-  type Skill = { id: string; name: string; slug: string; active: boolean; content: string | null; description: string | null; required_config: RequiredConfigItem[] | null; default_content: string | null; content_overridden: boolean; operations: OperationItem[] | null }
+  type Skill = { id: string; name: string; slug: string; active: boolean; content: string | null; description: string | null; required_config: RequiredConfigItem[] | null; default_content: string | null; content_overridden: boolean; operations: OperationItem[] | null; required_builtins: string[] | null }
   type ConnectorRef = { id: string; name: string; slug: string; active: boolean }
   const skills = skillsRaw as Skill[]
   const connectors = connectorsRaw as ConnectorRef[]
@@ -495,6 +511,7 @@ export default function AgentsPage() {
     capabilities: [] as string[],
     avatar_url: null as string | null,
     max_tokens_per_job: 0,
+    enabled_builtin_tools: null as string[] | null,
   })
   const [slugManuallyEdited, setSlugManuallyEdited] = useState(false)
   const [telegramStatus, setTelegramStatus] = useState('')
@@ -553,6 +570,7 @@ export default function AgentsPage() {
       capabilities: [],
       avatar_url: null,
       max_tokens_per_job: 0,
+      enabled_builtin_tools: null,
     })
     setShowAdd(true)
   }
@@ -590,6 +608,7 @@ export default function AgentsPage() {
       capabilities: a.capabilities || [],
       avatar_url: a.avatar_url || null,
       max_tokens_per_job: a.max_tokens_per_job ?? 0,
+      enabled_builtin_tools: a.enabled_builtin_tools ?? null,
     })
 
     // Single fetch for all edit data (1 server action, 4 parallel DB queries)
@@ -634,6 +653,7 @@ export default function AgentsPage() {
       capabilities: [],
       avatar_url: null,
       max_tokens_per_job: 0,
+      enabled_builtin_tools: null,
     })
   }
 
@@ -674,6 +694,7 @@ export default function AgentsPage() {
         requires_approval: form.requires_approval,
         avatar_url: form.avatar_url || null,
         max_tokens_per_job: form.max_tokens_per_job,
+        enabled_builtin_tools: form.enabled_builtin_tools,
       })
       if (!result.ok) { toast.error(result.error); return }
       const orchAssignments = assignedAgentIds.map(id => ({ sub_agent_id: id, instructions: agentInstructions[id] || null }))
@@ -724,6 +745,7 @@ export default function AgentsPage() {
         requires_approval: form.requires_approval,
         avatar_url: form.avatar_url || null,
         max_tokens_per_job: form.max_tokens_per_job,
+        enabled_builtin_tools: form.enabled_builtin_tools,
       })
       if (!result.ok) { toast.error(result.error); return }
       const newId = (result as { ok: true; data: { id: string } }).data?.id
@@ -1697,6 +1719,15 @@ export default function AgentsPage() {
                             checked={checked}
                             onChange={() => {
                               setAssignedSkillIds(prev => checked ? prev.filter(id => id !== skill.id) : [...prev, skill.id])
+                              // Auto-enable built-in tools the skill depends on (only when assigning).
+                              // Never auto-disable on unassignment — let the user decide.
+                              if (!checked && skill.required_builtins?.length) {
+                                setForm(prev => {
+                                  const base = prev.enabled_builtin_tools ?? BUILTIN_TOOL_NAMES
+                                  const next = Array.from(new Set([...base, ...skill.required_builtins!]))
+                                  return { ...prev, enabled_builtin_tools: next }
+                                })
+                              }
                               if (!checked) setExpandedSkillId(skill.id)
                               else if (isExpanded) setExpandedSkillId(null)
                             }}
@@ -2171,10 +2202,42 @@ export default function AgentsPage() {
                 )
               })()}
 
+              {/* Built-in tools */}
+              <section aria-labelledby="section-builtins" className="border-t border-neutral-800/50 pt-5">
+                <h3 id="section-builtins" className="text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-0.5">Built-in tools</h3>
+                <p className="text-xs text-neutral-600 mb-2.5">Only checked tools are exposed to this agent. Skill-adapter and MCP tools are not affected.</p>
+                <div className="flex flex-col gap-0.5">
+                  {BUILTIN_TOOLS.map(([tool, label, help]) => {
+                    const enabled = form.enabled_builtin_tools ?? BUILTIN_TOOL_NAMES
+                    const checked = enabled.includes(tool)
+                    return (
+                      <label key={tool} className={`flex items-start gap-2.5 px-2 py-1.5 rounded-lg cursor-pointer transition-colors hover:bg-neutral-800/30 ${checked ? 'bg-neutral-800/20' : ''}`}>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => setForm(prev => {
+                            const base = prev.enabled_builtin_tools ?? BUILTIN_TOOL_NAMES
+                            const next = checked
+                              ? base.filter(t => t !== tool)
+                              : Array.from(new Set([...base, tool]))
+                            return { ...prev, enabled_builtin_tools: next }
+                          })}
+                          className="rounded border-neutral-700 bg-neutral-800 accent-emerald-500 shrink-0 mt-0.5 cursor-pointer"
+                        />
+                        <div className="min-w-0">
+                          <span className="text-xs text-neutral-300">{label}</span>
+                          <p className="text-[11px] text-neutral-600 mt-0.5">{help}</p>
+                        </div>
+                      </label>
+                    )
+                  })}
+                </div>
+              </section>
+
               {/* Human-in-the-Loop */}
               <section aria-labelledby="section-approval" className="border-t border-neutral-800/50 pt-5">
-                <h3 id="section-approval" className="text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-0.5">Require human approval before:</h3>
-                <p className="text-xs text-neutral-600 mb-2.5">Your agent will pause and wait for your OK before taking these actions.</p>
+                <h3 id="section-approval" className="text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-0.5">Require human approval before using these tools:</h3>
+                <p className="text-xs text-neutral-600 mb-2.5">Agent pauses and waits for your OK. Only applies to tools the agent already has access to (see Built-in tools above).</p>
                 <div className="flex flex-col gap-0.5">
                   {([
                     ['web_search', 'Search the web'],

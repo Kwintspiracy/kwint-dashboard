@@ -51,6 +51,10 @@ export type SkillTemplate = {
   /** Slug of the matching MCP_CATALOG entry when a remote-MCP alternative exists.
    *  Surfaces the orange "MCP Remote" badge + install path on the marketplace card. */
   mcp_catalog_slug?: string
+  /** Built-in tools this skill needs to function. Auto-enabled on the agent when
+   *  the skill is assigned. Examples: skills relying on internal proxies require
+   *  `http_request`. Skills that describe browsing may need `fetch_page`. */
+  required_builtins?: string[]
 }
 
 /** Maps skill slug → capability tags (auto-derived, no manual input needed). */
@@ -231,6 +235,7 @@ export const SKILL_TEMPLATES: SkillTemplate[] = [
     id: 'google-sheets', name: 'Google Sheets', slug: 'google-sheets',
     description: 'Read and write Google Spreadsheets via the internal proxy',
     category: 'google', color: '#34A853',
+    required_builtins: ['http_request'],
     icon: 'M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zM7 7h2v2H7zm0 4h2v2H7zm0 4h2v2H7zm4-8h6v2h-6zm0 4h6v2h-6zm0 4h6v2h-6z',
     brandIcon: '/app-icons/google-sheets.svg',
     connector: { slug: 'google-sheets' },
@@ -818,6 +823,7 @@ Get stateId from: \`{ workflowStates(filter: {team: {id: {eq: "TEAM_ID"}}}) { no
     id: 'airtable', name: 'Airtable', slug: 'airtable',
     description: 'Spreadsheet-database hybrid with powerful REST API',
     category: 'planning', color: '#18BFFF',
+    required_builtins: ['http_request'],
     icon: 'M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 01-1.125-1.125M3.375 19.5h7.5c.621 0 1.125-.504 1.125-1.125m-9.75 0V5.625m0 12.75v-1.5c0-.621.504-1.125 1.125-1.125m18.375 2.625V5.625m0 12.75c0 .621-.504 1.125-1.125 1.125m1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125m0 3.75h-7.5A1.125 1.125 0 0112 18.375m9.75-12.75c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125m19.5 0v1.5c0 .621-.504 1.125-1.125 1.125M2.25 5.625v1.5c0 .621.504 1.125 1.125 1.125m0 0h17.25m-17.25 0h7.5c.621 0 1.125.504 1.125 1.125M3.375 8.25c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125m17.25-3.75h-7.5c-.621 0-1.125.504-1.125 1.125m8.625-1.125c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-17.25 0h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125M12 10.875v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 10.875c0 .621.504 1.125 1.125 1.125m-2.25 0c.621 0 1.125.504 1.125 1.125M13.125 12h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125M20.625 12c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-17.25 0h7.5M12 14.625v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 14.625c0 .621.504 1.125 1.125 1.125m-2.25 0c.621 0 1.125.504 1.125 1.125m0 0v1.5c0 .621-.504 1.125-1.125 1.125',
     brandIcon: '/app-icons/airtable.svg',
     connector: { slug: 'airtable', base_url: 'https://api.airtable.com/v0' },
