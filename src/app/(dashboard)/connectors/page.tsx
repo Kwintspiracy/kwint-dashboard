@@ -121,6 +121,7 @@ export default function ConnectorsPage() {
   const installedMcpSlugs = new Set(mcpServers.map(s => s.slug))
   const mcpCatalogSlugs = new Set(MCP_CATALOG.map(e => e.slug))
   const [installingMcpSlug, setInstallingMcpSlug] = useState<string | null>(null)
+  const [pendingMcpAfterConnector, setPendingMcpAfterConnector] = useState<string | null>(null)
   const [testingMcpId, setTestingMcpId] = useState<string | null>(null)
   const [mcpTestResult, setMcpTestResult] = useState<Record<string, string>>({})
 
@@ -151,6 +152,21 @@ export default function ConnectorsPage() {
   }
 
   async function handleInstallMcp(slug: string) {
+    // If this MCP reuses a connector that isn't installed yet, open the connector
+    // install modal first and chain MCP install after it succeeds.
+    const entry = MCP_CATALOG.find(e => e.slug === slug)
+    if (entry?.auth_mode === 'reuse_connector' && entry.requires_connector_slug) {
+      const needed = entry.requires_connector_slug
+      if (!installedSlugs.has(needed)) {
+        const tmpl = SKILL_TEMPLATES.find(t => t.connector?.slug === needed)
+        if (tmpl) {
+          toast.info(`${entry.name} needs the ${needed} API key first — enter it below and we'll finish the MCP install automatically.`)
+          setPendingMcpAfterConnector(slug)
+          openInstallModal(tmpl)
+          return
+        }
+      }
+    }
     setInstallingMcpSlug(slug)
     try {
       const result = await installMcpFromCatalogAction(slug)
@@ -268,6 +284,7 @@ export default function ConnectorsPage() {
     setInstalling(null)
     setInstallForm({})
     setInstalledSlug(null)
+    setPendingMcpAfterConnector(null)
   }
 
   async function handleDeploy() {
@@ -303,6 +320,12 @@ export default function ConnectorsPage() {
       toast.success(`${installing.name} installed successfully`)
       await mutate()
       setInstalledSlug(installing.slug)
+      if (pendingMcpAfterConnector) {
+        const mcpSlug = pendingMcpAfterConnector
+        setPendingMcpAfterConnector(null)
+        closeInstallModal()
+        await handleInstallMcp(mcpSlug)
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Deploy failed')
     } finally {
