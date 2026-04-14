@@ -1346,6 +1346,7 @@ Parameters:
     id: 'firecrawl', name: 'Firecrawl', slug: 'firecrawl',
     description: 'Scrape and crawl websites — handles JS rendering, rate limits, and anti-bot protection',
     category: 'search', color: '#F97316',
+    mcp_catalog_slug: 'firecrawl',
     icon: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z',
     connector: { slug: 'firecrawl', base_url: 'https://api.firecrawl.dev' },
     fields: [{ key: 'api_key', label: 'API Key', type: 'password', placeholder: 'fc-...', required: true, help: 'From firecrawl.dev > Dashboard > API Keys' }],
@@ -1420,6 +1421,48 @@ Then check the returned markdown for "No longer accepting applications" or simil
       { name: 'Scrape page', slug: 'scrape_page', risk: 'read', requires_approval: false, description: 'Fetch and render a single URL (including JS-rendered pages), returns clean markdown. Use when fetch_page returns a login wall or empty body. Paid quota.' },
       { name: 'Batch scrape', slug: 'batch_scrape', risk: 'read', requires_approval: false, description: 'Scrape a list of URLs in parallel. Faster than N scrape_page calls. Use for 3+ URLs.' },
       { name: 'Crawl website', slug: 'crawl_site', risk: 'read', requires_approval: false, description: 'Crawl an entire domain starting from a root URL, following internal links. Asynchronous; returns a job id then poll for results. Use for discovering pages on a site.' },
+    ],
+  },
+
+  {
+    id: 'apify', name: 'Apify', slug: 'apify',
+    description: 'Run 5,000+ web scrapers and automation Actors — social media, e-commerce, search engines, browser automation',
+    category: 'search', color: '#97D700',
+    mcp_catalog_slug: 'apify',
+    icon: 'M12 2L2 22h20L12 2zm0 4.5L18.5 20h-13L12 6.5z',
+    connector: { slug: 'apify', base_url: 'https://api.apify.com/v2' },
+    fields: [{ key: 'api_key', label: 'API Token', type: 'password', placeholder: 'apify_api_...', required: true, help: 'From console.apify.com > Settings > Integrations > API token' }],
+    content: `# Apify API
+
+Run any of the 5,000+ Actors on Apify Store — web scrapers, crawlers, social media extractors, browser automation. Use connector_slug="apify" for auth (Bearer token).
+
+Base URL: https://api.apify.com/v2
+
+## Run an Actor (sync)
+POST /acts/{actor_id}/run-sync-get-dataset-items
+Body: Actor-specific input JSON. Returns the scraped dataset immediately (waits for completion).
+
+## Run an Actor (async)
+POST /acts/{actor_id}/runs
+Returns a run id. Poll GET /actor-runs/{run_id} until status is "SUCCEEDED", then fetch results from GET /datasets/{dataset_id}/items.
+
+## Popular Actors
+- apify/web-scraper — generic JS-rendering scraper
+- apify/google-search-scraper — SERP results
+- apidojo/tweet-scraper — X/Twitter posts
+- apify/instagram-scraper — IG posts and profiles
+
+## Error handling
+- 401: invalid API token
+- 402: out of compute credits
+- 404: actor id not found — check the slug format owner/actor-name`,
+    required_config: [
+      { label: 'Apify API Token', description: 'API token from console.apify.com > Settings > Integrations', type: 'connector_slug', value: 'apify', critical: true },
+    ],
+    operations: [
+      { name: 'Run Actor (sync)', slug: 'run_actor_sync', risk: 'write', requires_approval: false, description: 'Execute an Apify Actor and wait for the dataset. Consumes paid compute.' },
+      { name: 'Run Actor (async)', slug: 'run_actor_async', risk: 'write', requires_approval: false, description: 'Kick off an Actor run and return a run id for polling. Use for long-running scrapes.' },
+      { name: 'Fetch dataset', slug: 'get_dataset_items', risk: 'read', requires_approval: false, description: 'Retrieve items from a finished run dataset.' },
     ],
   },
 
