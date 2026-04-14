@@ -36,9 +36,10 @@ export const MCP_CATALOG: McpCatalogEntry[] = [
     description:
       "Web scraping and crawling via Firecrawl's official remote MCP. Scrape single pages, crawl entire sites, extract structured data, and search the web — all with JS rendering and anti-bot handling built in.",
     icon: "🔥",
-    mcp_url: "https://mcp.firecrawl.dev/mcp",
+    mcp_url: "https://mcp.firecrawl.dev/v2/mcp",
     category: "Web & Data",
-    auth_mode: "mcp_oauth",
+    auth_mode: "reuse_connector",
+    requires_connector_slug: "firecrawl",
     docs_url: "https://docs.firecrawl.dev/mcp",
   },
   {
