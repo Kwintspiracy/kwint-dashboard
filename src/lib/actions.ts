@@ -2455,13 +2455,20 @@ export async function testMcpServerAction(id: string): Promise<ActionResult<{ to
     if (env?.access_token) bearer = env.access_token
     else if (env?.auth_bearer) bearer = env.auth_bearer
     else if (env?.auth_connector_slug) {
+      // api_key is stored encrypted (pgcrypto) — must go through the RPC to decrypt.
+      // OAuth tokens are stored raw, so read them directly as a fallback.
       const { data: conn } = await supabase
         .from('connectors')
-        .select('api_key, oauth_access_token')
+        .select('oauth_access_token')
         .eq('slug', env.auth_connector_slug)
         .eq('entity_id', entityId)
         .maybeSingle()
-      bearer = conn?.oauth_access_token || conn?.api_key || null
+      if (conn?.oauth_access_token) {
+        bearer = conn.oauth_access_token
+      } else {
+        const { data: decrypted } = await supabase.rpc('decrypt_connector_key', { p_slug: env.auth_connector_slug })
+        bearer = (typeof decrypted === 'string' ? decrypted : null) || null
+      }
     }
 
     const headers: Record<string, string> = {
