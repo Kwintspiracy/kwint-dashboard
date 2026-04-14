@@ -151,11 +151,11 @@ export default function ConnectorsPage() {
     mutateMcp()
   }
 
-  async function handleInstallMcp(slug: string) {
+  async function handleInstallMcp(slug: string, opts?: { skipConnectorCheck?: boolean }) {
     // If this MCP reuses a connector that isn't installed yet, open the connector
     // install modal first and chain MCP install after it succeeds.
     const entry = MCP_CATALOG.find(e => e.slug === slug)
-    if (entry?.auth_mode === 'reuse_connector' && entry.requires_connector_slug) {
+    if (!opts?.skipConnectorCheck && entry?.auth_mode === 'reuse_connector' && entry.requires_connector_slug) {
       const needed = entry.requires_connector_slug
       if (!installedSlugs.has(needed)) {
         const tmpl = SKILL_TEMPLATES.find(t => t.connector?.slug === needed)
@@ -331,7 +331,7 @@ export default function ConnectorsPage() {
         const mcpSlug = pendingMcpAfterConnector
         setPendingMcpAfterConnector(null)
         closeInstallModal()
-        await handleInstallMcp(mcpSlug)
+        await handleInstallMcp(mcpSlug, { skipConnectorCheck: true })
       }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Deploy failed')
