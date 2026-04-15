@@ -3346,6 +3346,33 @@ export async function getAllSkillAssignmentsAction(): Promise<ActionResult<{ age
 
 // ─── Task Board Actions ───────────────────────────────────────────────────────
 
+/**
+ * Manually trigger a cron tick on the runner.
+ * Uses CRON_SECRET if set (primary), falls back to WORKER_SECRET (same value on Fly today).
+ * Returns the cron response body so the UI can show "triggered N / skipped N / executed N".
+ */
+export async function triggerCronAction(): Promise<ActionResult<unknown>> {
+  try {
+    await requireAuthWithEntity()
+    const agentUrl = process.env.NEXT_PUBLIC_AGENT_API_URL
+    if (!agentUrl) return fail('NEXT_PUBLIC_AGENT_API_URL is not configured')
+    const apiKey = process.env.CRON_SECRET || process.env.WORKER_SECRET || process.env.API_SECRET_KEY
+    if (!apiKey) return fail('CRON_SECRET / WORKER_SECRET not configured')
+    const res = await fetch(`${agentUrl}/api/cron`, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${apiKey}` },
+    })
+    const body = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      const msg = (body as { error?: string }).error ?? res.statusText
+      return fail(`Cron tick failed (${res.status}): ${msg}`)
+    }
+    return ok(body)
+  } catch (e) {
+    return dbError(e)
+  }
+}
+
 export async function getTasksAction(orchestratorId?: string): Promise<unknown[]> {
   const { supabase, entityId } = await requireAuthWithEntity()
   let q = supabase

@@ -23,9 +23,15 @@ import {
   getAgentsAction,
   updateAgentAction,
   getSchedulesAction,
+  triggerCronAction,
+  createScheduleAction,
+  updateScheduleAction,
+  deleteScheduleAction,
+  runScheduleNowAction,
 } from '@/lib/actions'
 import { TASK_TEMPLATES, TASK_TEMPLATE_CATEGORIES } from '@/lib/task-templates'
 import { useData } from '@/hooks/useData'
+import { timeAgo } from '@/lib/utils'
 import { useAuth } from '@/components/AuthProvider'
 import PageHeader from '@/components/PageHeader'
 import EmptyState from '@/components/EmptyState'
@@ -51,6 +57,7 @@ type Task = {
   output_tokens: number | null
   cost_usd: number | null
   created_at: string
+  updated_at?: string | null
 }
 
 const COLUMNS: {
@@ -114,6 +121,68 @@ const EMPTY_FORM = {
   priority: 'medium' as Task['priority'],
 }
 
+// ─── Recurrence helpers ───────────────────────────────────────────────────────
+// The runner (api/cron.py::_calculate_next_run) supports these patterns:
+//   */N * * * *  — every N minutes
+//   0 */N * * *  — every N hours
+//   0 H * * *    — daily at hour H
+//   0 H * * D    — weekly on day D at hour H
+// Anything else falls back to "+1 hour from now".
+//
+// The create modal exposes a simple picker (Every N hours | Every N days) —
+// the functions below translate between that picker state and the raw cron_expr,
+// so users never have to touch cron syntax unless they open the advanced view.
+
+type RecurrenceUnit = 'hours' | 'days'
+type Recurrence = { n: number; unit: RecurrenceUnit }
+
+function recurrenceToCron({ n, unit }: Recurrence): string {
+  const hours = Math.max(1, Math.min(23, Math.floor(Number(n) || 1)))
+  const days = Math.max(1, Math.min(30, Math.floor(Number(n) || 1)))
+  if (unit === 'hours') return `0 */${hours} * * *`
+  if (days === 1) return '0 9 * * *' // daily at 09:00 local-as-UTC (runner uses UTC)
+  return `0 9 */${days} * *`
+}
+
+function cronToRecurrence(cron: string | null | undefined): Recurrence | null {
+  if (!cron) return null
+  const trimmed = cron.trim()
+  const hourMatch = trimmed.match(/^0\s+\*\/(\d+)\s+\*\s+\*\s+\*$/)
+  if (hourMatch) return { n: parseInt(hourMatch[1], 10), unit: 'hours' }
+  const dailyMatch = trimmed.match(/^0\s+(\d+)\s+\*\s+\*\s+\*$/)
+  if (dailyMatch) return { n: 1, unit: 'days' }
+  const everyNDays = trimmed.match(/^0\s+(\d+)\s+\*\/(\d+)\s+\*\s+\*$/)
+  if (everyNDays) return { n: parseInt(everyNDays[2], 10), unit: 'days' }
+  return null
+}
+
+function formatRecurrence(cron: string | null | undefined): string {
+  const r = cronToRecurrence(cron)
+  if (!r) return cron || 'custom schedule'
+  if (r.unit === 'hours') return r.n === 1 ? 'every hour' : `every ${r.n} hours`
+  if (r.n === 1) return 'daily'
+  return `every ${r.n} days`
+}
+
+// Schedule row shape as returned by getSchedulesAction. Shared between the
+// page state and the RoutinesColumn component.
+type Schedule = {
+  id: string
+  name: string
+  type: string
+  cron_expr: string
+  active: boolean
+  agent_id: string
+  task: string | null
+  objectives: string | null
+  chat_id: string | null
+  agents: { name: string } | null
+  last_run: string | null
+  last_status: string | null
+  next_run?: string | null
+  created_at?: string
+}
+
 // ─── TaskCardContent ──────────────────────────────────────────────────────────
 // Shared card body — rendered both on the board and inside the DragOverlay.
 
@@ -143,6 +212,15 @@ function TaskCardContent({
 }: TaskCardContentProps) {
   const creatorName = task.created_by_agent_id && agentMap?.get(task.created_by_agent_id)?.name
   const assigneeName = task.assigned_agent_id && agentMap?.get(task.assigned_agent_id)?.name
+
+  // Relative time for the card footer — updated_at if it differs from created_at,
+  // otherwise just created_at. Users care about "when last touched" more than the exact ISO.
+  const rawUpdatedAt = task.updated_at
+  const updatedAt = rawUpdatedAt && rawUpdatedAt !== task.created_at ? rawUpdatedAt : null
+  const timestampTitle = `Created ${new Date(task.created_at).toLocaleString()}${updatedAt ? `\nUpdated ${new Date(updatedAt).toLocaleString()}` : ''}`
+  const timestampLabel = updatedAt
+    ? `updated ${timeAgo(updatedAt)}`
+    : `created ${timeAgo(task.created_at)}`
 
   return (
     <>
@@ -192,6 +270,14 @@ function TaskCardContent({
           job:{task.job_id.slice(0, 8)}
         </a>
       )}
+
+      {/* Timestamp */}
+      <p
+        className="text-[10px] text-neutral-600 font-mono"
+        title={timestampTitle}
+      >
+        {timestampLabel}
+      </p>
 
       {/* Actions row — hidden in overlay */}
       {!overlay && (
@@ -443,6 +529,126 @@ function DroppableColumn({
   )
 }
 
+// ─── RoutinesColumn ───────────────────────────────────────────────────────────
+// Board column showing the user's active cron schedules (routines). Different
+// data shape from tasks — schedules don't have status/drag-and-drop semantics,
+// but the column visually matches the others for consistency.
+
+interface RoutinesColumnProps {
+  routines: Schedule[]
+  agentMap: Map<string, Agent>
+  onCreate: () => void
+  onEdit: (r: Schedule) => void
+  onToggle: (r: Schedule) => void
+  onRunNow: (r: Schedule) => void
+  onDelete: (r: Schedule) => void
+}
+
+function RoutinesColumn({ routines, agentMap, onCreate, onEdit, onToggle, onRunNow, onDelete }: RoutinesColumnProps) {
+  return (
+    <div className="flex flex-col">
+      {/* Column header — neutral purple-ish to distinguish from task states */}
+      <div className="flex items-center justify-between px-3 py-2.5 rounded-t-xl border-t-2 border-x border-neutral-800/40 bg-neutral-900/80 border-t-violet-500/60">
+        <span className="text-xs uppercase tracking-wider font-semibold text-neutral-400">Routines</span>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={onCreate}
+            className="text-[11px] px-2 py-0.5 rounded-md text-neutral-500 hover:text-violet-300 hover:bg-violet-500/10 transition-colors"
+            title="Create a new routine"
+          >
+            + Add
+          </button>
+          <span className="inline-flex items-center justify-center min-w-[22px] h-5 px-1.5 rounded-full text-xs font-bold tabular-nums bg-violet-500/15 text-violet-400">
+            {routines.length}
+          </span>
+        </div>
+      </div>
+
+      {/* Column lane */}
+      <div className="flex flex-col gap-2.5 rounded-b-xl p-3 min-h-[280px] bg-neutral-950/30 border-x border-b border-neutral-800/40">
+        {routines.length === 0 && (
+          <div className="flex-1 flex items-center justify-center py-8">
+            <div className="flex flex-col items-center gap-2 border border-dashed border-neutral-800 rounded-xl px-5 py-6 w-full">
+              <span className="text-lg leading-none text-neutral-700">↺</span>
+              <p className="text-xs text-neutral-700">No routines yet</p>
+              <button
+                onClick={onCreate}
+                className="text-[11px] text-violet-400 hover:text-violet-300 underline underline-offset-2"
+              >
+                Create one
+              </button>
+            </div>
+          </div>
+        )}
+
+        {routines.map(r => {
+          const agentName = r.agents?.name || agentMap.get(r.agent_id)?.name || 'unknown agent'
+          const recurrence = formatRecurrence(r.cron_expr)
+          const nextRunLabel = r.next_run ? `next ${timeAgo(r.next_run)}` : (r.last_run ? `last ${timeAgo(r.last_run)}` : 'not run yet')
+          const paused = !r.active
+          return (
+            <div
+              key={r.id}
+              className={[
+                'bg-neutral-900 border border-l-4 rounded-xl p-3 flex flex-col gap-2',
+                paused ? 'border-l-neutral-700 opacity-60' : 'border-l-violet-500',
+                'border-neutral-800/60',
+              ].join(' ')}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-sm font-medium text-white leading-snug flex-1">{r.name}</p>
+                <Badge label={recurrence} color="neutral" className="shrink-0 mt-0.5" />
+              </div>
+              {r.task && (
+                <p className="text-xs text-neutral-500 leading-relaxed line-clamp-2">{r.task}</p>
+              )}
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-950/50 border border-emerald-900/30 text-emerald-400 font-mono">
+                  {agentName}
+                </span>
+                {paused && (
+                  <span className="text-xs px-1.5 py-0.5 rounded bg-neutral-800/60 border border-neutral-700 text-neutral-400 font-mono">
+                    paused
+                  </span>
+                )}
+              </div>
+              <p className="text-[10px] text-neutral-600 font-mono" title={r.next_run ? new Date(r.next_run).toLocaleString() : ''}>
+                {nextRunLabel}
+              </p>
+              <div className="flex items-center gap-1 pt-2 border-t border-neutral-800/50 flex-wrap">
+                <button
+                  onClick={() => onRunNow(r)}
+                  className="px-2.5 py-1 text-xs font-semibold text-violet-400 hover:text-violet-300 hover:bg-violet-500/10 rounded-md transition-all duration-150"
+                >
+                  Run now
+                </button>
+                <button
+                  onClick={() => onToggle(r)}
+                  className="px-2.5 py-1 text-xs text-neutral-400 hover:text-white hover:bg-neutral-700/50 rounded-md transition-all duration-150"
+                >
+                  {paused ? 'Resume' : 'Pause'}
+                </button>
+                <button
+                  onClick={() => onEdit(r)}
+                  className="px-2.5 py-1 text-xs text-neutral-400 hover:text-white hover:bg-neutral-700/50 rounded-md transition-all duration-150"
+                >
+                  Edit
+                </button>
+                <button
+                  onClick={() => onDelete(r)}
+                  className="px-2.5 py-1 text-xs text-neutral-600 hover:text-red-400 hover:bg-red-500/10 rounded-md transition-all duration-150 ml-auto"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function TasksPage() {
@@ -455,6 +661,7 @@ export default function TasksPage() {
   const [form, setForm] = useState({ ...EMPTY_FORM })
   const [saving, setSaving] = useState(false)
   const [starting, setStarting] = useState<string | null>(null)
+  const [cronRunning, setCronRunning] = useState(false)
   const [showContextEditor, setShowContextEditor] = useState(false)
   const [contextTemplate, setContextTemplate] = useState<string>('')
   const [savingContext, setSavingContext] = useState(false)
@@ -476,10 +683,97 @@ export default function TasksPage() {
   const orchestrators = allAgents.filter(a => a.role === 'orchestrator')
   const agentMap = new Map(allAgents.map(a => [a.id, a]))
 
-  // System schedules
-  const { data: schedulesRaw } = useData(['schedules', eid], getSchedulesAction)
-  type Schedule = { id: string; name: string; type: string; cron_expr: string; active: boolean; agent_id: string; agents: { name: string } | null; last_run: string | null; last_status: string | null }
+  // Schedules (routines + system crons)
+  const { data: schedulesRaw, mutate: mutateSchedules } = useData(['schedules', eid], getSchedulesAction)
   const schedules = (schedulesRaw ?? []) as Schedule[]
+  // Show all user-created schedules on the board. System schedules (memory-guardian
+  // etc) have type='system' and a synthetic id — keep them hidden here, they're
+  // managed internally.
+  const routines = schedules.filter(s => s.type !== 'system' && !s.id.startsWith('system-'))
+
+  // ─── Routine modal state ─────────────────────────────────────
+  const [showRoutineModal, setShowRoutineModal] = useState(false)
+  const [editingRoutineId, setEditingRoutineId] = useState<string | null>(null)
+  const [routineForm, setRoutineForm] = useState<{
+    name: string
+    agent_id: string
+    task: string
+    n: number
+    unit: RecurrenceUnit
+  }>({ name: '', agent_id: '', task: '', n: 1, unit: 'hours' })
+  const [savingRoutine, setSavingRoutine] = useState(false)
+
+  function openCreateRoutine() {
+    const defaultAgent = orchestratorId && orchestratorId !== '__all__'
+      ? orchestratorId
+      : (orchestrators[0]?.id ?? allAgents[0]?.id ?? '')
+    setEditingRoutineId(null)
+    setRoutineForm({ name: '', agent_id: defaultAgent, task: '', n: 3, unit: 'hours' })
+    setShowRoutineModal(true)
+  }
+
+  function openEditRoutine(r: Schedule) {
+    const rec = cronToRecurrence(r.cron_expr) ?? { n: 1, unit: 'hours' as RecurrenceUnit }
+    setEditingRoutineId(r.id)
+    setRoutineForm({
+      name: r.name ?? '',
+      agent_id: r.agent_id,
+      task: r.task ?? '',
+      n: rec.n,
+      unit: rec.unit,
+    })
+    setShowRoutineModal(true)
+  }
+
+  async function saveRoutine() {
+    if (!routineForm.name.trim()) { toast.error('Name is required'); return }
+    if (!routineForm.agent_id) { toast.error('Pick an agent'); return }
+    if (!routineForm.task.trim()) { toast.error('Task description is required'); return }
+    setSavingRoutine(true)
+    try {
+      const cron_expr = recurrenceToCron({ n: routineForm.n, unit: routineForm.unit })
+      const payload = {
+        name: routineForm.name.trim(),
+        agent_id: routineForm.agent_id,
+        type: 'cron' as const,
+        cron_expr,
+        task: routineForm.task.trim(),
+      }
+      const result = editingRoutineId
+        ? await updateScheduleAction(editingRoutineId, payload)
+        : await createScheduleAction(payload)
+      if (!result.ok) { toast.error(result.error); return }
+      toast.success(editingRoutineId ? 'Routine updated' : 'Routine created')
+      setShowRoutineModal(false)
+      setEditingRoutineId(null)
+      mutateSchedules()
+    } finally {
+      setSavingRoutine(false)
+    }
+  }
+
+  async function toggleRoutineActive(r: Schedule) {
+    const result = await updateScheduleAction(r.id, { active: !r.active })
+    if (!result.ok) { toast.error(result.error); return }
+    toast.success(r.active ? 'Routine paused' : 'Routine resumed')
+    mutateSchedules()
+  }
+
+  async function runRoutineNow(r: Schedule) {
+    const result = await runScheduleNowAction(r.id)
+    if (!result.ok) { toast.error(result.error); return }
+    toast.success(`Routine fired — job ${result.data.job_id?.slice(0, 8) ?? 'queued'}`)
+    mutate()
+    mutateSchedules()
+  }
+
+  async function deleteRoutine(r: Schedule) {
+    if (!confirm(`Delete routine "${r.name}"?`)) return
+    const result = await deleteScheduleAction(r.id)
+    if (!result.ok) { toast.error(result.error); return }
+    toast.success('Routine deleted')
+    mutateSchedules()
+  }
 
   // Auto-select "all" by default
   useEffect(() => {
@@ -621,6 +915,25 @@ export default function TasksPage() {
     mutate()
   }
 
+  async function runCron() {
+    setCronRunning(true)
+    try {
+      const result = await triggerCronAction()
+      if (!result.ok) { toast.error(result.error); return }
+      const data = result.data as { triggered?: number; duration_ms?: number } | undefined
+      const triggered = data?.triggered ?? 0
+      const duration = data?.duration_ms ?? 0
+      toast.success(
+        triggered > 0
+          ? `Cron tick done — ${triggered} scheduled job${triggered > 1 ? 's' : ''} fired (${duration}ms)`
+          : `Cron tick done — board swept (${duration}ms)`,
+      )
+      mutate()
+    } finally {
+      setCronRunning(false)
+    }
+  }
+
   async function handleStart(task: Task) {
     setStarting(task.id)
     try {
@@ -651,6 +964,20 @@ export default function TasksPage() {
   return (
     <div className="space-y-5 max-w-7xl">
       <PageHeader title="Tasks" count={totalCount}>
+        <button
+          onClick={runCron}
+          disabled={cronRunning}
+          title="Run the cron tick now — claims todo tasks immediately instead of waiting for the next 2-min tick."
+          className="px-3 py-2 text-xs font-semibold bg-neutral-900 text-neutral-200 border border-neutral-800 rounded-full hover:bg-neutral-800 active:scale-[0.97] transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {cronRunning ? 'Running cron…' : 'Run cron now'}
+        </button>
+        <button
+          onClick={openCreateRoutine}
+          className="px-3 py-2 text-xs font-semibold bg-neutral-900 text-neutral-200 border border-neutral-800 rounded-full hover:bg-neutral-800 active:scale-[0.97] transition-all duration-150"
+        >
+          + Routine
+        </button>
         <button
           onClick={startAdd}
           disabled={!orchestratorId}
@@ -746,7 +1073,16 @@ export default function TasksPage() {
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
+            <RoutinesColumn
+              routines={routines}
+              agentMap={agentMap}
+              onCreate={openCreateRoutine}
+              onEdit={openEditRoutine}
+              onToggle={toggleRoutineActive}
+              onRunNow={runRoutineNow}
+              onDelete={deleteRoutine}
+            />
             {COLUMNS.map(col => (
               <DroppableColumn
                 key={col.key}
@@ -932,6 +1268,114 @@ export default function TasksPage() {
               <button
                 onClick={cancelForm}
                 className="px-5 py-2.5 text-xs font-medium border border-neutral-700 text-neutral-400 rounded-full hover:text-white hover:border-neutral-600 transition-all duration-150"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Routine create/edit modal */}
+      {showRoutineModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={() => setShowRoutineModal(false)}
+        >
+          <div
+            className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 w-full max-w-lg shadow-2xl shadow-black/60 mx-4"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <p className="text-sm font-semibold text-white">{editingRoutineId ? 'Edit routine' : 'New routine'}</p>
+                <p className="text-xs text-neutral-500 mt-0.5">
+                  Recurring task — the agent will be fired on the schedule below.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowRoutineModal(false)}
+                className="w-8 h-8 flex items-center justify-center text-neutral-500 hover:text-white hover:bg-neutral-800 rounded-lg transition-all duration-150 text-lg leading-none"
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-neutral-400 uppercase tracking-wide mb-1.5">Name</label>
+                <input
+                  type="text"
+                  value={routineForm.name}
+                  onChange={e => setRoutineForm(f => ({ ...f, name: e.target.value }))}
+                  placeholder="e.g. Check JobHunt for new ‼️ offers"
+                  className="w-full bg-neutral-950/60 border border-neutral-800 rounded-lg px-3 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none transition-colors"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-neutral-400 uppercase tracking-wide mb-1.5">Agent</label>
+                <select
+                  value={routineForm.agent_id}
+                  onChange={e => setRoutineForm(f => ({ ...f, agent_id: e.target.value }))}
+                  className="w-full bg-neutral-950/60 border border-neutral-800 rounded-lg px-3 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none transition-colors"
+                >
+                  <option value="">— Pick an agent —</option>
+                  {allAgents.filter(a => a.role !== 'system').map(a => (
+                    <option key={a.id} value={a.id}>{a.name}{a.role === 'orchestrator' ? ' (orchestrator)' : ''}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-neutral-400 uppercase tracking-wide mb-1.5">Runs every</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={1}
+                    max={routineForm.unit === 'hours' ? 23 : 30}
+                    value={routineForm.n}
+                    onChange={e => setRoutineForm(f => ({ ...f, n: Math.max(1, Number(e.target.value) || 1) }))}
+                    className="w-20 bg-neutral-950/60 border border-neutral-800 rounded-lg px-3 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none transition-colors"
+                  />
+                  <select
+                    value={routineForm.unit}
+                    onChange={e => setRoutineForm(f => ({ ...f, unit: e.target.value as RecurrenceUnit }))}
+                    className="flex-1 bg-neutral-950/60 border border-neutral-800 rounded-lg px-3 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none transition-colors"
+                  >
+                    <option value="hours">hours</option>
+                    <option value="days">days</option>
+                  </select>
+                </div>
+                <p className="text-[11px] text-neutral-600 mt-1 font-mono">
+                  cron: {recurrenceToCron({ n: routineForm.n, unit: routineForm.unit })}
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-neutral-400 uppercase tracking-wide mb-1.5">Task to run</label>
+                <textarea
+                  value={routineForm.task}
+                  onChange={e => setRoutineForm(f => ({ ...f, task: e.target.value }))}
+                  placeholder="What should the agent do each time?"
+                  rows={4}
+                  className="w-full bg-neutral-950/60 border border-neutral-800 rounded-lg px-3 py-2.5 text-sm text-white focus:border-neutral-600 focus:outline-none transition-colors resize-y"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 mt-6 pt-4 border-t border-neutral-800/60">
+              <button
+                onClick={saveRoutine}
+                disabled={savingRoutine}
+                className="px-4 py-2 text-xs font-semibold bg-white text-black rounded-full hover:bg-neutral-200 active:scale-[0.97] transition-all duration-150 disabled:opacity-50"
+              >
+                {savingRoutine ? 'Saving…' : (editingRoutineId ? 'Save changes' : 'Create routine')}
+              </button>
+              <button
+                onClick={() => setShowRoutineModal(false)}
+                className="px-4 py-2 text-xs text-neutral-400 hover:text-white hover:bg-neutral-800 rounded-full transition-all duration-150"
               >
                 Cancel
               </button>
