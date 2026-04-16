@@ -46,17 +46,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Check out AgentOne alongside so we can reuse its pinned schema fixture.
-      # A separate commit in dashboard would duplicate the 2700-line snapshot
-      # — single source of truth lives in the runner repo.
-      - name: Checkout AgentOne schema fixture
-        uses: actions/checkout@v4
-        with:
-          repository: Kwintspiracy/Kwint-Agent-One
-          path: agentone
-          ref: main
-          sparse-checkout: tests/smoke/fixtures
-
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -77,7 +66,7 @@ jobs:
           cd /tmp/sb
           supabase init --force
           mkdir -p supabase/migrations
-          cp "$GITHUB_WORKSPACE/agentone/tests/smoke/fixtures/schema.sql" \
+          cp "$GITHUB_WORKSPACE/e2e/fixtures/schema.sql" \
              supabase/migrations/00000000000000_base_schema.sql
           supabase start
 
