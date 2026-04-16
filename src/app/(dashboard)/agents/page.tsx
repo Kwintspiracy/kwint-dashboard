@@ -817,6 +817,12 @@ export default function AgentsPage() {
         >
           From Template
         </button>
+        <a
+          href="/agents/configurator"
+          className="px-3.5 py-1.5 text-xs font-medium border border-blue-600/70 text-blue-300 rounded-lg hover:border-blue-400 hover:text-blue-200 transition-all duration-150"
+        >
+          ✨ Avec l&apos;assistant
+        </a>
         <button
           onClick={startAdd}
           className="px-3.5 py-1.5 text-xs font-semibold bg-white text-black rounded-lg hover:bg-neutral-200 active:bg-neutral-300 active:scale-[0.97] transition-all duration-150"
