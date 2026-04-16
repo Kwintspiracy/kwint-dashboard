@@ -21,7 +21,11 @@ export function useRealtimeTable<T = Record<string, unknown>>(
   options: UseRealtimeTableOptions<T>
 ) {
   const optionsRef = useRef(options)
-  optionsRef.current = options
+  // Sync latest callbacks into the ref inside an effect, not during render.
+  // React 19 forbids ref mutation during render (react-hooks/refs).
+  useEffect(() => {
+    optionsRef.current = options
+  })
 
   useEffect(() => {
     if (options.enabled === false) return

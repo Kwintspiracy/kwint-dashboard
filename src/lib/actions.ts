@@ -1179,7 +1179,7 @@ async function getConnectorToken(supabase: Awaited<ReturnType<typeof requireAuth
   const row = rows.find(r => r.auth_type === 'oauth2') || rows[0]
 
   if (row.auth_type === 'oauth2') {
-    let token = row.oauth_access_token
+    const token = row.oauth_access_token
     const expiresAt = row.oauth_token_expires_at
 
     // Check if token is still valid (5 min buffer)
@@ -3575,7 +3575,7 @@ export async function rotateMcpTokenAction(): Promise<ActionResult<{ token: stri
 
 // ─── Billing Actions ─────────────────────────────────────────────────────────
 
-export async function getBillingRunsAction(): Promise<any[]> {
+export async function getBillingRunsAction(): Promise<Record<string, unknown>[]> {
   const { supabase, entityId } = await requireAuthWithEntity()
   const { data, error } = await supabase
     .from('agent_runs')

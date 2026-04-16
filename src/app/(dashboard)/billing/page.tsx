@@ -113,7 +113,7 @@ export default function BillingPage() {
           <p className="text-xl font-bold text-white">{fmtCost(operatorCost)}</p>
           <p className="text-xs text-neutral-500 mt-1">{fmtTokens(operatorTokens)} tokens · billed by KwintAgents</p>
           <p className="text-xs text-neutral-600 mt-3">
-            These runs used KwintAgents' shared API key. Add your own key in{' '}
+            These runs used KwintAgents&apos; shared API key. Add your own key in{' '}
             <a href="/settings" className="text-emerald-500 hover:underline">Settings</a>{' '}
             to reduce your bill.
           </p>

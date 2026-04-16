@@ -2,10 +2,24 @@
 
 import { useEffect, useRef, useState } from 'react'
 
-type StreamEvent = {
-  type: 'status' | 'tool_call' | 'done' | 'error'
-  data: any
+type StatusEventData = { status: string; [k: string]: unknown }
+type ToolCallEventData = {
+  tool_name: string
+  duration_ms?: number | null
+  created_at: string
+  [k: string]: unknown
 }
+type DoneEventData = {
+  result?: string
+  error?: string
+  [k: string]: unknown
+}
+
+export type StreamEvent =
+  | { type: 'status'; data: StatusEventData }
+  | { type: 'tool_call'; data: ToolCallEventData }
+  | { type: 'done'; data: DoneEventData }
+  | { type: 'error'; data: Record<string, unknown> }
 
 export function useJobStream(jobId: string | null) {
   const [events, setEvents] = useState<StreamEvent[]>([])
@@ -17,8 +31,12 @@ export function useJobStream(jobId: string | null) {
 
     const source = new EventSource(`/api/jobs/${jobId}/stream`)
     sourceRef.current = source
-    setConnected(true)
-    setEvents([])
+    // Reset state inside the async "open" handler so we don't call setState
+    // synchronously during the effect body (react-hooks/set-state-in-effect).
+    source.addEventListener('open', () => {
+      setConnected(true)
+      setEvents([])
+    })
 
     source.addEventListener('status', (e) => {
       setEvents(prev => [...prev, { type: 'status', data: JSON.parse(e.data) }])

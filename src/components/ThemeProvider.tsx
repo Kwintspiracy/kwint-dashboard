@@ -13,12 +13,14 @@ const ThemeContext = createContext<{ theme: Theme; toggle: () => void }>({
 export function useTheme() { return useContext(ThemeContext) }
 
 export default function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>('dark')
-
-  useEffect(() => {
-    const saved = localStorage.getItem('theme') as Theme | null
-    if (saved) setTheme(saved)
-  }, [])
+  // Initialise from localStorage in the lazy useState form so the first
+  // render already has the saved theme — avoids a useEffect setState
+  // (react-hooks/set-state-in-effect) and avoids a flash of wrong theme.
+  // localStorage isn't available during SSR, so guard for window.
+  const [theme, setTheme] = useState<Theme>(() => {
+    if (typeof window === 'undefined') return 'dark'
+    return (localStorage.getItem('theme') as Theme | null) ?? 'dark'
+  })
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)

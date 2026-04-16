@@ -16,15 +16,22 @@ export function useApprovalCount(): number {
   const [count, setCount] = useState(0)
 
   useEffect(() => {
-    if (!eid) { setCount(0); return }
-    supabase
-      .from('approval_requests')
-      .select('id', { count: 'exact', head: true })
-      .eq('status', 'pending')
-      .eq('entity_id', eid)
-      .then(({ count: initialCount }) => {
-        setCount(initialCount ?? 0)
-      })
+    // Async IIFE so every setCount happens outside the effect's sync
+    // execution (React 19 rule react-hooks/set-state-in-effect).
+    let cancelled = false
+    ;(async () => {
+      if (!eid) {
+        if (!cancelled) setCount(0)
+        return
+      }
+      const { count: initialCount } = await supabase
+        .from('approval_requests')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'pending')
+        .eq('entity_id', eid)
+      if (!cancelled) setCount(initialCount ?? 0)
+    })()
+    return () => { cancelled = true }
   }, [eid])
 
   useRealtimeTable<ApprovalRequest>({

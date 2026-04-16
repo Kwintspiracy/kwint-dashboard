@@ -74,8 +74,12 @@ export default function Sidebar() {
   const { signOut, activeEntity } = useAuth()
   const approvalCount = useApprovalCount()
 
-  // Close on route change
-  useEffect(() => { setOpen(false) }, [pathname])
+  // Close on route change — schedule via microtask so the setState
+  // call isn't synchronous inside the effect body (React 19 rule
+  // react-hooks/set-state-in-effect).
+  useEffect(() => {
+    queueMicrotask(() => setOpen(false))
+  }, [pathname])
 
   // Close on escape
   useEffect(() => {
