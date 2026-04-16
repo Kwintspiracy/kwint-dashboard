@@ -41,3 +41,10 @@ yarn-error.log*
 next-env.d.ts
 
 .vercel
+
+# supabase local dev — schema dump used to bootstrap smoke tests.
+# Regenerate via `supabase db dump --schema public --linked -f ...`.
+# Must NOT be committed (2600+ lines of prod snapshot).
+supabase/migrations/00000000000000_*.sql
+supabase/.temp/
+supabase/.branches/
