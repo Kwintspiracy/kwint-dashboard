@@ -66,7 +66,10 @@ Auth gating logic: checks session, manages entity cookies (`kwint_has_entities`,
 
 | File | Purpose |
 |------|---------|
-| `actions.ts` | All Server Actions (CRUD for every entity type) |
+| `actions.ts` | All Server Actions (CRUD for every entity type). `'use server'`, so don't import directly in tests. |
+| `action-errors.ts` | `ok` / `fail` / `dbError` / `dbFail` helpers. Lifted out of `actions.ts` for testability. `dbFail` specialises Postgres error codes (23505 unique, 23502 not-null, 42501 RLS) — **don't regress this**; the Configurator used to swallow real errors behind a generic "Operation failed" and users had no idea their agent creation had failed. |
+| `configurator/preview.ts` | `deriveAgentPreview(messages)` — pure logic for the Configurator's live sidebar. Extracted so it can be unit-tested. |
+| `configurator/tools.ts` | LLM tool handlers (`run_test_job`, `poll_test_result`, etc.). **`run_test_job` must POST to `/api/worker` (not `/api/agent`) with `WORKER_SECRET` or `API_SECRET_KEY` as the Bearer token.** Regression tests in `tools.test.ts` pin this. |
 | `schemas.ts` | Zod schemas for all inputs |
 | `agent-templates.ts` | Pre-built agent personalities with system prompts |
 | `skill-templates.ts` | 59 connector templates (Slack, GitHub, Stripe, etc.) |
@@ -78,8 +81,16 @@ CSS custom properties in `globals.css` (`--bg-body`, `--bg-surface`, `--border`,
 
 ### Testing
 
-- **Unit**: Vitest + jsdom + Testing Library. Setup mocks Supabase in `src/test/setup.ts`.
+- **Unit**: Vitest + jsdom + Testing Library. 105 tests. Setup mocks Supabase in `src/test/setup.ts`. New coverage on the code paths that shipped the most bugs: `configurator/preview.test.ts`, `configurator/tools.test.ts`, `action-errors.test.ts`.
 - **E2E**: Playwright against production build (`npm run start`). Retries 2x in CI.
+- **CI**: `.github/workflows/ci.yml` runs `lint-typecheck` → `unit-tests` → `e2e-tests` on every push to `master`/`main`/`develop`. All gates must be green before merging. `npm run lint` must return 0 errors (warnings are OK for now).
+
+### Rules
+
+- **Every bug fix lands with a regression test** (vitest or Playwright). A fix without a test is a postponement.
+- **Don't regress `dbFail`** in `action-errors.ts` — the Postgres error-code translation is what surfaces real failures to the Configurator UI. If you see a generic "Operation failed" in prod, the first suspect is a new error code we haven't specialised yet.
+- **Don't add `any` types** — the lint gate rejects them. Prefer `unknown` + narrowing, or define a proper interface.
+- **Don't write `setState` synchronously in a `useEffect` body** — React 19's `react-hooks/set-state-in-effect` rule will block lint. Wrap in an async IIFE, `queueMicrotask`, or move the call into an event/async handler.
 
 ## Database Tables
 
