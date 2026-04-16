@@ -39,6 +39,13 @@ import {
   type ToolCallsPageInput,
 } from '@/lib/schemas'
 import { SKILL_CAPABILITIES } from '@/lib/skill-templates'
+import {
+  type ActionResult as _ActionResult,
+  ok as _ok,
+  fail as _fail,
+  dbError as _dbError,
+  dbFail as _dbFail,
+} from '@/lib/action-errors'
 
 async function getActiveEntityId(): Promise<string | null> {
   const cookieStore = await cookies()
@@ -46,29 +53,15 @@ async function getActiveEntityId(): Promise<string | null> {
 }
 
 // ─── ActionResult ─────────────────────────────────────────────────────────────
+// Canonical definitions live in @/lib/action-errors so they're unit-testable
+// without loading the server-only next/headers machinery. Nothing outside
+// this file imports these helpers directly, so keeping them private here.
 
-export type ActionResult<T = void> = { ok: true; data: T } | { ok: false; error: string }
-
-function ok<T>(data: T): ActionResult<T> {
-  return { ok: true, data }
-}
-
-function fail(error: string): ActionResult<never> {
-  return { ok: false, error }
-}
-
-function dbError(e: unknown): ActionResult<never> {
-  console.error('[actions]', e)
-  return fail('An unexpected error occurred. Please try again.')
-}
-
-function dbFail(e: { message: string; code?: string; details?: string }): ActionResult<never> {
-  console.error('[actions]', e.message, e.code, e.details)
-  if (e.code === '23505') return fail('A record with this slug already exists.')
-  if (e.code === '23502') return fail(`Missing required field: ${e.details ?? e.message}`)
-  if (e.code === '42501') return fail('Permission denied — check RLS policies.')
-  return fail(`Operation failed: ${e.message}`)
-}
+export type ActionResult<T = void> = _ActionResult<T>
+const ok = _ok
+const fail = _fail
+const dbError = _dbError
+const dbFail = _dbFail
 
 // ─── Auth Guard ──────────────────────────────────────────────────────────────
 
