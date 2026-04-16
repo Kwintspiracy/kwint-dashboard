@@ -3,7 +3,10 @@ import { test, expect } from '@playwright/test'
 test.describe('Login page', () => {
   test('shows login form when not authenticated', async ({ page }) => {
     await page.goto('/login')
-    await expect(page.locator('h1')).toContainText('Kwint Agents')
+    // Header copy is "Welcome" for signin/signup modes ("Reset password" for forgot).
+    await expect(page.locator('h1')).toContainText('Welcome')
+    // kwint-agents brand wordmark sits above the heading.
+    await expect(page.locator('text=kwint-agents').first()).toBeVisible()
     await expect(page.locator('input[type="email"]')).toBeVisible()
     await expect(page.locator('button[type="submit"]')).toBeVisible()
   })
@@ -14,10 +17,10 @@ test.describe('Login page', () => {
     await expect(page.locator('input[type="email"]')).toBeVisible()
   })
 
-  test('shows error for empty email submission', async ({ page }) => {
+  test('email input is required (browser-level validation)', async ({ page }) => {
     await page.goto('/login')
-    // The form has required attribute, so browser validation prevents submission
-    const button = page.locator('button[type="submit"]')
-    await expect(button).toBeDisabled()
+    // The form relies on HTML5 `required` rather than disabling the submit
+    // button — asserting the attribute keeps the test framework-agnostic.
+    await expect(page.locator('input[type="email"]')).toHaveAttribute('required', '')
   })
 })
