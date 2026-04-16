@@ -94,6 +94,14 @@ export async function GET(request: NextRequest) {
         .update({ env_vars: mergedEnv, updated_at: new Date().toISOString() })
         .eq('id', serverId)
         .eq('entity_id', entityId)
+    } else if (!env.token_endpoint || env.token_endpoint !== meta.token_endpoint) {
+      // Pre-registered client: persist discovered endpoints for token refresh
+      const endpointEnv = { ...env, token_endpoint: meta.token_endpoint, authorization_endpoint: meta.authorization_endpoint }
+      await supabase
+        .from('mcp_servers')
+        .update({ env_vars: endpointEnv, updated_at: new Date().toISOString() })
+        .eq('id', serverId)
+        .eq('entity_id', entityId)
     }
 
     // PKCE

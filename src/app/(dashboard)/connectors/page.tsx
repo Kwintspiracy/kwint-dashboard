@@ -779,7 +779,9 @@ export default function ConnectorsPage() {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="text-sm font-semibold text-white leading-tight">{template.name}</p>
-                        <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-semibold bg-violet-950/50 text-violet-400 border border-violet-900/40" title="Hand-written adapter targeting the vendor's REST API">API Custom</span>
+                        {template.connector && (
+                          <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-semibold bg-violet-950/50 text-violet-400 border border-violet-900/40" title="Hand-written adapter targeting the vendor's REST API">API Custom</span>
+                        )}
                         {template.mcp_catalog_slug && mcpCatalogSlugs.has(template.mcp_catalog_slug) && (
                           <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-semibold bg-orange-950/50 text-orange-400 border border-orange-900/40" title="Official remote MCP server — full API coverage, zero maintenance">MCP Remote</span>
                         )}
@@ -849,17 +851,19 @@ export default function ConnectorsPage() {
                         (({ google: 'blue', design: 'purple', marketing: 'amber', finance: 'emerald', planning: 'amber', communication: 'purple', analytics: 'blue', storage: 'neutral', ai: 'purple', ecommerce: 'amber', dev: 'emerald', crm: 'blue', hr: 'emerald', search: 'red', media: 'red' } as Record<string, string>)[template.category] || 'neutral') as 'emerald' | 'red' | 'amber' | 'blue' | 'purple' | 'neutral'
                       } />
                     <div className="flex items-center gap-1.5">
-                      {isInstalled ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-violet-400 bg-violet-950/30 border border-violet-900/40 rounded-lg" title="API Custom installed">
-                          <svg viewBox="0 0 16 16" className="w-3 h-3" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z" /></svg>
-                          API
-                        </span>
-                      ) : (
-                        <button onClick={() => openInstallModal(template)}
-                          className="px-3 py-1.5 text-xs font-medium border border-violet-900/60 text-violet-300 rounded-lg hover:bg-violet-950/40 transition-colors duration-150">
-                          Install API
-                        </button>
-                      )}
+                      {template.connector ? (
+                        isInstalled ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-violet-400 bg-violet-950/30 border border-violet-900/40 rounded-lg" title="API Custom installed">
+                            <svg viewBox="0 0 16 16" className="w-3 h-3" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z" /></svg>
+                            API
+                          </span>
+                        ) : (
+                          <button onClick={() => openInstallModal(template)}
+                            className="px-3 py-1.5 text-xs font-medium border border-violet-900/60 text-violet-300 rounded-lg hover:bg-violet-950/40 transition-colors duration-150">
+                            Install API
+                          </button>
+                        )
+                      ) : null}
                       {template.mcp_catalog_slug && mcpCatalogSlugs.has(template.mcp_catalog_slug) && (
                         installedMcpSlugs.has(template.mcp_catalog_slug) ? (
                           <span className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-orange-400 bg-orange-950/30 border border-orange-900/40 rounded-lg" title="MCP Remote installed">

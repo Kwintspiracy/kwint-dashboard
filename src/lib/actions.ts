@@ -62,9 +62,12 @@ function dbError(e: unknown): ActionResult<never> {
   return fail('An unexpected error occurred. Please try again.')
 }
 
-function dbFail(e: { message: string }): ActionResult<never> {
-  console.error('[actions]', e.message)
-  return fail('Operation failed. Please try again.')
+function dbFail(e: { message: string; code?: string; details?: string }): ActionResult<never> {
+  console.error('[actions]', e.message, e.code, e.details)
+  if (e.code === '23505') return fail('A record with this slug already exists.')
+  if (e.code === '23502') return fail(`Missing required field: ${e.details ?? e.message}`)
+  if (e.code === '42501') return fail('Permission denied — check RLS policies.')
+  return fail(`Operation failed: ${e.message}`)
 }
 
 // ─── Auth Guard ──────────────────────────────────────────────────────────────
@@ -2318,9 +2321,31 @@ export async function installMcpFromCatalogAction(slug: string): Promise<ActionR
       }
     }
 
-    const envBase = entry.auth_mode === 'reuse_connector'
-      ? { auth_mode: 'reuse_connector', auth_connector_slug: entry.requires_connector_slug }
-      : { auth_mode: 'mcp_oauth' }
+    if (entry.auth_mode === 'api_key') {
+      if (!entry.api_key_connector_slug) return fail('Catalog entry misconfigured')
+      const { data: conn } = await supabase
+        .from('connectors')
+        .select('id, slug, active, api_key')
+        .eq('slug', entry.api_key_connector_slug)
+        .eq('entity_id', entityId)
+        .maybeSingle()
+      if (!conn) return fail(`Connect the "${entry.api_key_connector_slug}" connector first, then install this MCP server.`)
+      if (!conn.api_key) return fail(`The "${entry.api_key_connector_slug}" connector has no API key configured.`)
+    }
+
+    let envBase: Record<string, string>
+    if (entry.auth_mode === 'reuse_connector') {
+      envBase = { auth_mode: 'reuse_connector', auth_connector_slug: entry.requires_connector_slug! }
+    } else if (entry.auth_mode === 'api_key') {
+      envBase = { auth_mode: 'api_key', auth_connector_slug: entry.api_key_connector_slug! }
+    } else if (entry.auth_mode === 'mcp_oauth_preregistered') {
+      const clientId = entry.oauth_client_id_env ? process.env[entry.oauth_client_id_env] : undefined
+      const clientSecret = entry.oauth_client_secret_env ? process.env[entry.oauth_client_secret_env] : undefined
+      if (!clientId) return fail(`${entry.name} requires server-side configuration (${entry.oauth_client_id_env}). Contact your admin.`)
+      envBase = { auth_mode: 'mcp_oauth', client_id: clientId, ...(clientSecret ? { client_secret: clientSecret } : {}) }
+    } else {
+      envBase = { auth_mode: 'mcp_oauth' }
+    }
 
     const { data: existing } = await supabase
       .from('mcp_servers')
@@ -2359,7 +2384,8 @@ export async function installMcpFromCatalogAction(slug: string): Promise<ActionR
     }
 
     const needs_oauth =
-      entry.auth_mode === 'mcp_oauth' && !(mergedEnv as { access_token?: string }).access_token
+      (entry.auth_mode === 'mcp_oauth' || entry.auth_mode === 'mcp_oauth_preregistered') &&
+      !(mergedEnv as { access_token?: string }).access_token
     return ok({ id, needs_oauth })
   } catch (e) { return dbError(e) }
 }
