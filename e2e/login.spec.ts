@@ -1,5 +1,9 @@
 import { test, expect } from '@playwright/test'
 
+// The login specs must run without a session — the global-setup storage state
+// otherwise pre-authenticates the browser and these assertions break.
+test.use({ storageState: 'e2e/.auth/anon.json' })
+
 test.describe('Login page', () => {
   test('shows login form when not authenticated', async ({ page }) => {
     await page.goto('/login')

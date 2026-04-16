@@ -1,5 +1,8 @@
 import { test, expect } from '@playwright/test'
 
+// Unauthenticated route checks — global setup would otherwise pre-authenticate.
+test.use({ storageState: 'e2e/.auth/anon.json' })
+
 test.describe('Navigation', () => {
   test('login page renders without errors', async ({ page }) => {
     await page.goto('/login')
