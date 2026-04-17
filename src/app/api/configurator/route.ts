@@ -9,7 +9,7 @@ export const runtime = 'nodejs'
 export const maxDuration = 300
 
 const MAX_TURNS = 20
-const MODEL = 'claude-opus-4-6'
+const MODEL = 'claude-opus-4-7'
 
 type ChatMessage = {
   role: 'user' | 'assistant'

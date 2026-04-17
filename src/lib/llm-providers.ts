@@ -32,7 +32,8 @@ export const LLM_PROVIDERS: LlmProvider[] = [
     keyHelp: 'Find your key at console.anthropic.com → API Keys',
     needsBaseUrl: false,
     models: [
-      { value: 'claude-opus-4-6', label: 'Claude Opus 4.6', description: 'Most capable' },
+      { value: 'claude-opus-4-7', label: 'Claude Opus 4.7', description: 'Most capable — 1M context' },
+      { value: 'claude-opus-4-6', label: 'Claude Opus 4.6', description: 'Previous flagship' },
       { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6', description: 'Balanced' },
       { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5', description: 'Fastest' },
     ],

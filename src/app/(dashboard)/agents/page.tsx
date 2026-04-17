@@ -821,7 +821,7 @@ export default function AgentsPage() {
           href="/agents/configurator"
           className="px-3.5 py-1.5 text-xs font-medium border border-blue-600/70 text-blue-300 rounded-lg hover:border-blue-400 hover:text-blue-200 transition-all duration-150"
         >
-          ✨ Avec l&apos;assistant
+          ✨ With AI assistant
         </a>
         <button
           onClick={startAdd}

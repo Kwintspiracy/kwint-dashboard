@@ -55,14 +55,14 @@ function AgentPreviewPanel({ preview, busy }: { preview: AgentPreview; busy: boo
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
         {!hasAnything && !busy && (
           <p className="text-xs text-neutral-600 text-center py-8">
-            La configuration de l&apos;agent apparaitra ici au fur et a mesure.
+            The agent configuration will appear here as you go.
           </p>
         )}
 
         {!hasAnything && busy && (
           <div className="text-center py-8">
             <div className="inline-block w-5 h-5 border-2 border-neutral-700 border-t-blue-500 rounded-full animate-spin" />
-            <p className="text-xs text-neutral-600 mt-2">Analyse en cours...</p>
+            <p className="text-xs text-neutral-600 mt-2">Analyzing...</p>
           </div>
         )}
 
@@ -317,26 +317,26 @@ export default function ConfiguratorPage() {
       <div className="flex flex-col flex-1 min-w-0">
         <PageHeader
           title="Agent Configurator"
-          description="Dis-moi ce dont tu as besoin — je configure, teste et livre l'agent."
+          description="Tell me what you need — I'll configure, test and deliver the agent."
         />
 
         {agentId && (
           <div className="px-4 py-2 text-xs text-[var(--text-secondary)] border-b border-[var(--border)]">
-            Agent cible : <Link href={`/agents`} className="underline">{agentId.slice(0, 8)}...</Link>
+            Target agent: <Link href={`/agents`} className="underline">{agentId.slice(0, 8)}...</Link>
           </div>
         )}
 
         <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
           {messages.length === 0 && (
             <div className="text-center text-[var(--text-secondary)] text-sm py-12">
-              D&eacute;cris ton besoin (ex : &laquo; un agent qui r&eacute;sume mes emails Gmail non-lus chaque matin sur Telegram &raquo;).
+              Describe what you need (e.g. &ldquo;an agent that summarises my unread Gmail every morning on Telegram&rdquo;).
             </div>
           )}
           {messages.map((m, i) => <MessageBubble key={i} msg={m} />)}
           {busy && (
             <div className="flex justify-start">
               <div className="rounded-lg px-3 py-2 text-sm bg-[var(--bg-surface)] border border-[var(--border)] text-[var(--text-secondary)]">
-                <span className="inline-block animate-pulse">R&eacute;flexion...</span>
+                <span className="inline-block animate-pulse">Thinking...</span>
               </div>
             </div>
           )}
@@ -344,8 +344,8 @@ export default function ConfiguratorPage() {
 
         {status !== 'active' && (
           <div className="px-4 py-2 text-xs bg-amber-950/40 text-amber-200 border-t border-amber-700">
-            Session {status === 'exhausted' ? 'a court de tours (20 max)' : 'fermee'}. D&eacute;marre une nouvelle session pour continuer.
-            <button className="ml-2 underline" onClick={() => router.push('/agents/configurator')}>Nouvelle session</button>
+            Session {status === 'exhausted' ? 'out of turns (20 max)' : 'closed'}. Start a new session to continue.
+            <button className="ml-2 underline" onClick={() => router.push('/agents/configurator')}>New session</button>
           </div>
         )}
 
@@ -370,7 +370,7 @@ export default function ConfiguratorPage() {
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
-              placeholder="Ton besoin..."
+              placeholder="What do you need?"
               rows={2}
               disabled={busy || status !== 'active'}
               className="flex-1 resize-none rounded-md border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-sm outline-none focus:border-blue-500"
@@ -380,7 +380,7 @@ export default function ConfiguratorPage() {
               disabled={busy || !input.trim() || status !== 'active'}
               className="px-4 py-2 rounded-md bg-blue-600 text-white text-sm font-medium disabled:opacity-50"
             >
-              Envoyer
+              Send
             </button>
           </form>
         </div>
