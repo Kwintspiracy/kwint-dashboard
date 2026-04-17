@@ -39,7 +39,7 @@ export const CONFIGURATOR_TOOLS: AnthropicTool[] = [
   },
   {
     name: 'list_connectors',
-    description: 'List connectors already configured for the current entity (with OAuth tokens or API keys). Returns slug, name, active status. Use this to check if a required connector exists BEFORE proposing a skill that depends on it.',
+    description: 'List integrations already configured for the current entity. Merges the `connectors` table (OAuth/API-key connectors like Gmail, Drive, Stripe) AND the `mcp_servers` table (MCP integrations like Notion MCP, Apify MCP). Each row carries a `kind` field: "connector" or "mcp". Use this to check whether a required integration exists BEFORE proposing a skill that depends on it. Skills may depend on either kind.',
     input_schema: { type: 'object', properties: {} },
   },
   {
@@ -195,12 +195,37 @@ export async function executeTool(
       }
 
       case 'list_connectors': {
-        const { data, error } = await ctx.supabase
-          .from('connectors')
-          .select('slug, name, active, auth_type')
-          .eq('entity_id', ctx.entityId)
-        if (error) return { ok: false, error: error.message }
-        return { ok: true, data: data ?? [] }
+        // Two backing tables — `connectors` (OAuth/API-key) and `mcp_servers`
+        // (MCP integrations like Notion MCP). The Configurator used to only
+        // see the first, which is why it kept telling users "Notion is not
+        // configured" even though their Notion MCP was active.
+        const [connectorsRes, mcpRes] = await Promise.all([
+          ctx.supabase
+            .from('connectors')
+            .select('slug, name, active, auth_type')
+            .eq('entity_id', ctx.entityId),
+          ctx.supabase
+            .from('mcp_servers')
+            .select('slug, name, active, transport')
+            .eq('entity_id', ctx.entityId),
+        ])
+        if (connectorsRes.error) return { ok: false, error: connectorsRes.error.message }
+        if (mcpRes.error) return { ok: false, error: mcpRes.error.message }
+        const connectors = (connectorsRes.data ?? []).map(c => ({
+          kind: 'connector' as const,
+          slug: c.slug,
+          name: c.name,
+          active: c.active,
+          auth_type: c.auth_type,
+        }))
+        const mcps = (mcpRes.data ?? []).map(m => ({
+          kind: 'mcp' as const,
+          slug: m.slug,
+          name: m.name,
+          active: m.active,
+          transport: m.transport,
+        }))
+        return { ok: true, data: [...connectors, ...mcps] }
       }
 
       case 'propose_agent_config':

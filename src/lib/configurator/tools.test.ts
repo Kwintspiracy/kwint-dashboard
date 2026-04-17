@@ -110,6 +110,43 @@ describe('executeTool', () => {
     expect(res).toEqual({ ok: false, error: 'Unknown tool: definitely_not_a_tool' })
   })
 
+  // ── list_connectors must include MCP servers ─────────────────────────
+  // Past bug: the Configurator kept telling users "Notion is not configured"
+  // because Notion is registered as an mcp_servers row, not a connectors
+  // row. The handler now queries both tables and merges with a `kind` field.
+  it('list_connectors merges connectors + mcp_servers with kind discriminator', async () => {
+    const { client } = buildSupabaseStub({
+      'connectors.list': { data: [
+        { slug: 'gmail', name: 'Gmail', active: true, auth_type: 'oauth2' },
+        { slug: 'tavily', name: 'Tavily Search', active: true, auth_type: 'api_key' },
+      ], error: null },
+      'mcp_servers.list': { data: [
+        { slug: 'notion', name: 'Notion MCP', active: true, transport: 'http' },
+        { slug: 'apify', name: 'Apify MCP', active: true, transport: 'http' },
+      ], error: null },
+    })
+    const res = await executeTool(makeCtx(client), 'list_connectors', {})
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    const data = res.data as Array<{ kind: string; slug: string; name: string }>
+    const slugs = data.map(d => d.slug).sort()
+    expect(slugs).toEqual(['apify', 'gmail', 'notion', 'tavily'])
+    const notion = data.find(d => d.slug === 'notion')
+    expect(notion?.kind).toBe('mcp')
+    expect(notion?.name).toBe('Notion MCP')
+    const gmail = data.find(d => d.slug === 'gmail')
+    expect(gmail?.kind).toBe('connector')
+  })
+
+  it('list_connectors surfaces an error if the mcp_servers query fails', async () => {
+    const { client } = buildSupabaseStub({
+      'connectors.list': { data: [], error: null },
+      'mcp_servers.list': { data: null, error: { message: 'mcp_servers RLS denied' } },
+    })
+    const res = await executeTool(makeCtx(client), 'list_connectors', {})
+    expect(res).toEqual({ ok: false, error: 'mcp_servers RLS denied' })
+  })
+
   // ── run_test_job: the regression hotspot ─────────────────────────────
   // Past bugs: wrong endpoint (/api/agent), wrong env var (AGENT_API_TOKEN).
   // These tests pin the correct wiring so future refactors can't silently regress.
