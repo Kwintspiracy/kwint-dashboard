@@ -942,11 +942,12 @@ export default function AgentsPage() {
                       href={`/agents/configurator?agentId=${a.id}`}
                       onClick={(e) => e.stopPropagation()}
                       title="Edit with AI — refine this agent via the Configurator"
-                      className="p-1 rounded text-neutral-600 hover:text-blue-400 transition-colors"
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-blue-950/40 text-blue-300 border border-blue-800/50 hover:bg-blue-900/50 hover:text-blue-200 hover:border-blue-700 transition-colors"
                     >
                       <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
                       </svg>
+                      <span>Edit with AI</span>
                     </a>
                     {!a.is_default && (
                       <button
@@ -1092,11 +1093,12 @@ export default function AgentsPage() {
                       <a
                         href={`/agents/configurator?agentId=${a.id}`}
                         title="Edit with AI — refine this agent via the Configurator"
-                        className="p-1.5 rounded-md text-neutral-500 hover:text-blue-400 hover:bg-neutral-800 transition-all duration-150"
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium bg-blue-950/40 text-blue-300 border border-blue-800/50 hover:bg-blue-900/50 hover:text-blue-200 hover:border-blue-700 transition-colors"
                       >
-                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
                         </svg>
+                        <span>AI</span>
                       </a>
                       <button
                         onClick={() => startEdit(a)}

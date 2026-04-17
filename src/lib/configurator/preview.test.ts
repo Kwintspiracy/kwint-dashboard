@@ -17,6 +17,45 @@ describe('deriveAgentPreview', () => {
     expect(deriveAgentPreview([])).toEqual(EMPTY_PREVIEW)
   })
 
+  // ── initial-state overlay ─────────────────────────────────────────────
+  // Used by the "Edit with AI" flow so the sidebar shows the existing
+  // agent's state immediately, before any tool_use fires.
+  it('applies the initial seed when no tool_use messages are present', () => {
+    const preview = deriveAgentPreview([], {
+      name: 'Existing Agent',
+      slug: 'existing',
+      model: 'claude-opus-4-7',
+      personality: 'prior personality',
+      skillSlugs: ['notion', 'memory'],
+      requiresApproval: ['gmail_send_email'],
+      agentId: 'agent-123',
+      activated: true,
+    })
+    expect(preview.name).toBe('Existing Agent')
+    expect(preview.model).toBe('claude-opus-4-7')
+    expect(preview.skillSlugs).toEqual(['notion', 'memory'])
+    expect(preview.requiresApproval).toEqual(['gmail_send_email'])
+    expect(preview.agentId).toBe('agent-123')
+    expect(preview.activated).toBe(true)
+  })
+
+  it('lets tool_use update_agent override the initial personality', () => {
+    const preview = deriveAgentPreview(
+      [toolUse('update_agent', { agent_id: 'agent-123', personality: 'NEW personality' })],
+      { name: 'Existing', personality: 'OLD personality', skillSlugs: [], requiresApproval: [] },
+    )
+    expect(preview.name).toBe('Existing')
+    expect(preview.personality).toBe('NEW personality')
+  })
+
+  it('lets tool_use detach_skills remove from the initial skill list', () => {
+    const preview = deriveAgentPreview(
+      [toolUse('detach_skills', { skill_slugs: ['memory'] })],
+      { skillSlugs: ['notion', 'memory'], requiresApproval: [] },
+    )
+    expect(preview.skillSlugs).toEqual(['notion'])
+  })
+
   it('ignores plain-text messages without tool_use blocks', () => {
     const preview = deriveAgentPreview([
       userText('Please build me an agent'),

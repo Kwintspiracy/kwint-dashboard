@@ -13,6 +13,18 @@ import {
   type ContentBlock,
 } from '@/lib/configurator/preview'
 
+type LoadedAgent = {
+  id: string
+  name: string
+  slug: string
+  model?: string | null
+  personality?: string | null
+  requiresApproval: string[]
+  maxTokens?: number
+  skillSlugs: string[]
+  activated: boolean
+}
+
 type ConfiguratorResponse = {
   sessionId: string
   messages: ChatMessage[]
@@ -258,10 +270,30 @@ export default function ConfiguratorPage() {
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState<string>('active')
   const [showMobilePreview, setShowMobilePreview] = useState(false)
+  const [loadedAgent, setLoadedAgent] = useState<LoadedAgent | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  const preview = useMemo(() => deriveAgentPreview(messages), [messages])
+  // When editing an existing agent via the "Edit with AI" button, seed the
+  // preview sidebar from the loaded agent's state so it's populated from
+  // turn 0. Any subsequent tool_use (update_agent, attach_skills, ...) will
+  // layer on top and take precedence.
+  const preview = useMemo(() => {
+    const initial: Partial<AgentPreview> | undefined = loadedAgent
+      ? {
+          name: loadedAgent.name,
+          slug: loadedAgent.slug,
+          model: loadedAgent.model ?? undefined,
+          personality: loadedAgent.personality ?? undefined,
+          skillSlugs: loadedAgent.skillSlugs,
+          requiresApproval: loadedAgent.requiresApproval,
+          maxTokens: loadedAgent.maxTokens,
+          agentId: loadedAgent.id,
+          activated: loadedAgent.activated,
+        }
+      : undefined
+    return deriveAgentPreview(messages, initial)
+  }, [messages, loadedAgent])
 
   // Auto-grow the input textarea as the user types, capped at 10 lines.
   // We measure line-height via getComputedStyle so the cap stays correct
@@ -290,6 +322,9 @@ export default function ConfiguratorPage() {
         setSessionId(data.session.id)
         setMessages((data.session.messages as ChatMessage[]) ?? [])
         setStatus(data.session.status)
+      }
+      if (data.agent) {
+        setLoadedAgent(data.agent as LoadedAgent)
       }
     })()
   }, [initialAgentId])

@@ -40,8 +40,27 @@ export const EMPTY_PREVIEW: AgentPreview = {
   activated: false,
 }
 
-export function deriveAgentPreview(messages: ChatMessage[]): AgentPreview {
-  const p: AgentPreview = { ...EMPTY_PREVIEW, skillSlugs: [], requiresApproval: [] }
+/**
+ * Derive the live preview from chat history, optionally starting from an
+ * `initial` state (used when the Configurator loads an EXISTING agent via
+ * the "Edit with AI" button — the sidebar then shows the current agent
+ * state immediately instead of an empty card, and any subsequent tool_use
+ * from the LLM layers on top).
+ */
+export function deriveAgentPreview(
+  messages: ChatMessage[],
+  initial?: Partial<AgentPreview>,
+): AgentPreview {
+  const p: AgentPreview = {
+    ...EMPTY_PREVIEW,
+    skillSlugs: [],
+    requiresApproval: [],
+    ...(initial ?? {}),
+    // Re-normalise array fields: spread of an undefined override must not
+    // leak into the arrays above.
+    skillSlugs: initial?.skillSlugs ? [...initial.skillSlugs] : [],
+    requiresApproval: initial?.requiresApproval ? [...initial.requiresApproval] : [],
+  }
 
   for (const msg of messages) {
     const blocks = typeof msg.content === 'string' ? [] : (msg.content as ContentBlock[])

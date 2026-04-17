@@ -275,7 +275,45 @@ export async function GET(req: NextRequest) {
         .order('updated_at', { ascending: false })
         .limit(1)
         .maybeSingle()
-      return NextResponse.json({ session: data ?? null })
+
+      // Also load the agent's current state so the page can seed the
+      // "Agent Preview" sidebar even when no prior session exists —
+      // otherwise "Edit with AI" lands on an empty card which makes no
+      // sense for an existing agent.
+      const { data: agentRow } = await supabase
+        .from('agents')
+        .select('id, name, slug, model, personality, requires_approval, max_tokens_per_job, active')
+        .eq('id', agentId)
+        .eq('entity_id', entityId)
+        .maybeSingle()
+      let skillSlugs: string[] = []
+      if (agentRow) {
+        const { data: assignments } = await supabase
+          .from('agent_skill_assignments')
+          .select('agent_skills!inner(slug)')
+          .eq('agent_id', agentId)
+        type AssignmentRow = { agent_skills: { slug: string } | { slug: string }[] }
+        skillSlugs = (assignments ?? []).map((r: AssignmentRow) => {
+          const s = Array.isArray(r.agent_skills) ? r.agent_skills[0] : r.agent_skills
+          return s?.slug
+        }).filter(Boolean) as string[]
+      }
+      return NextResponse.json({
+        session: data ?? null,
+        agent: agentRow
+          ? {
+              id: agentRow.id,
+              name: agentRow.name,
+              slug: agentRow.slug,
+              model: agentRow.model,
+              personality: agentRow.personality,
+              requiresApproval: agentRow.requires_approval ?? [],
+              maxTokens: agentRow.max_tokens_per_job || undefined,
+              skillSlugs,
+              activated: Boolean(agentRow.active),
+            }
+          : null,
+      })
     }
     return NextResponse.json({ error: 'Provide sessionId or agentId' }, { status: 400 })
   } catch (e) {
