@@ -259,8 +259,27 @@ export default function ConfiguratorPage() {
   const [status, setStatus] = useState<string>('active')
   const [showMobilePreview, setShowMobilePreview] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const preview = useMemo(() => deriveAgentPreview(messages), [messages])
+
+  // Auto-grow the input textarea as the user types, capped at 10 lines.
+  // We measure line-height via getComputedStyle so the cap stays correct
+  // regardless of font-size or theme changes.
+  const TEXTAREA_MAX_LINES = 10
+  useEffect(() => {
+    const el = textareaRef.current
+    if (!el) return
+    const styles = window.getComputedStyle(el)
+    const lineHeight = parseFloat(styles.lineHeight) || 20
+    const paddingY = parseFloat(styles.paddingTop) + parseFloat(styles.paddingBottom)
+    const maxHeight = lineHeight * TEXTAREA_MAX_LINES + paddingY
+    // Reset to 'auto' so scrollHeight reflects the natural content height,
+    // not the previous height we set.
+    el.style.height = 'auto'
+    el.style.height = Math.min(el.scrollHeight, maxHeight) + 'px'
+    el.style.overflowY = el.scrollHeight > maxHeight ? 'auto' : 'hidden'
+  }, [input])
 
   useEffect(() => {
     if (!initialAgentId) return
@@ -367,13 +386,14 @@ export default function ConfiguratorPage() {
             className="flex gap-2 flex-1"
           >
             <textarea
+              ref={textareaRef}
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
               placeholder="What do you need?"
-              rows={2}
+              rows={4}
               disabled={busy || status !== 'active'}
-              className="flex-1 resize-none rounded-md border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-sm outline-none focus:border-blue-500"
+              className="flex-1 resize-none rounded-md border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-sm outline-none focus:border-blue-500 leading-snug"
             />
             <button
               type="submit"
