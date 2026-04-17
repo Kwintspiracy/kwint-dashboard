@@ -293,8 +293,16 @@ export default function ConnectorsPage() {
     try {
       let connectorId: string | null = null
       if (installing.connector) {
+        // Unified connectors (e.g. Google covers Gmail/Drive/Sheets/Docs/Calendar)
+        // need a stable name on the connector row — otherwise installing the
+        // Gmail skill creates a row literally named "Gmail" even though it
+        // covers 5 services. The slug 'google' maps to the canonical name.
+        const CANONICAL_CONNECTOR_NAMES: Record<string, string> = {
+          google: 'Google',
+        }
+        const connName = CANONICAL_CONNECTOR_NAMES[installing.connector.slug] ?? installing.name
         const connPayload: Record<string, unknown> = {
-          name: installing.name,
+          name: connName,
           slug: installing.connector.slug,
           base_url: installing.connector.base_url || undefined,
           auth_type: installing.connector.auth_type || 'api_key',

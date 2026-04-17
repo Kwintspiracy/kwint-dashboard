@@ -237,7 +237,7 @@ export const SKILL_TEMPLATES: SkillTemplate[] = [
     category: 'google', color: '#34A853',
     icon: 'M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zM7 7h2v2H7zm0 4h2v2H7zm0 4h2v2H7zm4-8h6v2h-6zm0 4h6v2h-6zm0 4h6v2h-6z',
     brandIcon: '/app-icons/google-sheets.svg',
-    connector: { slug: 'google-sheets' },
+    connector: { slug: 'google' },
     fields: [],
     content: `# Google Sheets API
 
@@ -284,7 +284,7 @@ POST /spreadsheets/{spreadsheetId}/values/{range}:clear (no body needed)
 
 **Never guess cell contents** — always read before writing to confirm the current structure.`,
     required_config: [
-      { label: 'Google Sheets connector', description: 'OAuth2 credentials required to read/write spreadsheets', type: 'connector_slug', value: 'google-sheets', critical: true },
+      { label: 'Google connector', description: 'Single OAuth2 covering Gmail / Drive / Sheets / Docs / Calendar', type: 'connector_slug', value: 'google', critical: true },
     ],
     operations: [
       { name: 'Read entire sheet', slug: 'sheets_read_all', risk: 'read', requires_approval: false, description: 'Read all non-empty rows of a sheet as JSON objects. Automatically skips phantom rows caused by extended formatting.' },
@@ -302,10 +302,10 @@ POST /spreadsheets/{spreadsheetId}/values/{range}:clear (no body needed)
     icon: 'M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z',
     brandIcon: '/app-icons/gmail.svg',
     connector: {
-      slug: 'gmail', base_url: 'https://gmail.googleapis.com',
+      slug: 'google', base_url: 'https://gmail.googleapis.com',
       auth_type: 'oauth2',
       oauth_token_url: 'https://oauth2.googleapis.com/token',
-      oauth_scopes: 'https://www.googleapis.com/auth/gmail.modify',
+      oauth_scopes: 'https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/calendar',
     },
     fields: [
       { key: 'oauth_client_id', label: 'Client ID', type: 'text', placeholder: 'xxxxxx.apps.googleusercontent.com', required: true, help: 'Google Cloud Console → Credentials → OAuth 2.0 Client IDs' },
@@ -403,7 +403,7 @@ System label IDs: INBOX, SENT, DRAFT, TRASH, SPAM, UNREAD, STARRED, IMPORTANT
 
 **Never summarize or fabricate email content** — always fetch the actual message before reporting on it.`,
     required_config: [
-      { label: 'Gmail connector', description: 'Google OAuth2 credentials with gmail.modify scope', type: 'connector_slug', value: 'gmail', critical: true },
+      { label: 'Google connector', description: 'Single OAuth2 covering Gmail / Drive / Sheets / Docs / Calendar', type: 'connector_slug', value: 'google', critical: true },
     ],
     operations: [
       { name: 'Search emails', slug: 'gmail_list_emails', risk: 'read', requires_approval: false, description: 'Search the inbox using Gmail query syntax (from:, subject:, has:attachment, newer_than:1d…). Returns a list of matching messages with metadata.' },
@@ -431,10 +431,10 @@ System label IDs: INBOX, SENT, DRAFT, TRASH, SPAM, UNREAD, STARRED, IMPORTANT
     icon: 'M7.71 3.5L1.15 15l3.43 6 6.55-11.5L7.71 3.5zm1.14 0l6.56 11.5H22L15.44 3.5H8.85zM15 16l-3.43 6h13.72l3.43-6H15z',
     brandIcon: '/app-icons/google-drive.svg',
     connector: {
-      slug: 'google-drive', base_url: 'https://www.googleapis.com/drive/v3',
+      slug: 'google', base_url: 'https://www.googleapis.com/drive/v3',
       auth_type: 'oauth2',
       oauth_token_url: 'https://oauth2.googleapis.com/token',
-      oauth_scopes: 'https://www.googleapis.com/auth/drive',
+      oauth_scopes: 'https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/calendar',
     },
     fields: [
       { key: 'oauth_client_id', label: 'Client ID', type: 'text', placeholder: 'xxxxxx.apps.googleusercontent.com', required: true, help: 'Google Cloud Console → Credentials → OAuth 2.0 Client IDs' },
@@ -443,7 +443,7 @@ System label IDs: INBOX, SENT, DRAFT, TRASH, SPAM, UNREAD, STARRED, IMPORTANT
     ],
     content: `# Google Drive API\n\nOAuth2 — the runner auto-refreshes the access token using the stored refresh token.\n\n## List files\nGET /files\n\n## Get file metadata or content\nGET /files/{fileId}\n\n## Upload file\nPOST /upload/drive/v3/files\n\nUse connector_slug="google-drive" for auth. Google Docs are exported as plain text automatically.`,
     required_config: [
-      { label: 'Google Drive connector', description: 'OAuth2 credentials with drive scope', type: 'connector_slug', value: 'google-drive', critical: true },
+      { label: 'Google connector', description: 'Single OAuth2 covering Gmail / Drive / Sheets / Docs / Calendar', type: 'connector_slug', value: 'google', critical: true },
     ],
     operations: [
       // Read
@@ -1830,7 +1830,7 @@ Returns a run id. Poll GET /actor-runs/{run_id} until status is "SUCCEEDED", the
     category: 'google', color: '#4285F4',
     icon: 'M19 4h-1V2h-2v2H8V2H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zM5 8V6h14v2H5zm2 4h5v5H7v-5z',
     brandIcon: '/app-icons/google-calendar.svg',
-    connector: { slug: 'google-calendar', base_url: 'https://www.googleapis.com/calendar/v3' },
+    connector: { slug: 'google', base_url: 'https://www.googleapis.com/calendar/v3' },
     fields: [{ key: 'api_key', label: 'Calendar API Key', type: 'password', placeholder: 'AIza...', required: true, help: 'From Google Cloud Console' }],
     content: `# Google Calendar API
 
@@ -1897,7 +1897,7 @@ Response: calendars.primary.busy[].{start, end}
 
 **Always confirm the date, time, and timezone with the user before creating or modifying events.**`,
     required_config: [
-      { label: 'Google Calendar connector', description: 'Google OAuth2 credentials with calendar.events scope', type: 'connector_slug', value: 'google-calendar', critical: true },
+      { label: 'Google connector', description: 'Single OAuth2 covering Gmail / Drive / Sheets / Docs / Calendar', type: 'connector_slug', value: 'google', critical: true },
     ],
     operations: [
       { name: 'List events', slug: 'list_events', risk: 'read', requires_approval: false },
@@ -1912,7 +1912,7 @@ Response: calendars.primary.busy[].{start, end}
     category: 'google', color: '#4285F4',
     icon: 'M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zM6 20V4h7v5h5v11H6zM8 12h8v2H8v-2zm0 4h5v2H8v-2z',
     brandIcon: '/app-icons/google-docs.svg',
-    connector: { slug: 'google-docs', base_url: 'https://docs.googleapis.com/v1' },
+    connector: { slug: 'google', base_url: 'https://docs.googleapis.com/v1' },
     fields: [{ key: 'api_key', label: 'Docs API Key', type: 'password', placeholder: 'AIza...', required: true }],
     content: `# Google Docs API\n\n## Get document\nGET /documents/{documentId}\n\n## Batch update (insert text)\nPOST /documents/{documentId}:batchUpdate\n\`\`\`json\n{"requests": [{"insertText": {"location": {"index": 1}, "text": "Hello world"}}]}\n\`\`\`\n\nUse connector_slug="google-docs" for auth.`,
   },

@@ -63,6 +63,21 @@ export const OAUTH_PROVIDERS: Record<string, OAuthProviderConfig> = {
 
 // Maps connector slug → which OAuth provider + scopes to request
 export const CONNECTOR_OAUTH: Record<string, { provider: string; scopes: string[] }> = {
+  // Unified Google connector — covers Gmail, Drive, Sheets, Docs, Calendar in
+  // a single OAuth. The runner's agent.memory._resolve_slug_chain falls back
+  // to this row when the per-service slug isn't found. New installs should
+  // use this; the per-service entries below stay for backward compatibility.
+  google: {
+    provider: 'google',
+    scopes: [
+      'https://www.googleapis.com/auth/gmail.modify',
+      'https://www.googleapis.com/auth/drive',
+      'https://www.googleapis.com/auth/spreadsheets',
+      'https://www.googleapis.com/auth/documents',
+      'https://www.googleapis.com/auth/calendar',
+      'https://www.googleapis.com/auth/userinfo.email',
+    ],
+  },
   gmail: {
     provider: 'google',
     scopes: [
