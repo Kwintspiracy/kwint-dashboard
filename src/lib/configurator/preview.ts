@@ -53,14 +53,13 @@ export function deriveAgentPreview(
 ): AgentPreview {
   const p: AgentPreview = {
     ...EMPTY_PREVIEW,
-    skillSlugs: [],
-    requiresApproval: [],
     ...(initial ?? {}),
-    // Re-normalise array fields: spread of an undefined override must not
-    // leak into the arrays above.
-    skillSlugs: initial?.skillSlugs ? [...initial.skillSlugs] : [],
-    requiresApproval: initial?.requiresApproval ? [...initial.requiresApproval] : [],
   }
+  // Re-normalise array fields with fresh copies so later mutations (e.g.
+  // detach_skills filtering p.skillSlugs) never leak back into EMPTY_PREVIEW
+  // or the caller-owned `initial` object.
+  p.skillSlugs = initial?.skillSlugs ? [...initial.skillSlugs] : []
+  p.requiresApproval = initial?.requiresApproval ? [...initial.requiresApproval] : []
 
   for (const msg of messages) {
     const blocks = typeof msg.content === 'string' ? [] : (msg.content as ContentBlock[])
