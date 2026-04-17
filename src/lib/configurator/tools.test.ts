@@ -8,6 +8,8 @@ vi.mock('@/lib/actions', () => ({
   createAgentAction: vi.fn(async () => ({ ok: true, data: { id: 'agent-xyz' } })),
   updateAgentAction: vi.fn(async () => ({ ok: true, data: { id: 'agent-xyz' } })),
   setAgentSkillAssignmentsAction: vi.fn(async () => ({ ok: true, data: {} })),
+  // createSkillAction returns a fresh id each call so we can track provisioning
+  createSkillAction: vi.fn(async () => ({ ok: true, data: { id: `skill-${Math.random().toString(36).slice(2, 8)}` } })),
 }))
 
 import { executeTool, type ToolContext } from './tools'
@@ -145,6 +147,90 @@ describe('executeTool', () => {
     })
     const res = await executeTool(makeCtx(client), 'list_connectors', {})
     expect(res).toEqual({ ok: false, error: 'mcp_servers RLS denied' })
+  })
+
+  // ── attach_skills must auto-provision missing skills from catalog ─────
+  // Past bug: list_skills surfaces the static SKILL_TEMPLATES catalog, so
+  // the LLM picks slugs like 'notion' or 'memory' that the entity has
+  // never provisioned. attach_skills then reported `missing: N` even
+  // though the slug was in the catalog — the agent was created but could
+  // not be tested. Every first-time skill use was blocked.
+  it('attach_skills auto-provisions a catalog slug not yet in agent_skills', async () => {
+    const { createSkillAction, setAgentSkillAssignmentsAction } = await import('@/lib/actions')
+    vi.clearAllMocks()
+    const { client } = buildSupabaseStub({
+      // No existing agent_skills rows for this entity
+      'agent_skills.list': { data: [], error: null },
+    })
+    const res = await executeTool(makeCtx(client), 'attach_skills', {
+      agent_id: 'agent-xyz', skill_slugs: ['notion', 'memory'],
+    })
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    const data = res.data as { attached: number; missing: number; missing_slugs: string[] }
+    expect(data.attached).toBe(2)
+    expect(data.missing).toBe(0)
+    expect(data.missing_slugs).toEqual([])
+    expect(createSkillAction).toHaveBeenCalledTimes(2)
+    expect(setAgentSkillAssignmentsAction).toHaveBeenCalledWith(
+      'agent-xyz', expect.arrayContaining([expect.stringMatching(/^skill-/)]),
+    )
+  })
+
+  it('attach_skills flags truly-unknown slugs as missing without blocking the rest', async () => {
+    vi.clearAllMocks()
+    const { client } = buildSupabaseStub({
+      'agent_skills.list': { data: [], error: null },
+    })
+    const res = await executeTool(makeCtx(client), 'attach_skills', {
+      agent_id: 'agent-xyz', skill_slugs: ['notion', 'this-slug-does-not-exist'],
+    })
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    const data = res.data as { attached: number; missing: number; missing_slugs: string[] }
+    expect(data.attached).toBe(1)
+    expect(data.missing).toBe(1)
+    expect(data.missing_slugs).toEqual(['this-slug-does-not-exist'])
+  })
+
+  it('attach_skills reuses existing agent_skills rows without re-provisioning', async () => {
+    const { createSkillAction } = await import('@/lib/actions')
+    vi.clearAllMocks()
+    const { client } = buildSupabaseStub({
+      'agent_skills.list': { data: [
+        { id: 'existing-skill-1', slug: 'notion' },
+      ], error: null },
+    })
+    const res = await executeTool(makeCtx(client), 'attach_skills', {
+      agent_id: 'agent-xyz', skill_slugs: ['notion'],
+    })
+    expect(res.ok).toBe(true)
+    expect(createSkillAction).not.toHaveBeenCalled()
+  })
+
+  // ── alert_ender must use an allowed agent_memory.category ─────────────
+  // Past bug: used category='ender_alert' which failed the CHECK
+  // constraint {preference, context, outcome, learned_rule}. Every
+  // escalation from the Configurator was silently lost.
+  it('alert_ender writes with category=context and tags [ENDER_ALERT]', async () => {
+    const captured: Array<Record<string, unknown>> = []
+    const client = {
+      from: vi.fn(() => ({
+        insert: vi.fn((row: Record<string, unknown>) => {
+          captured.push(row)
+          return Promise.resolve({ error: null })
+        }),
+      })),
+    } as unknown as SupabaseClient
+    const res = await executeTool(makeCtx(client), 'alert_ender', {
+      skill_slug: 'notion',
+      issue: 'attach failed',
+      evidence_job_id: 'job-abc',
+    })
+    expect(res).toEqual({ ok: true, data: { alerted: true } })
+    expect(captured).toHaveLength(1)
+    expect(captured[0].category).toBe('context')
+    expect(captured[0].fact).toMatch(/^\[ENDER_ALERT\]/)
   })
 
   // ── run_test_job: the regression hotspot ─────────────────────────────

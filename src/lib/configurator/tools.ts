@@ -4,6 +4,7 @@ import {
   createAgentAction,
   updateAgentAction,
   setAgentSkillAssignmentsAction,
+  createSkillAction,
 } from '@/lib/actions'
 
 export type ToolContext = {
@@ -172,6 +173,63 @@ async function resolveSkillIds(supabase: SupabaseClient, entityId: string, slugs
   return (data ?? []).map(r => r.id)
 }
 
+/**
+ * Ensure every requested slug has a row in `agent_skills` for this entity,
+ * auto-provisioning from `SKILL_TEMPLATES` when a slug is only in the
+ * marketplace catalog but has never been added to the entity before.
+ *
+ * Bug this fixes: `list_skills` surfaces the full static catalog, so the
+ * LLM naturally picks slugs like `notion` or `memory`. But `attach_skills`
+ * used to only query `agent_skills` for this entity — a slug could show
+ * up in `list_skills` yet be "missing" at attach time, blocking every
+ * agent creation that reached for a skill not previously provisioned.
+ *
+ * Returns { ids, missing } where `missing` counts slugs not found in
+ * either `agent_skills` or `SKILL_TEMPLATES` (truly unknown slugs).
+ */
+async function ensureSkillsProvisioned(
+  supabase: SupabaseClient,
+  entityId: string,
+  slugs: string[],
+): Promise<{ ids: string[]; missing: number; missingSlugs: string[] }> {
+  if (!slugs.length) return { ids: [], missing: 0, missingSlugs: [] }
+
+  const { data: existing } = await supabase
+    .from('agent_skills')
+    .select('id, slug')
+    .eq('entity_id', entityId)
+    .in('slug', slugs)
+  const bySlug: Record<string, string> = {}
+  for (const row of existing ?? []) bySlug[row.slug] = row.id
+
+  const toProvision = slugs.filter(s => !(s in bySlug))
+  const missingSlugs: string[] = []
+  for (const slug of toProvision) {
+    const tpl = SKILL_TEMPLATES.find(t => t.slug === slug)
+    if (!tpl) {
+      missingSlugs.push(slug)
+      continue
+    }
+    const res = await createSkillAction({
+      name: tpl.name,
+      slug: tpl.slug,
+      content: tpl.content,
+      description: tpl.description ?? null,
+      default_content: tpl.content,
+      required_config: tpl.required_config ?? null,
+      operations: tpl.operations ?? null,
+    })
+    if (res.ok && res.data && typeof res.data === 'object' && 'id' in res.data) {
+      bySlug[slug] = (res.data as { id: string }).id
+    } else {
+      missingSlugs.push(slug)
+    }
+  }
+
+  const ids = slugs.map(s => bySlug[s]).filter(Boolean) as string[]
+  return { ids, missing: missingSlugs.length, missingSlugs }
+}
+
 export async function executeTool(
   ctx: ToolContext,
   name: string,
@@ -243,11 +301,18 @@ export async function executeTool(
 
       case 'attach_skills': {
         const slugs = (input.skill_slugs as string[]) ?? []
-        const skillIds = await resolveSkillIds(ctx.supabase, ctx.entityId, slugs)
-        const missing = slugs.length - skillIds.length
+        // Auto-provision any slug that's in the marketplace catalog but not
+        // yet in this entity's `agent_skills`. Without this, every
+        // first-time use of a skill (Notion, Memory, etc.) reported
+        // `missing: N` even though `list_skills` advertised it.
+        const { ids: skillIds, missing, missingSlugs } = await ensureSkillsProvisioned(
+          ctx.supabase,
+          ctx.entityId,
+          slugs,
+        )
         const res = await setAgentSkillAssignmentsAction(input.agent_id as string, skillIds)
         if (!res.ok) return { ok: false, error: res.error }
-        return { ok: true, data: { attached: skillIds.length, missing } }
+        return { ok: true, data: { attached: skillIds.length, missing, missing_slugs: missingSlugs } }
       }
 
       case 'detach_skills': {
@@ -347,11 +412,17 @@ export async function executeTool(
       }
 
       case 'alert_ender': {
-        const fact = `Skill issue reported by Configurator — skill=${input.skill_slug}: ${input.issue}${input.evidence_job_id ? ` (evidence job_id=${input.evidence_job_id})` : ''} [session ${ctx.sessionId}]`
+        // agent_memory.category is constrained to {preference, context,
+        // outcome, learned_rule}. We used to pass 'ender_alert' which
+        // failed the CHECK constraint silently — every escalation was
+        // lost. Tag the fact itself with [ENDER_ALERT] so it's greppable
+        // and file it under 'context' (the only category that fits a
+        // platform-gap report).
+        const fact = `[ENDER_ALERT] Skill issue reported by Configurator — skill=${input.skill_slug}: ${input.issue}${input.evidence_job_id ? ` (evidence job_id=${input.evidence_job_id})` : ''} [session ${ctx.sessionId}]`
         const { error } = await ctx.supabase.from('agent_memory').insert({
           entity_id: ctx.entityId,
           fact,
-          category: 'ender_alert',
+          category: 'context',
           importance: 5,
           source: 'configurator',
         })
