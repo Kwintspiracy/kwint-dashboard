@@ -940,17 +940,51 @@ export async function createSkillAction(
     const { supabase, entityId } = await requireAuthWithEntity()
     const { connector_ids, ...skillData } = parsed.data
 
-    const { data, error } = await supabase
+    // Reinstall-safe: if a skill with this slug already exists for this entity,
+    // UPDATE it in place instead of creating a new row. Without this, every
+    // reinstall orphans the existing agent_skill_assignments — observed on
+    // 2026-04-17 when reinstalling Gmail wiped the skill from Jennie & Sherlock
+    // because the new skill row had a new UUID.
+    const { data: existing } = await supabase
       .from('agent_skills')
-      .insert({ ...skillData, entity_id: entityId })
-      .select()
-      .single()
+      .select('id')
+      .eq('entity_id', entityId)
+      .eq('slug', skillData.slug)
+      .maybeSingle()
 
-    if (error) return dbFail(error)
+    let data: { id: string } | null = null
+    if (existing) {
+      const { data: updated, error } = await supabase
+        .from('agent_skills')
+        .update({ ...skillData })
+        .eq('id', (existing as { id: string }).id)
+        .eq('entity_id', entityId)
+        .select()
+        .single()
+      if (error) return dbFail(error)
+      data = updated as { id: string }
+    } else {
+      const { data: inserted, error } = await supabase
+        .from('agent_skills')
+        .insert({ ...skillData, entity_id: entityId })
+        .select()
+        .single()
+      if (error) return dbFail(error)
+      data = inserted as { id: string }
+    }
 
-    if (connector_ids && connector_ids.length > 0) {
+    if (connector_ids && connector_ids.length > 0 && data) {
+      // Reset skill_connectors to exactly the requested set — reinstalls
+      // that change the connector (e.g. Gmail → unified Google) should
+      // clear stale links.
+      await supabase
+        .from('skill_connectors')
+        .delete()
+        .eq('skill_id', data.id)
+        .eq('entity_id', entityId)
+
       const junctions = connector_ids.map((connector_id) => ({
-        skill_id: (data as { id: string }).id,
+        skill_id: data.id,
         connector_id,
         entity_id: entityId,
       }))
