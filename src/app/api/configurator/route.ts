@@ -82,9 +82,61 @@ export async function POST(req: NextRequest) {
       session = (data as unknown as Session | null) ?? null
     }
     if (!session) {
+      // When the user lands here with ?agentId= (e.g. via the "Edit with AI"
+      // button on an existing agent card) and no prior session, seed the
+      // chat with a synthetic system-style note describing the agent so the
+      // LLM knows what it is refining. Without this, the model treated
+      // every Edit-with-AI session as a fresh agent build.
+      const seedMessages: ChatMessage[] = []
+      if (body.agentId) {
+        const { data: existingAgent } = await supabase
+          .from('agents')
+          .select('id, name, slug, role, model, personality, requires_approval, max_tokens_per_job, active')
+          .eq('id', body.agentId)
+          .eq('entity_id', entityId)
+          .maybeSingle()
+        if (existingAgent) {
+          const { data: assignments } = await supabase
+            .from('agent_skill_assignments')
+            .select('agent_skills!inner(slug)')
+            .eq('agent_id', body.agentId)
+          type AssignmentRow = { agent_skills: { slug: string } | { slug: string }[] }
+          const skillSlugs = (assignments ?? []).map((r: AssignmentRow) => {
+            const s = Array.isArray(r.agent_skills) ? r.agent_skills[0] : r.agent_skills
+            return s?.slug
+          }).filter(Boolean) as string[]
+          const personalityPreview = (existingAgent.personality ?? '').slice(0, 1500)
+          seedMessages.push({
+            role: 'user',
+            content: `[CONTEXT — not from the user, do not greet]
+You are editing an EXISTING agent. Use update_agent, attach_skills, or detach_skills (NOT create_agent) to refine it.
+
+Existing agent:
+- id: ${existingAgent.id}
+- name: ${existingAgent.name}
+- slug: ${existingAgent.slug}
+- role: ${existingAgent.role ?? 'agent'}
+- model: ${existingAgent.model ?? '(unset)'}
+- active: ${existingAgent.active}
+- max_tokens_per_job: ${existingAgent.max_tokens_per_job ?? '(default)'}
+- skills attached: ${skillSlugs.length ? skillSlugs.join(', ') : '(none)'}
+- requires_approval (operations): ${(existingAgent.requires_approval ?? []).join(', ') || '(none)'}
+
+--- personality (first 1500 chars) ---
+${personalityPreview}${(existingAgent.personality ?? '').length > 1500 ? '\n... (truncated)' : ''}
+--- end personality ---
+
+The user's next message will tell you what to change. Acknowledge briefly what you are about to edit, then ask one targeted clarifying question if needed before calling tools.`,
+          })
+          seedMessages.push({
+            role: 'assistant',
+            content: `Loaded existing agent **${existingAgent.name}** (${existingAgent.slug}). What would you like to change?`,
+          })
+        }
+      }
       const { data, error } = await supabase
         .from('configurator_sessions')
-        .insert({ entity_id: entityId, agent_id: body.agentId ?? null, messages: [], status: 'active', turn_count: 0 })
+        .insert({ entity_id: entityId, agent_id: body.agentId ?? null, messages: seedMessages, status: 'active', turn_count: 0 })
         .select('id, messages, agent_id, turn_count, status')
         .single()
       if (error || !data) return NextResponse.json({ error: 'Session create failed' }, { status: 500 })
