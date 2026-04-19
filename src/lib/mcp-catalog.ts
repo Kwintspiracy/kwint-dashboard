@@ -82,6 +82,18 @@ export const MCP_CATALOG: McpCatalogEntry[] = [
     docs_url: "https://developers.asana.com",
   },
   {
+    slug: "airtable-mcp",
+    name: "Airtable",
+    description:
+      "Official Airtable MCP — list/search/update records, inspect schema, filter by column values, and access interface pages. Authenticates with an existing Airtable connector PAT.",
+    icon: "🗂️",
+    mcp_url: "https://mcp.airtable.com/mcp",
+    category: "Productivity",
+    auth_mode: "api_key",
+    api_key_connector_slug: "airtable",
+    docs_url: "https://support.airtable.com/docs/using-the-airtable-mcp-server",
+  },
+  {
     slug: "slack-mcp",
     name: "Slack",
     description:
