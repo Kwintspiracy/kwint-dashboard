@@ -133,6 +133,35 @@ describe('deriveAgentPreview', () => {
     expect(preview.testError).toBe('Tool X timed out')
   })
 
+  // Bug 2026-04-19: the sidebar's "Testing..." spinner stayed lit forever
+  // because run_test_job's tool_result returned `{ job_id }` but the
+  // preview never captured it, so the page had no way to client-poll the
+  // job's actual status. The LLM stops calling poll_test_result after one
+  // `still_running` response (per its system prompt), so the spinner had
+  // no exit condition once that path was taken.
+  it('run_test_job tool_result captures job_id so the sidebar can client-poll', () => {
+    const preview = deriveAgentPreview([
+      toolUse('run_test_job', { task: 'go' }, 'tu-run'),
+      toolResult('tu-run', { ok: true, data: { job_id: 'job-abc-123' } }),
+    ])
+    expect(preview.testJobId).toBe('job-abc-123')
+    // Status stays running — no completion payload yet.
+    expect(preview.testStatus).toBe('running')
+  })
+
+  it('a new run_test_job clears the previous testJobId until the new tool_result returns one', () => {
+    const preview = deriveAgentPreview([
+      toolUse('run_test_job', { task: 'first' }, 'tu-run-1'),
+      toolResult('tu-run-1', { ok: true, data: { job_id: 'job-old' } }),
+      toolUse('run_test_job', { task: 'second' }, 'tu-run-2'),
+      // No tool_result yet for the second run.
+    ])
+    // Stale jobId must NOT leak — otherwise the polling effect would query
+    // the old job and decide the new test is "passed" based on stale state.
+    expect(preview.testJobId).toBeUndefined()
+    expect(preview.testStatus).toBe('running')
+  })
+
   it('tool_result with an agent id sets agentId on the preview', () => {
     const preview = deriveAgentPreview([
       toolUse('create_agent', { name: 'Agent' }, 'tu-create'),

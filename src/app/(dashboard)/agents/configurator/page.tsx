@@ -6,6 +6,7 @@ import Link from 'next/link'
 import PageHeader from '@/components/PageHeader'
 import { SKILL_TEMPLATES } from '@/lib/skill-templates'
 import { toast } from 'sonner'
+import { getJobStatusAction } from '@/lib/actions'
 import {
   deriveAgentPreview,
   type AgentPreview,
@@ -278,6 +279,20 @@ export default function ConfiguratorPage() {
   // preview sidebar from the loaded agent's state so it's populated from
   // turn 0. Any subsequent tool_use (update_agent, attach_skills, ...) will
   // layer on top and take precedence.
+  //
+  // pollOverride: client-side polling result for the current test job. When
+  // the LLM stops calling poll_test_result (it stops after one `still_running`
+  // response per its system prompt), the spinner used to spin forever even
+  // when the job had failed. Now we poll agent_jobs directly while
+  // testStatus === 'running', and overlay the resolved status here.
+  // The `jobId` guard ensures stale overrides from a previous test never
+  // apply to the next one.
+  const [pollOverride, setPollOverride] = useState<{
+    jobId: string
+    status: 'passed' | 'failed'
+    error?: string
+  } | null>(null)
+
   const preview = useMemo(() => {
     const initial: Partial<AgentPreview> | undefined = loadedAgent
       ? {
@@ -292,8 +307,45 @@ export default function ConfiguratorPage() {
           activated: loadedAgent.activated,
         }
       : undefined
-    return deriveAgentPreview(messages, initial)
-  }, [messages, loadedAgent])
+    const base = deriveAgentPreview(messages, initial)
+    if (pollOverride && base.testJobId && pollOverride.jobId === base.testJobId && base.testStatus === 'running') {
+      return { ...base, testStatus: pollOverride.status, testError: pollOverride.error }
+    }
+    return base
+  }, [messages, loadedAgent, pollOverride])
+
+  // Poll agent_jobs for the in-flight test job's status. Runs while the
+  // sidebar shows "Testing..." AND we know the job_id. Stops when the job
+  // resolves OR the test is restarted (testJobId changes).
+  useEffect(() => {
+    const jobId = preview.testJobId
+    if (!jobId || preview.testStatus !== 'running') return
+    let cancelled = false
+    let timer: ReturnType<typeof setTimeout> | null = null
+
+    const tick = async () => {
+      if (cancelled) return
+      const res = await getJobStatusAction(jobId)
+      if (cancelled) return
+      if (res.ok) {
+        const s = res.data.status
+        if (s === 'completed' || s === 'failed') {
+          setPollOverride({
+            jobId,
+            status: s === 'completed' ? 'passed' : 'failed',
+            error: res.data.error ?? undefined,
+          })
+          return
+        }
+      }
+      timer = setTimeout(tick, 4000)
+    }
+    timer = setTimeout(tick, 4000)
+    return () => {
+      cancelled = true
+      if (timer) clearTimeout(timer)
+    }
+  }, [preview.testJobId, preview.testStatus])
 
   // Auto-grow the input textarea as the user types, capped at 10 lines.
   // We measure line-height via getComputedStyle so the cap stays correct

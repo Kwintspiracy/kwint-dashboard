@@ -30,6 +30,15 @@ export type AgentPreview = {
   agentId?: string
   testStatus: 'running' | 'passed' | 'failed' | null
   testError?: string
+  /**
+   * Job ID of the in-flight test job — set when run_test_job's tool_result
+   * comes back with `data.job_id`. The sidebar uses it to client-poll
+   * agent_jobs status while testStatus === 'running', so the spinner is no
+   * longer dependent on the LLM continuing to call poll_test_result. Bug
+   * 2026-04-19: the LLM would stop polling after one `still_running`
+   * response and the sidebar would spin forever even after the job failed.
+   */
+  testJobId?: string
   activated: boolean
 }
 
@@ -95,6 +104,7 @@ export function deriveAgentPreview(
           case 'run_test_job':
             p.testStatus = 'running'
             p.testError = undefined
+            p.testJobId = undefined  // cleared until the tool_result returns the new job_id
             break
           case 'finalize_agent':
             break
@@ -111,6 +121,11 @@ export function deriveAgentPreview(
           const d = data.data
           if (typeof d.id === 'string' && !p.agentId) p.agentId = d.id
           if (typeof d.activated === 'boolean' && d.activated) p.activated = true
+
+          // run_test_job's tool_result returns { job_id }. We capture it so
+          // the sidebar can client-poll the job status independently of
+          // whether the LLM keeps calling poll_test_result.
+          if (typeof d.job_id === 'string') p.testJobId = d.job_id
 
           if (typeof d.status === 'string') {
             if (d.status === 'completed') {

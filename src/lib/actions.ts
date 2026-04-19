@@ -637,6 +637,36 @@ export async function getJobTraceAction(jobId: string): Promise<ActionResult<{ c
   }
 }
 
+/**
+ * Lightweight job-status fetch for the Configurator sidebar's live polling.
+ * Returns just the fields we need to update the test badge — no joins, no
+ * tool_calls. Bug 2026-04-19: the sidebar's "Testing..." spinner stayed lit
+ * forever because poll_test_result returned `still_running` once, the LLM
+ * stopped polling, and the UI had nothing to refresh from. The sidebar now
+ * polls this endpoint while testStatus === 'running'.
+ */
+export async function getJobStatusAction(jobId: string): Promise<ActionResult<{
+  status: string
+  error: string | null
+  result: string | null
+  total_duration_ms: number | null
+}>> {
+  try {
+    const { supabase, entityId } = await requireAuthWithEntity()
+    const { data, error } = await supabase
+      .from('agent_jobs')
+      .select('status, error, result, total_duration_ms')
+      .eq('id', jobId)
+      .eq('entity_id', entityId)
+      .maybeSingle()
+    if (error) return dbFail(error)
+    if (!data) return fail('Job not found')
+    return ok(data)
+  } catch (e) {
+    return dbError(e)
+  }
+}
+
 // ─── Agent Mutations ──────────────────────────────────────────────────────────
 
 export async function createAgentAction(raw: unknown): Promise<ActionResult<unknown>> {
