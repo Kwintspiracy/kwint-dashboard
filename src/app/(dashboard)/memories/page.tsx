@@ -691,13 +691,46 @@ function MemoryCard({ m, agents, expanded, onToggle, onUpdate, onDelete }: {
   onToggle: () => void; onUpdate: () => void; onDelete: () => void
 }) {
   const { label: accessedLabel, stale } = decayInfo(m)
-  const agentName = m.agent_id ? agents.find(a => a.id === m.agent_id)?.name ?? 'Agent' : 'Global'
+  const agentName = m.agent_id ? agents.find(a => a.id === m.agent_id)?.name ?? 'Global' : 'Global'
 
-  // Split fact into title (first line) and body
-  const lines = m.fact.split('\n')
-  const title = lines[0].length > 100 ? lines[0].slice(0, 100) + '...' : lines[0]
-  const body = lines.slice(1).join('\n').trim()
-  const preview = body.length > 200 && !expanded ? body.slice(0, 200) + '...' : body
+  const [editing, setEditing] = useState(false)
+  const [draftFact, setDraftFact] = useState(m.fact)
+  const [draftCat, setDraftCat] = useState(m.category)
+  const [draftAgentId, setDraftAgentId] = useState(m.agent_id ?? '')
+  const [saving, setSaving] = useState(false)
+
+  function startEdit() {
+    setDraftFact(m.fact)
+    setDraftCat(m.category)
+    setDraftAgentId(m.agent_id ?? '')
+    setEditing(true)
+  }
+
+  // Collapsed preview only — when expanded, the full fact is rendered verbatim
+  // (no slice). Bug 2026-04-19: previously the first line was hard-capped at
+  // 100 chars even in expanded mode, so multi-line memories with a long first
+  // line couldn't be read in full.
+  const firstLine = m.fact.split('\n', 1)[0]
+  const collapsedTitle = firstLine.length > 140 ? firstLine.slice(0, 140) + '…' : firstLine
+  const hasMore = m.fact.length > firstLine.length || firstLine.length > 140
+
+  async function handleSave() {
+    const trimmed = draftFact.trim()
+    if (!trimmed) { toast.error('Memory cannot be empty'); return }
+    setSaving(true)
+    const patch: Record<string, unknown> = {}
+    if (trimmed !== m.fact) patch.fact = trimmed
+    if (draftCat !== m.category) patch.category = draftCat
+    const newAgentId = draftAgentId || null
+    if (newAgentId !== m.agent_id) patch.agent_id = newAgentId
+    if (Object.keys(patch).length === 0) { setEditing(false); setSaving(false); return }
+    const r = await updateMemoryAction(m.id, patch)
+    setSaving(false)
+    if (!r.ok) { toast.error(r.error); return }
+    toast.success('Updated')
+    setEditing(false)
+    onUpdate()
+  }
 
   return (
     <div className={`bg-neutral-900 border rounded-xl transition-all duration-150 group ${
@@ -708,41 +741,91 @@ function MemoryCard({ m, agents, expanded, onToggle, onUpdate, onDelete }: {
         <div className="flex items-start gap-3">
           <div className="shrink-0 pt-0.5">
             <ImportanceDots value={m.importance}
-              onChange={m.archived ? undefined : async (n) => {
+              onChange={m.archived || editing ? undefined : async (n) => {
                 const r = await updateMemoryAction(m.id, { importance: n })
                 if (!r.ok) toast.error(r.error); else onUpdate()
               }} />
           </div>
-          <div className="flex-1 min-w-0 cursor-pointer" onClick={onToggle}>
-            <p className={`text-sm font-medium leading-snug ${m.archived ? 'text-neutral-500 line-through' : 'text-neutral-100'}`}>
-              {title}
-            </p>
-            {preview && (
-              <p className={`text-xs leading-relaxed mt-1.5 whitespace-pre-wrap ${m.archived ? 'text-neutral-600' : 'text-neutral-400'}`}>
-                {expanded ? body : preview}
-              </p>
-            )}
-          </div>
+
+          {editing ? (
+            <div className="flex-1 min-w-0 space-y-2">
+              <textarea
+                value={draftFact}
+                onChange={e => setDraftFact(e.target.value)}
+                rows={Math.min(20, Math.max(4, draftFact.split('\n').length + 1))}
+                autoFocus
+                className="w-full bg-neutral-800/50 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-neutral-100 resize-y focus:border-neutral-500 focus:outline-none font-mono"
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <select value={draftCat} onChange={e => setDraftCat(e.target.value)}
+                  className="bg-neutral-800/50 border border-neutral-800 rounded-md px-2 py-1 text-xs text-neutral-300">
+                  {CATEGORIES.map(c => <option key={c} value={c}>{c.replace('_', ' ')}</option>)}
+                </select>
+                <select value={draftAgentId} onChange={e => setDraftAgentId(e.target.value)}
+                  className="bg-neutral-800/50 border border-neutral-800 rounded-md px-2 py-1 text-xs text-neutral-300">
+                  <option value="">Global</option>
+                  {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+                <div className="ml-auto flex items-center gap-1.5">
+                  <button onClick={() => setEditing(false)} disabled={saving}
+                    className="px-3 py-1 text-xs font-semibold text-neutral-400 hover:text-white border border-neutral-800 rounded-md transition-colors">
+                    Cancel
+                  </button>
+                  <button onClick={handleSave} disabled={saving || !draftFact.trim()}
+                    className="px-3 py-1 text-xs font-semibold bg-white text-black rounded-md hover:bg-neutral-200 disabled:opacity-50 transition-colors">
+                    {saving ? 'Saving…' : 'Save'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="flex-1 min-w-0 cursor-pointer" onClick={onToggle}>
+              {expanded ? (
+                <p className={`text-sm leading-relaxed whitespace-pre-wrap break-words ${m.archived ? 'text-neutral-500 line-through' : 'text-neutral-100'}`}>
+                  {m.fact}
+                </p>
+              ) : (
+                <>
+                  <p className={`text-sm font-medium leading-snug break-words ${m.archived ? 'text-neutral-500 line-through' : 'text-neutral-100'}`}>
+                    {collapsedTitle}
+                  </p>
+                  {hasMore && (
+                    <p className="text-[11px] text-neutral-600 mt-1">Click to expand</p>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
           {/* Actions */}
-          <div className="shrink-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-            {m.archived ? (
-              <button onClick={async () => {
-                const r = await unarchiveMemoryAction(m.id)
-                if (!r.ok) toast.error(r.error); else { toast.success('Unarchived'); onUpdate() }
-              }} className="text-xs text-neutral-500 hover:text-emerald-400 border border-neutral-800 rounded-md px-2 py-1 transition-colors">
-                Unarchive
-              </button>
-            ) : (
-              <button onClick={async () => {
-                if (confirm('Delete this memory?')) {
-                  const r = await deleteMemoryAction(m.id)
-                  if (!r.ok) toast.error(r.error); else { toast.success('Deleted'); onDelete() }
-                }
-              }} className="text-neutral-700 hover:text-red-400 transition-colors text-lg leading-none w-7 h-7 flex items-center justify-center rounded-md hover:bg-neutral-800/50">
-                ×
-              </button>
-            )}
-          </div>
+          {!editing && (
+            <div className="shrink-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+              {!m.archived && (
+                <button onClick={(e) => { e.stopPropagation(); startEdit() }}
+                  className="text-xs text-neutral-500 hover:text-white border border-neutral-800 hover:border-neutral-600 rounded-md px-2 py-1 transition-colors">
+                  Edit
+                </button>
+              )}
+              {m.archived ? (
+                <button onClick={async () => {
+                  const r = await unarchiveMemoryAction(m.id)
+                  if (!r.ok) toast.error(r.error); else { toast.success('Unarchived'); onUpdate() }
+                }} className="text-xs text-neutral-500 hover:text-emerald-400 border border-neutral-800 rounded-md px-2 py-1 transition-colors">
+                  Unarchive
+                </button>
+              ) : (
+                <button onClick={async (e) => {
+                  e.stopPropagation()
+                  if (confirm('Delete this memory?')) {
+                    const r = await deleteMemoryAction(m.id)
+                    if (!r.ok) toast.error(r.error); else { toast.success('Deleted'); onDelete() }
+                  }
+                }} className="text-neutral-700 hover:text-red-400 transition-colors text-lg leading-none w-7 h-7 flex items-center justify-center rounded-md hover:bg-neutral-800/50">
+                  ×
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Footer */}
