@@ -357,17 +357,46 @@ export async function executeTool(
           .single()
         if (error || !job) return { ok: false, error: error?.message ?? 'insert failed' }
 
-        // Trigger the worker (fire-and-forget) — must use /api/worker, not /api/agent
+        // Trigger the worker — must use /api/worker, not /api/agent.
+        // Auth header is X-Worker-Secret, NOT Authorization: Bearer. The
+        // runner's /api/worker (AgentOne/api/worker.py) only checks
+        // X-Worker-Secret via hmac.compare_digest; everything else 403s.
+        // Bug 2026-04-19: every Configurator-launched test job silently
+        // failed for weeks because the prior wiring sent Bearer, the
+        // runner returned 403, the fire-and-forget catch swallowed it,
+        // and the job stayed `pending`/`processing` until the user
+        // manually killed it. Now we await + check status so a
+        // misconfigured trigger fails loudly and immediately.
         const runnerUrl = process.env.NEXT_PUBLIC_AGENT_API_URL
         const runnerToken = process.env.WORKER_SECRET || process.env.API_SECRET_KEY
         if (!runnerUrl || !runnerToken) {
           return { ok: false, error: 'Runner trigger not configured (NEXT_PUBLIC_AGENT_API_URL / WORKER_SECRET missing).' }
         }
-        fetch(`${runnerUrl}/api/worker`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${runnerToken}` },
-          body: JSON.stringify({ job_id: job.id }),
-        }).catch(e => console.error('[configurator] runner trigger failed', e))
+        try {
+          const triggerRes = await fetch(`${runnerUrl}/api/worker`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': runnerToken },
+            body: JSON.stringify({ job_id: job.id }),
+          })
+          if (!triggerRes.ok) {
+            const body = await triggerRes.text().catch(() => '')
+            const detail = `Runner /api/worker returned ${triggerRes.status}: ${body.slice(0, 200)}`
+            console.error('[configurator] runner trigger failed', detail)
+            await ctx.supabase
+              .from('agent_jobs')
+              .update({ status: 'failed', error: detail, completed_at: new Date().toISOString() })
+              .eq('id', job.id)
+            return { ok: false, error: detail }
+          }
+        } catch (e) {
+          const detail = `Runner unreachable: ${e instanceof Error ? e.message : String(e)}`
+          console.error('[configurator] runner trigger failed', detail)
+          await ctx.supabase
+            .from('agent_jobs')
+            .update({ status: 'failed', error: detail, completed_at: new Date().toISOString() })
+            .eq('id', job.id)
+          return { ok: false, error: detail }
+        }
         return { ok: true, data: { job_id: job.id } }
       }
 

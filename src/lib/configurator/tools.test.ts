@@ -249,14 +249,18 @@ describe('executeTool', () => {
     })
     expect(res).toEqual({ ok: true, data: { job_id: 'job-123' } })
 
-    // Let the fire-and-forget fetch resolve.
-    await new Promise(r => setTimeout(r, 10))
     const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
     expect(fetchMock).toHaveBeenCalledTimes(1)
     const [url, init] = fetchMock.mock.calls[0]
     expect(url).toBe('https://runner.example.com/api/worker')
     expect(init.method).toBe('POST')
-    expect(init.headers.Authorization).toBe('Bearer secret-value')
+    // Runner's /api/worker (AgentOne/api/worker.py) only accepts the
+    // X-Worker-Secret header. Bug 2026-04-19: Bearer was used and every
+    // Configurator test job silently 403'd because the runner rejected
+    // the auth, the fire-and-forget catch swallowed it, and the job sat
+    // in `pending`/`processing` until the user manually killed it.
+    expect(init.headers['X-Worker-Secret']).toBe('secret-value')
+    expect(init.headers.Authorization).toBeUndefined()
     expect(JSON.parse(init.body)).toEqual({ job_id: 'job-123' })
   })
 
@@ -273,10 +277,9 @@ describe('executeTool', () => {
     })
     expect(res.ok).toBe(true)
 
-    await new Promise(r => setTimeout(r, 10))
     const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
     const [, init] = fetchMock.mock.calls[0]
-    expect(init.headers.Authorization).toBe('Bearer legacy-key')
+    expect(init.headers['X-Worker-Secret']).toBe('legacy-key')
   })
 
   it('run_test_job rejects when NEXT_PUBLIC_AGENT_API_URL is missing', async () => {
@@ -306,6 +309,36 @@ describe('executeTool', () => {
     })
     expect(res.ok).toBe(false)
     if (!res.ok) expect(res.error).toMatch(/WORKER_SECRET/)
+  })
+
+  it('run_test_job marks the job failed when /api/worker returns 4xx (was: silent loss)', async () => {
+    vi.stubEnv('NEXT_PUBLIC_AGENT_API_URL', 'https://runner.example.com')
+    vi.stubEnv('WORKER_SECRET', 'wrong-secret')
+
+    const updateMock = vi.fn(() => ({ eq: vi.fn(async () => ({ data: null, error: null })) }))
+    const { client } = buildSupabaseStub({
+      'agent_jobs.single': { data: { id: 'job-403' }, error: null },
+    })
+    // Splice in an `update` chain on the stub so we can assert it was called.
+    const origFrom = client.from
+    client.from = ((table: string) => {
+      const base = origFrom(table)
+      return Object.assign(base, { update: updateMock })
+    }) as typeof client.from
+
+    globalThis.fetch = vi.fn(async () => new Response('Invalid worker secret', { status: 403 })) as unknown as typeof fetch
+
+    const res = await executeTool(makeCtx(client), 'run_test_job', {
+      agent_id: 'a', task: 't',
+    })
+    expect(res.ok).toBe(false)
+    if (!res.ok) expect(res.error).toMatch(/403/)
+    // Job row must be flipped to `failed` so the user/Configurator stop
+    // waiting on a job the worker will never pick up.
+    expect(updateMock).toHaveBeenCalled()
+    const patch = (updateMock.mock.calls[0] as unknown as [{ status?: string; error?: string }])[0]
+    expect(patch.status).toBe('failed')
+    expect(patch.error).toMatch(/403/)
   })
 
   it('run_test_job surfaces Supabase insert errors', async () => {

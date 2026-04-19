@@ -69,7 +69,7 @@ Auth gating logic: checks session, manages entity cookies (`kwint_has_entities`,
 | `actions.ts` | All Server Actions (CRUD for every entity type). `'use server'`, so don't import directly in tests. |
 | `action-errors.ts` | `ok` / `fail` / `dbError` / `dbFail` helpers. Lifted out of `actions.ts` for testability. `dbFail` specialises Postgres error codes (23505 unique, 23502 not-null, 42501 RLS) — **don't regress this**; the Configurator used to swallow real errors behind a generic "Operation failed" and users had no idea their agent creation had failed. |
 | `configurator/preview.ts` | `deriveAgentPreview(messages)` — pure logic for the Configurator's live sidebar. Extracted so it can be unit-tested. |
-| `configurator/tools.ts` | LLM tool handlers (`run_test_job`, `poll_test_result`, etc.). **`run_test_job` must POST to `/api/worker` (not `/api/agent`) with `WORKER_SECRET` or `API_SECRET_KEY` as the Bearer token.** Regression tests in `tools.test.ts` pin this. |
+| `configurator/tools.ts` | LLM tool handlers (`run_test_job`, `poll_test_result`, etc.). **`run_test_job` must POST to `/api/worker` (not `/api/agent`) with the secret in the `X-Worker-Secret` header (NOT `Authorization: Bearer`).** The runner's `worker.py` only checks `X-Worker-Secret` via `hmac.compare_digest`; Bearer 403s. Bug 2026-04-19 (job ea6d5761): wrong header → silent 403 → every Configurator test stuck. Regression tests in `tools.test.ts` pin both the header AND the failure path (job is flipped to `failed` on non-2xx). |
 | `schemas.ts` | Zod schemas for all inputs |
 | `agent-templates.ts` | Pre-built agent personalities with system prompts |
 | `skill-templates.ts` | 59 connector templates (Slack, GitHub, Stripe, etc.) |
