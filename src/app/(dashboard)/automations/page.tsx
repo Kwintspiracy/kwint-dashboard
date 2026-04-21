@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import {
   getSchedulesAction,
   createScheduleAction,
@@ -237,6 +237,13 @@ export default function AutomationsPage() {
   const [selectedPreset, setSelectedPreset] = useState<string | 'custom'>('')
   const [showCustomCron, setShowCustomCron] = useState(false)
   const [runningId, setRunningId] = useState<string | null>(null)
+  // Synchronous guard — React setState is async, so a quick double-click
+  // passes the `disabled={runningId===s.id}` check twice before the first
+  // render commits. The ref update IS synchronous and blocks the 2nd call.
+  // Bug 2026-04-21: "Va dans le cortex" fired twice at 17:23:20 + 17:23:21
+  // from a single user interaction, creating 2 redundant Ender+Displacer
+  // chains and burning tokens for nothing.
+  const inFlightRunRef = useRef<Set<string>>(new Set())
 
   const [editingTriggerId, setEditingTriggerId] = useState<string | null>(null)
   const [showAddTrigger, setShowAddTrigger] = useState(false)
@@ -354,6 +361,11 @@ export default function AutomationsPage() {
   }
 
   async function handleRunNow(s: Schedule) {
+    // Race-proof guard: if a call is already in flight for this schedule,
+    // drop the duplicate immediately. setState-based disabled={} can't
+    // catch back-to-back clicks within the same React tick.
+    if (inFlightRunRef.current.has(s.id)) return
+    inFlightRunRef.current.add(s.id)
     setRunningId(s.id)
     try {
       const result = await runScheduleNowAction(s.id)
@@ -362,6 +374,7 @@ export default function AutomationsPage() {
     } catch {
       toast.error('Failed to trigger automation')
     } finally {
+      inFlightRunRef.current.delete(s.id)
       setRunningId(null)
     }
   }
