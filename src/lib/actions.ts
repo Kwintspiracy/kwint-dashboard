@@ -2408,6 +2408,13 @@ export async function installMcpFromCatalogAction(slug: string): Promise<ActionR
       envBase = { auth_mode: 'mcp_oauth' }
     }
 
+    // Forward auth format overrides (default runner behavior is
+    // Authorization: Bearer <token>, which covers Notion/Linear/Stripe/etc.
+    // Cogni needs x-api-key — catalog entries declare the override here).
+    if (entry.auth_header_name) envBase.auth_header_name = entry.auth_header_name
+    if (entry.auth_header_prefix !== undefined) envBase.auth_header_prefix = entry.auth_header_prefix
+    if (entry.auth_query_param) envBase.auth_query_param = entry.auth_query_param
+
     const { data: existing } = await supabase
       .from('mcp_servers')
       .select('id, env_vars')

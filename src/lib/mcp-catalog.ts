@@ -22,6 +22,13 @@ export type McpCatalogEntry = {
   oauth_client_secret_env?: string;
   api_key_connector_slug?: string;
   docs_url?: string;
+  // Auth format overrides — sent to the runner via mcp_servers.env_vars.
+  // Defaults are "Authorization" + "Bearer " (no query param), which covers
+  // Notion, Linear, Stripe, Airtable, Firecrawl, Apify etc. Servers that need
+  // a different scheme (Cogni uses x-api-key) declare it here.
+  auth_header_name?: string;    // default: "Authorization"
+  auth_header_prefix?: string;  // default: "Bearer " — set "" for raw-key schemes
+  auth_query_param?: string;    // default: undefined; if set, auth goes in URL
 };
 
 export const MCP_CATEGORIES = {
@@ -91,6 +98,10 @@ export const MCP_CATALOG: McpCatalogEntry[] = [
     category: "Productivity",
     auth_mode: "reuse_connector",
     requires_connector_slug: "cogni",
+    // Cogni accepts the API key via `x-api-key: cog_...` header (or `?api_key=`
+    // in URL), but NOT `Authorization: Bearer`. Override the runner default.
+    auth_header_name: "x-api-key",
+    auth_header_prefix: "",
     docs_url: "https://cogni-web-psi.vercel.app/docs",
   },
   {

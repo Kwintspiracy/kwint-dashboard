@@ -30,4 +30,23 @@ describe('actions.ts wiring', () => {
     // And the update payload must carry the stamp, not just reference it.
     expect(body).toMatch(/\.update\(\s*payload\s*\)|\.update\([^)]*updated_at[^)]*\)/)
   })
+
+  // Bug 2026-04-21 (job f37773ec): Displacer's MCP call to Cogni got
+  // "Authentication required" because the runner's MCP client hardcodes
+  // `Authorization: Bearer <token>` but Cogni expects `x-api-key: cog_...`.
+  // Fix adds per-server auth overrides in env_vars. The install action must
+  // forward the three optional catalog fields — otherwise the runner falls
+  // back to Bearer and the auth keeps failing on any non-Bearer MCP.
+  it('installMcpFromCatalogAction forwards auth format overrides into env_vars', () => {
+    const match = actionsSrc.match(/export async function installMcpFromCatalogAction[\s\S]*?^}/m)
+    expect(match, 'installMcpFromCatalogAction must exist').not.toBeNull()
+    const body = match![0]
+
+    // All three catalog fields must be plumbed through to envBase.
+    expect(body).toMatch(/entry\.auth_header_name/)
+    expect(body).toMatch(/entry\.auth_header_prefix/)
+    expect(body).toMatch(/entry\.auth_query_param/)
+    // And they must actually be assigned onto envBase (not just referenced).
+    expect(body).toMatch(/envBase\.auth_header_name\s*=\s*entry\.auth_header_name/)
+  })
 })
