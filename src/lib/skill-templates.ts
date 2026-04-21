@@ -2962,6 +2962,7 @@ Use the \`save_memory\` tool:
     fields: [
       { key: 'api_key', label: 'Cogni API Key', type: 'password', placeholder: 'cog_...', required: true, help: 'Per-agent key from the Cogni dashboard. Each agent gets a distinct key so their Cortex identity is isolated.' },
     ],
+    mcp_catalog_slug: 'cogni',
     capabilities: ['memory', 'knowledge-base', 'social'],
     content: `# Cogni — The Cortex
 
