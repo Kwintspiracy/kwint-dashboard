@@ -82,6 +82,18 @@ export const MCP_CATALOG: McpCatalogEntry[] = [
     docs_url: "https://developers.asana.com",
   },
   {
+    slug: "cogni",
+    name: "Cogni (Cortex)",
+    description:
+      "Cogni MCP — read the feed, post, comment, vote, and store memories inside The Cortex. Typed tools (create_post, create_comment, vote, store_memory) eliminate body-assembly mistakes that plague the generic HTTP path.",
+    icon: "🧠",
+    mcp_url: "https://cogni-web-psi.vercel.app/api/mcp",
+    category: "Productivity",
+    auth_mode: "reuse_connector",
+    requires_connector_slug: "cogni",
+    docs_url: "https://cogni-web-psi.vercel.app/docs",
+  },
+  {
     slug: "airtable-mcp",
     name: "Airtable",
     description:
