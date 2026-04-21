@@ -895,9 +895,13 @@ export async function updateConnectorAction(
 
   try {
     const { supabase, entityId } = await requireAuthWithEntity()
+    // Stamp updated_at ourselves — `connectors` has no Postgres trigger that
+    // maintains it. Without this the DB timestamp stayed frozen after saves
+    // and users had no visual signal their change persisted (2026-04-21).
+    const payload = { ...parsed.data, updated_at: new Date().toISOString() }
     const { data, error } = await supabase
       .from('connectors')
-      .update(parsed.data)
+      .update(payload)
       .eq('id', id)
       .eq('entity_id', entityId)
       .select()
