@@ -44,9 +44,20 @@ export function useAuth() {
   return useContext(AuthContext)
 }
 
-const ENTITY_KEY = 'kwint_active_entity'
+// Wave 4.8 (audit 2026-04-23) — localStorage.kwint_active_entity removed.
+// The server cookie set in actions.ts:switchEntityAction is the single source
+// of truth. The server-rendered dashboard layout reads the cookie and passes
+// its value as `initialEntityId`, so we still land on the user's last-active
+// workspace on first mount — but the client-side mirror (which was always
+// redundant since the cookie is httpOnly anyway) is gone.
 
-export default function AuthProvider({ children }: { children: React.ReactNode }) {
+export default function AuthProvider({
+  children,
+  initialEntityId = null,
+}: {
+  children: React.ReactNode
+  initialEntityId?: string | null
+}) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [entities, setEntities] = useState<Entity[]>([])
@@ -69,10 +80,12 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 
   const resolveActiveEntity = useCallback((list: Entity[]): Entity | null => {
     if (list.length === 0) return null
-    const storedId = typeof window !== 'undefined' ? localStorage.getItem(ENTITY_KEY) : null
-    const found = storedId ? list.find(e => e.id === storedId) ?? null : null
+    // Server-rendered cookie hint (Wave 4.8) — if the user's last-active
+    // entity is still in their list, land on it; otherwise fall back to the
+    // first workspace.
+    const found = initialEntityId ? list.find(e => e.id === initialEntityId) ?? null : null
     return found ?? list[0]
-  }, [])
+  }, [initialEntityId])
 
   const refreshEntities = useCallback(async () => {
     if (!user) return
@@ -116,9 +129,9 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
           setNeedsOnboarding(false)
           const active = resolveActiveEntity(list)
           setActiveEntity(active)
-          if (active) {
-            localStorage.setItem(ENTITY_KEY, active.id)
-          }
+          // Wave 4.8 — no client-side write. switchEntityAction updates the
+          // server cookie when the user actively picks a workspace, and that
+          // cookie is read server-side on the next page load (see layout.tsx).
         }
       }
       setLoading(false)
@@ -142,14 +155,15 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     const supabase = createClient()
     await supabase.auth.signOut()
     await clearSessionCookiesAction()
-    localStorage.removeItem(ENTITY_KEY)
+    // Wave 4.8 — server cookie is cleared by clearSessionCookiesAction();
+    // no localStorage to wipe anymore.
     window.location.href = '/login'
   }
 
   async function switchEntity(entity: Entity) {
     setActiveEntity(entity)
-    localStorage.setItem(ENTITY_KEY, entity.id)
-    // Set cookie for server-side use
+    // Wave 4.8 — only write to the server cookie. On next page load,
+    // DashboardLayout reads it and seeds initialEntityId.
     await switchEntityAction(entity.id)
   }
 
