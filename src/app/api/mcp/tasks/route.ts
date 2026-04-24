@@ -48,14 +48,17 @@ const TOOLS = [
 
 async function resolveEntityId(token: string): Promise<string | null> {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  // Use anon key — token lookup goes through a SECURITY DEFINER function that bypasses RLS
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  if (!supabaseUrl || !anonKey) {
-    console.error('[mcp/tasks] missing env: url=%s anon=%s', !!supabaseUrl, !!anonKey)
+  // Must use service role key. Wave 0.5 (20260423_mcp_token_scope.sql) revokes
+  // EXECUTE on get_entity_by_mcp_token from anon/authenticated to close the
+  // tenant enumeration channel. This route is server-side, so the key stays
+  // on the server.
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!supabaseUrl || !serviceRoleKey) {
+    console.error('[mcp/tasks] missing env: url=%s srvkey=%s', !!supabaseUrl, !!serviceRoleKey)
     return null
   }
 
-  const supabase = createClient(supabaseUrl, anonKey)
+  const supabase = createClient(supabaseUrl, serviceRoleKey)
   const { data, error } = await supabase.rpc('get_entity_by_mcp_token', { p_token: token })
   if (error) console.error('[mcp/tasks] token lookup error:', error.message)
   return (data as string | null) ?? null

@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Refuse any commit that would stage a .env* file.
+# Activate once per clone with: git config core.hooksPath .githooks
+set -e
+
+staged_env=$(git diff --cached --name-only --diff-filter=AM | grep -E '(^|/)\.env($|\.|/)' || true)
+
+if [ -n "$staged_env" ]; then
+  echo "ERROR: refusing to commit staged .env* file(s):"
+  echo "$staged_env" | sed 's/^/  /'
+  echo
+  echo "Secrets must live in Fly/Vercel secret stores, not in git."
+  echo "If this is a template (.env.example), rename it and retry."
+  exit 1
+fi
+
+exit 0

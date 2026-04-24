@@ -2,6 +2,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { NextRequest, NextResponse } from 'next/server'
 import { createHmac, randomBytes, createHash } from 'crypto'
 import { cookies } from 'next/headers'
+import { assertSafeOutboundUrl, UrlGuardError } from '@/lib/url-guard'
 
 // OAuth 2.1 + PKCE + Dynamic Client Registration flow for remote MCP servers.
 //
@@ -38,7 +39,17 @@ export async function GET(request: NextRequest) {
       .single()
     if (!server || !server.url) return NextResponse.json({ error: 'MCP server not found' }, { status: 404 })
 
-    const mcpOrigin = new URL(server.url).origin
+    // Wave 4.3 — SSRF guard. Before this check, a malicious admin-configured
+    // MCP URL could be e.g. http://169.254.169.254/ (AWS IMDS) and we'd
+    // happily fetch it. assertSafeOutboundUrl rejects loopback / private /
+    // link-local / cloud-metadata hosts and (in production) non-https.
+    let mcpOrigin: string
+    try {
+      mcpOrigin = assertSafeOutboundUrl(server.url).origin
+    } catch (e) {
+      const reason = e instanceof UrlGuardError ? e.reason : 'invalid URL'
+      return NextResponse.json({ error: `MCP server URL rejected: ${reason}` }, { status: 400 })
+    }
     const discoveryUrl = `${mcpOrigin}/.well-known/oauth-authorization-server`
     const disc = await fetch(discoveryUrl, { headers: { 'User-Agent': 'KwintAgents/1.0' }, signal: AbortSignal.timeout(10_000) })
     if (!disc.ok) return NextResponse.json({ error: `Discovery failed: HTTP ${disc.status} at ${discoveryUrl}` }, { status: 502 })

@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
+import { secretsMatch } from '@/lib/secrets'
 
 export async function POST(
   request: NextRequest,
@@ -29,9 +30,9 @@ export async function POST(
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  // Verify secret — same 403 response to avoid enumeration
+  // Verify secret — constant-time compare to block timing side-channel.
   const providedSecret = request.headers.get('X-Webhook-Secret')
-  if (providedSecret !== trigger.secret) {
+  if (!secretsMatch(providedSecret, trigger.secret)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

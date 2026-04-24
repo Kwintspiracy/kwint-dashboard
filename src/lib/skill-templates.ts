@@ -523,6 +523,10 @@ System label IDs: INBOX, SENT, DRAFT, TRASH, SPAM, UNREAD, STARRED, IMPORTANT
     connector: { slug: 'resend', base_url: 'https://api.resend.com' },
     fields: [{ key: 'api_key', label: 'API Key', type: 'password', placeholder: 're_...', required: true, help: 'From resend.com > API Keys' }],
     content: `# Resend Email API\n\n## Send email\nPOST /emails\n\`\`\`json\n{"from": "Agent <agent@yourdomain.com>", "to": ["user@example.com"], "subject": "Subject", "text": "Body"}\n\`\`\`\n\nUse connector_slug="resend" for auth.`,
+    // Wave 3.8 — sync with backend adapter (agent/adapters/resend.py).
+    operations: [
+      { name: 'Send email', slug: 'resend_send_email', risk: 'write', requires_approval: true, description: 'Send a transactional email. Approval required — external communication.' },
+    ],
   },
   {
     id: 'sendgrid', name: 'SendGrid', slug: 'sendgrid',
@@ -1253,6 +1257,15 @@ POST /repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches
     connector: { slug: 'hubspot', base_url: 'https://api.hubapi.com' },
     fields: [{ key: 'api_key', label: 'Private App Token', type: 'password', placeholder: 'pat-na1-...', required: true, help: 'HubSpot > Settings > Integrations > Private Apps' }],
     content: `# HubSpot API\n\n## Create contact\nPOST /crm/v3/objects/contacts\n\`\`\`json\n{"properties": {"email": "user@example.com", "firstname": "John", "lastname": "Doe"}}\n\`\`\`\n\n## List deals\nGET /crm/v3/objects/deals?limit=10\n\n## Search contacts\nPOST /crm/v3/objects/contacts/search\n\`\`\`json\n{"filterGroups": [{"filters": [{"propertyName": "email", "operator": "CONTAINS_TOKEN", "value": "example"}]}]}\n\`\`\`\n\nUse connector_slug="hubspot" for auth.`,
+    // Wave 3.8 — sync with backend adapter (agent/adapters/hubspot.py).
+    // Only 3 tools exist today (hubspot_list_contacts, hubspot_create_contact,
+    // hubspot_list_deals); full CRM coverage (companies, tickets, pipelines,
+    // custom fields) is tracked as part of the Wave 3.6 SDK migration.
+    operations: [
+      { name: 'List contacts', slug: 'hubspot_list_contacts', risk: 'read', requires_approval: false, description: 'List contacts by email, name, or arbitrary property filter.' },
+      { name: 'Create contact', slug: 'hubspot_create_contact', risk: 'write', requires_approval: true, description: 'Create a new contact. Approval required — CRM writes are customer-visible.' },
+      { name: 'List deals', slug: 'hubspot_list_deals', risk: 'read', requires_approval: false, description: 'List deals with stage, amount, and associated contact/company.' },
+    ],
   },
   {
     id: 'pipedrive', name: 'Pipedrive', slug: 'pipedrive',

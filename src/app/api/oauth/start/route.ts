@@ -74,11 +74,15 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Sign state to prevent CSRF
+    // Sign state to prevent CSRF. Wave 1.7 — bind state to the current session
+    // user_id so a leaked state token cannot be replayed against a different
+    // session. Before: an attacker with WORKER_SECRET (or a leaked state) could
+    // land OAuth tokens on a victim entity. Now: callback verifies the session
+    // user matches the user_id embedded at /start, closing the replay window.
     const workerSecret = process.env.WORKER_SECRET || process.env.API_SECRET_KEY
     if (!workerSecret) return NextResponse.json({ error: 'Server misconfigured: WORKER_SECRET required' }, { status: 500 })
     const payload = Buffer.from(
-      JSON.stringify({ connector_id: connectorId, entity_id: entityId, ts: Date.now() })
+      JSON.stringify({ connector_id: connectorId, entity_id: entityId, user_id: user.id, ts: Date.now() })
     ).toString('base64url')
     const hmac = createHmac('sha256', workerSecret).update(payload).digest('hex')
     const state = `${payload}.${hmac}`

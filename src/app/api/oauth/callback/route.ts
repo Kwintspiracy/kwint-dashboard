@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { createHmac, timingSafeEqual } from 'crypto'
 import { OAUTH_PROVIDERS, CONNECTOR_OAUTH } from '@/lib/oauth-providers'
+import { createServerSupabaseClient } from '@/lib/supabase-server'
 
 const OAUTH_ENV: Record<string, string | undefined> = {
   GOOGLE_CLIENT_ID:        process.env.GOOGLE_CLIENT_ID,
@@ -67,13 +68,27 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(connectorsUrl)
     }
 
-    const { connector_id, entity_id, ts } = JSON.parse(
+    const { connector_id, entity_id, user_id, ts } = JSON.parse(
       Buffer.from(payloadB64, 'base64url').toString('utf-8')
-    )
+    ) as { connector_id: string; entity_id: string; user_id?: string; ts: number }
 
     if (Date.now() - ts > 15 * 60 * 1000) {
       connectorsUrl.searchParams.set('oauth_error', 'state_expired')
       return NextResponse.redirect(connectorsUrl)
+    }
+
+    // Wave 1.7 — session binding. Require that the browser completing the
+    // callback is the same user who started the flow. If user_id is absent
+    // (pre-Wave-1.7 state still in flight) we tolerate it for a grace window;
+    // after ts < Date.now() - 15min the state is rejected by the expiry check
+    // above anyway, so the grace is bounded.
+    if (user_id) {
+      const sessionSupabase = await createServerSupabaseClient()
+      const { data: { user: sessionUser } } = await sessionSupabase.auth.getUser()
+      if (!sessionUser || sessionUser.id !== user_id) {
+        connectorsUrl.searchParams.set('oauth_error', 'session_mismatch')
+        return NextResponse.redirect(connectorsUrl)
+      }
     }
 
     // Load connector via SECURITY DEFINER RPC (entity_id is HMAC-verified above)
@@ -118,7 +133,14 @@ export async function GET(request: NextRequest) {
 
     const tokens = await tokenRes.json()
     if (!tokenRes.ok || tokens.error) {
-      console.error('[oauth/callback] token exchange failed', tokens)
+      // Redact: never log access_token / refresh_token / id_token payloads; only log
+      // error code and response shape so we can debug without leaking creds.
+      console.error('[oauth/callback] token exchange failed', {
+        status: tokenRes.status,
+        error: tokens?.error,
+        error_description: tokens?.error_description,
+        keys: Object.keys(tokens ?? {}),
+      })
       connectorsUrl.searchParams.set('oauth_error', 'token_exchange_failed')
       return NextResponse.redirect(connectorsUrl)
     }

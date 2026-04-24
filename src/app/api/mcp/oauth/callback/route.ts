@@ -94,12 +94,24 @@ export async function GET(request: NextRequest) {
     const tokenRes = await fetch(tokenEndpoint, { method: 'POST', headers, body: body.toString(), signal: AbortSignal.timeout(15_000) })
     if (!tokenRes.ok) {
       const text = await tokenRes.text().catch(() => '')
+      // Parse and log only non-sensitive fields. Some IdPs echo the auth code or
+      // client_secret in error bodies; never log raw body, and never forward it
+      // into the redirect URL (ends up in browser history + Vercel logs).
+      let errCode: string | undefined
+      let errDesc: string | undefined
+      try {
+        const parsed = JSON.parse(text) as { error?: string; error_description?: string }
+        errCode = parsed?.error
+        errDesc = parsed?.error_description
+      } catch {
+        /* non-json body */
+      }
       console.error('[mcp/oauth/callback] token_exchange_failed', {
         status: tokenRes.status,
-        body: text.slice(0, 500),
+        error: errCode,
+        error_description: errDesc,
         tokenEndpoint,
-        clientId,
-        redirectUri,
+        hasClientSecret: Boolean(clientSecret),
       })
       // If the stored client is no longer known to the MCP server (expired DCR),
       // wipe our cached DCR fields so the next /start re-registers from scratch.
@@ -117,7 +129,11 @@ export async function GET(request: NextRequest) {
           .eq('entity_id', decoded.entity_id)
           .then(() => {}, () => {})
       }
-      targetUrl.searchParams.set('mcp_oauth_error', `token_exchange_${tokenRes.status}: ${text.slice(0, 200)}`)
+      // Redact: forward only status + error code to the UI. Never include raw body.
+      targetUrl.searchParams.set(
+        'mcp_oauth_error',
+        `token_exchange_${tokenRes.status}${errCode ? `: ${errCode}` : ''}`,
+      )
       return NextResponse.redirect(targetUrl)
     }
     const tokens = await tokenRes.json() as {
